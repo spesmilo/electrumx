@@ -647,7 +647,7 @@ class GoByte(Coin):
         TX_COUNT_HEIGHT = 115890
         TX_COUNT = 245030
         TX_PER_BLOCK = 4
-        RPC_PORT = 51473
+        RPC_PORT = 12454
         PEERS = [
             'electrum1-gbx.polispay.org',
             'electrum2-gbx.polispay.org'
@@ -1327,5 +1327,3 @@ class Chips(Coin):
     TX_PER_BLOCK = 2
     RPC_PORT = 57776
     REORG_LIMIT = 800
-
-

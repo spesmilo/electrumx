@@ -37,30 +37,11 @@ from collections import Container, Mapping
 from struct import pack, Struct
 
 
-class LoggedClass(object):
-
-    def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(logging.INFO)
-        self.log_prefix = ''
-        self.throttled = 0
-
-    def log_info(self, msg, throttle=False):
-        # Prevent annoying log messages by throttling them if there
-        # are too many in a short period
-        if throttle:
-            self.throttled += 1
-            if self.throttled > 3:
-                return
-            if self.throttled == 3:
-                msg += ' (throttling later logs)'
-        self.logger.info(self.log_prefix + msg)
-
-    def log_warning(self, msg):
-        self.logger.warning(self.log_prefix + msg)
-
-    def log_error(self, msg):
-        self.logger.error(self.log_prefix + msg)
+class ConnectionLogger(logging.LoggerAdapter):
+    '''Prepends a connection identifier to a logging message.'''
+    def process(self, msg, kwargs):
+        conn_id = self.extra.get('conn_id', 'unknown')
+        return f'[{conn_id}] {msg}', kwargs
 
 
 # Method decorator.  To be used for calculations that will always
@@ -145,6 +126,13 @@ def chunks(items, size):
     '''Break up items, an iterable, into chunks of length size.'''
     for i in range(0, len(items), size):
         yield items[i: i + size]
+
+
+def resolve_limit(limit):
+    if limit is None:
+        return -1
+    assert isinstance(limit, int) and limit >= 0
+    return limit
 
 
 def bytes_to_int(be_bytes):
@@ -261,7 +249,11 @@ def address_string(address):
 # See http://stackoverflow.com/questions/2532053/validate-a-hostname-string
 # Note underscores are valid in domain names, but strictly invalid in host
 # names.  We ignore that distinction.
-SEGMENT_REGEX = re.compile("(?!-)[A-Z_\d-]{1,63}(?<!-)$", re.IGNORECASE)
+
+
+SEGMENT_REGEX = re.compile("(?!-)[A-Z_\\d-]{1,63}(?<!-)$", re.IGNORECASE)
+
+
 def is_valid_hostname(hostname):
     if len(hostname) > 255:
         return False
@@ -269,6 +261,7 @@ def is_valid_hostname(hostname):
     if hostname and hostname[-1] == ".":
         hostname = hostname[:-1]
     return all(SEGMENT_REGEX.match(x) for x in hostname.split("."))
+
 
 def protocol_tuple(s):
     '''Converts a protocol version number, such as "1.0" to a tuple (1, 0).
@@ -279,12 +272,14 @@ def protocol_tuple(s):
     except Exception:
         return (0, )
 
-def protocol_version_string(ptuple):
+
+def version_string(ptuple):
     '''Convert a version tuple such as (1, 2) to "1.2".
     There is always at least one dot, so (1, ) becomes "1.0".'''
     while len(ptuple) < 2:
         ptuple += (0, )
     return '.'.join(str(p) for p in ptuple)
+
 
 def protocol_version(client_req, server_min, server_max):
     '''Given a client protocol request, return the protocol version
@@ -309,6 +304,7 @@ def protocol_version(client_req, server_min, server_max):
         result = None
 
     return result
+
 
 unpack_int32_from = Struct('<i').unpack_from
 unpack_int64_from = Struct('<q').unpack_from

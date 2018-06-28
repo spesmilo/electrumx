@@ -21,7 +21,7 @@ DB Engine        I use `plyvel`_ 0.9, a Python interface to LevelDB.
 `x11_hash`_      Only required for DASH.  Python X11 Hash package.  Only
                  required if for Dash.  Version 1.4 tested.
 `quark_hash`_    Only required for ColossusXT and PIVX related coins
-`neoscrypt`_     Only required for GoByte                       
+`neoscrypt`_     Only required for GoByte: https://github.com/goacoincore/neoscrypt                      
 ================ ========================
 
 You need to be running a non-pruning bitcoin daemon with::

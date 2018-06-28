@@ -577,6 +577,36 @@ class Litecoin(Coin):
     ]
 
 
+class Polis(Coin):
+    NAME = "Polis"
+    SHORTNAME = "POLIS"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("03E25D7E")
+    XPRV_VERBYTES = bytes.fromhex("03E25945")
+    GENESIS_HASH = ('000009701eb781a8113b1af1d814e2f0'
+                    '60f6408a2c990db291bc5108a1345c1e')
+    P2PKH_VERBYTE = bytes.fromhex("37")
+    P2SH_VERBYTES = [bytes.fromhex("38")]
+    WIF_BYTE = bytes.fromhex("3c")
+    TX_COUNT_HEIGHT = 111111
+    TX_COUNT = 256128
+    TX_PER_BLOCK = 4
+    RPC_PORT = 24127
+    PEERS = [
+        'electrum1-polis.polispay.org',
+        'electrum2-polis.polispay.org'
+    ]
+    SESSIONCLS = DashElectrumX
+    DAEMON = daemon.DashDaemon
+
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return the hash.'''
+        import x11_hash
+        return x11_hash.getPoWHash(header)
+
+
+
 class LitecoinTestnet(Litecoin):
     SHORTNAME = "XLT"
     NET = "testnet"

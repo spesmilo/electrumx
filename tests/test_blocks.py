@@ -62,8 +62,11 @@ def test_block(block_details):
     raw_block = unhexlify(block_info['block'])
     block = coin.block(raw_block, block_info['height'])
 
-    assert coin.header_hash(
-        block.header) == hex_str_to_hash(block_info['hash'])
+    try:
+        assert coin.header_hash(
+            block.header) == hex_str_to_hash(block_info['hash'])
+    except ImportError as e:
+        pytest.skip(str(e))
     assert (coin.header_prevhash(block.header)
             == hex_str_to_hash(block_info['previousblockhash']))
     assert len(block_info['tx']) == len(block.transactions)

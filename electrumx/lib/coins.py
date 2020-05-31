@@ -317,8 +317,9 @@ class ScryptMixin(object):
     def header_hash(cls, header):
         '''Given a header return the hash.'''
         if cls.HEADER_HASH is None:
-            import scrypt
-            cls.HEADER_HASH = lambda x: scrypt.hash(x, x, 1024, 1, 1, 32)
+            # Requires OpenSSL 1.1.0+
+            from hashlib import scrypt
+            cls.HEADER_HASH = lambda x: scrypt(x, salt=x, n=1024, r=1, p=1, dklen=32)
 
         version, = util.unpack_le_uint32_from(header)
         if version > 6:
@@ -3301,9 +3302,9 @@ class ECCoin(Coin):
 
     @classmethod
     def header_hash(cls, header):
-        # you have to install scryp python module (pip install scrypt)
-        import scrypt
-        return scrypt.hash(header, header, 1024, 1, 1, 32)
+        # Requires OpenSSL 1.1.0+
+        from hashlib import scrypt
+        return scrypt(header, salt=header, n=1024, r=1, p=1, dklen=32)
 
 
 class Bellcoin(Coin):
@@ -3497,8 +3498,9 @@ class Myce(Coin):
         version, = util.unpack_le_uint32_from(header)
 
         if version < 7:
-            import scrypt
-            return scrypt.hash(header, header, 1024, 1, 1, 32)
+            # Requires OpenSSL 1.1.0+
+            from hashlib import scrypt
+            return scrypt(header, salt=header, n=1024, r=1, p=1, dklen=32)
         else:
             return double_sha256(header)
 

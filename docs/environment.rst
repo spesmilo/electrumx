@@ -22,7 +22,7 @@ These environment variables are always required:
 .. envvar:: COIN
 
   Must be a :attr:`NAME` from one of the :class:`Coin` classes in
-  `lib/coins.py`_.
+  `lib/coins.py`_. For example, ``Bitcoin``.
 
 .. envvar:: DB_DIRECTORY
 

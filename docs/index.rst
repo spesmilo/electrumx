@@ -2,10 +2,10 @@
 ElectrumX
 =========
 
-.. image:: https://travis-ci.org/kyuupichan/electrumx.svg?branch=master
-    :target: https://travis-ci.org/kyuupichan/electrumx
-.. image:: https://coveralls.io/repos/github/kyuupichan/electrumx/badge.svg
-    :target: https://coveralls.io/github/kyuupichan/electrumx
+.. image:: https://travis-ci.org/spesmilo/electrumx.svg?branch=master
+    :target: https://travis-ci.org/spesmilo/electrumx
+.. image:: https://coveralls.io/repos/github/spesmilo/electrumx/badge.svg
+    :target: https://coveralls.io/github/spesmilo/electrumx
 
 A reimplementation of Electrum-Server for a future with bigger blocks.
 
@@ -15,12 +15,12 @@ Source Code
 ===========
 
 The project is hosted on `GitHub
-<https://github.com/kyuupichan/electrumx/>`_.  and uses `Travis
-<https://travis-ci.org/kyuupichan/electrumx>`_ for Continuous
+<https://github.com/spesmilo/electrumx/>`_.  and uses `Travis
+<https://travis-ci.org/spesmilo/electrumx>`_ for Continuous
 Integration.
 
 Please submit an issue on the `bug tracker
-<https://github.com/kyuupichan/electrumx/issues>`_ if you have found a
+<https://github.com/spesmilo/electrumx/issues>`_ if you have found a
 bug or have a suggestion to improve the server.
 
 Authors and License
@@ -30,7 +30,7 @@ Neil Booth wrote the vast majority of the code; see :ref:`Authors`.
 Python version at least 3.7 is required.
 
 The code is released under the `MIT Licence
-<https://github.com/kyuupichan/electrumx/LICENCE>`_.
+<https://github.com/spesmilo/electrumx/LICENCE>`_.
 
 Getting Started
 ===============

@@ -4,7 +4,7 @@
 FROM ubuntu:18.04
 
 WORKDIR /
-ADD https://github.com/kyuupichan/electrumx/archive/1.13.0.tar.gz /
+ADD https://github.com/spesmilo/electrumx/archive/1.13.0.tar.gz /
 RUN tar zxvf *.tar.gz
 
 RUN apt-get update && \

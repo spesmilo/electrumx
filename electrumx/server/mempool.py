@@ -218,7 +218,7 @@ class MemPool(object):
             hex_hashes = await self.api.mempool_hashes()
             if height != await self.api.height():
                 continue
-            hashes = set(hex_str_to_hash(hh) for hh in hex_hashes)
+            hashes = {hex_str_to_hash(hh) for hh in hex_hashes}
             try:
                 async with self.lock:
                     await self._process_mempool(hashes, touched, height)
@@ -242,15 +242,15 @@ class MemPool(object):
             raise DBSyncError
 
         # First handle txs that have disappeared
-        for tx_hash in set(txs).difference(all_hashes):
+        for tx_hash in (set(txs) - all_hashes):
             tx = txs.pop(tx_hash)
-            tx_hashXs = set(hashX for hashX, value in tx.in_pairs)
+            tx_hashXs = {hashX for hashX, value in tx.in_pairs}
             tx_hashXs.update(hashX for hashX, value in tx.out_pairs)
             for hashX in tx_hashXs:
                 hashXs[hashX].remove(tx_hash)
                 if not hashXs[hashX]:
                     del hashXs[hashX]
-            touched.update(tx_hashXs)
+            touched |= tx_hashXs
 
         # Process new transactions
         new_hashes = list(all_hashes.difference(txs))

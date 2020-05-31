@@ -123,11 +123,11 @@ class Peer(object):
         while self.other_port_pairs:
             pairs.append(self.other_port_pairs.pop())
         if isinstance(self.ip_address, IPv4Address):
-            families = [AF_INET]
+            families = (AF_INET,)
         elif isinstance(self.ip_address, IPv6Address):
-            families = [AF_INET6]
+            families = (AF_INET6,)
         else:
-            families = [AF_INET, AF_INET6]
+            families = (AF_INET, AF_INET6)
         return [(kind, port, family)
                 for kind, port in pairs if port
                 for family in families]
@@ -294,7 +294,7 @@ class Peer(object):
 
         parts = [self.host, 'v' + self.protocol_max]
         if self.pruning:
-            parts.append('p{:d}'.format(self.pruning))
+            parts.append(f'p{self.pruning:d}')
         for letter, port in (('s', self.ssl_port), ('t', self.tcp_port)):
             if port:
                 parts.append(port_text(letter, port))

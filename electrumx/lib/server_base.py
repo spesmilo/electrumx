@@ -54,7 +54,7 @@ class ServerBase:
         # Sanity checks
         if sys.version_info < self.PYTHON_MIN_VERSION:
             mvs = '.'.join(str(part) for part in self.PYTHON_MIN_VERSION)
-            raise RuntimeError('Python version >= {} is required'.format(mvs))
+            raise RuntimeError(f'Python version >= {mvs} is required')
 
         if platform.system() == 'Windows':
             pass

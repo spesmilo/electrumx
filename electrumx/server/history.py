@@ -8,7 +8,7 @@
 
 '''History by script hash (address).'''
 
-import array
+from array import array
 import ast
 import bisect
 import time
@@ -24,7 +24,7 @@ from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN
 
 class History(object):
 
-    DB_VERSIONS = [0, 1]
+    DB_VERSIONS = (0, 1)
 
     def __init__(self):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
@@ -127,7 +127,7 @@ class History(object):
             tx_numb = pack_le_uint64(tx_num)[:5]
             hashXs = set(hashXs)
             for hashX in hashXs:
-                unflushed[hashX].extend(tx_numb)
+                unflushed[hashX] += tx_numb
             count += len(hashXs)
         self.unflushed_count += count
 
@@ -170,8 +170,10 @@ class History(object):
                 deletes = []
                 puts = {}
                 for key, hist in self.db.iterator(prefix=hashX, reverse=True):
-                    a = array.array('Q')
-                    a.frombytes(b''.join(item + bytes(3) for item in chunks(hist, 5)))
+                    a = array(
+                        'Q',
+                        b''.join(item + b'\0\0\0' for item in chunks(hist, 5))
+                    )
                     # Remove all history entries >= tx_count
                     idx = bisect_left(a, tx_count)
                     nremoves += len(a) - idx
@@ -199,7 +201,7 @@ class History(object):
             for tx_numb in chunks(hist, 5):
                 if limit == 0:
                     return
-                tx_num, = unpack_le_uint64(tx_numb + bytes(3))
+                tx_num, = unpack_le_uint64(tx_numb + b'\0\0\0')
                 yield tx_num
                 limit -= 1
 
@@ -253,10 +255,10 @@ class History(object):
         full_hist = b''.join(hist_list)
         nrows = (len(full_hist) + max_row_size - 1) // max_row_size
         if nrows > 4:
-            self.logger.info('hashX {} is large: {:,d} entries across '
-                             '{:,d} rows'
-                             .format(hash_to_hex_str(hashX),
-                                     len(full_hist) // 5, nrows))
+            self.logger.info(
+                f'hashX {hash_to_hex_str(hashX)} is large: '
+                f'{len(full_hist) // 5:,d} entries across {nrows:,d} rows'
+            )
 
         # Find what history needs to be written, and what keys need to
         # be deleted.  Start by assuming all keys are to be deleted,
@@ -325,11 +327,12 @@ class History(object):
         max_rows = self.comp_flush_count + 1
         self._flush_compaction(cursor, write_items, keys_to_delete)
 
-        self.logger.info('history compaction: wrote {:,d} rows ({:.1f} MB), '
-                         'removed {:,d} rows, largest: {:,d}, {:.1f}% complete'
-                         .format(len(write_items), write_size / 1000000,
-                                 len(keys_to_delete), max_rows,
-                                 100 * cursor / 65536))
+        self.logger.info(
+            f'history compaction: wrote {len(write_items):,d} rows '
+            f'({write_size / 1000000:.1f} MB), removed '
+            f'{len(keys_to_delete):,d} rows, largest: {max_rows:,d}, '
+            f'{100 * cursor / 65536:.1f}% complete'
+        )
         return write_size
 
     def _cancel_compaction(self):

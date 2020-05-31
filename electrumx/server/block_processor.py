@@ -87,12 +87,12 @@ class Prefetcher(object):
         daemon_height = await self.daemon.height()
         behind = daemon_height - height
         if behind > 0:
-            self.logger.info('catching up to daemon height {:,d} '
-                             '({:,d} blocks behind)'
-                             .format(daemon_height, behind))
+            self.logger.info(
+                f'catching up to daemon height {daemon_height:,d} ({behind:,d} '
+                f'blocks behind)'
+            )
         else:
-            self.logger.info('caught up to daemon height {:,d}'
-                             .format(daemon_height))
+            self.logger.info(f'caught up to daemon height {daemon_height:,d}')
 
     async def _prefetch_blocks(self):
         '''Prefetch some blocks and put them on the queue.
@@ -115,8 +115,8 @@ class Prefetcher(object):
 
                 hex_hashes = await daemon.block_hex_hashes(first, count)
                 if self.caught_up:
-                    self.logger.info('new block height {:,d} hash {}'
-                                     .format(first + count-1, hex_hashes[-1]))
+                    self.logger.info(f'new block height {first + count-1:,d} '
+                                     f'hash {hex_hashes[-1]}')
                 blocks = await daemon.raw_blocks(hex_hashes)
 
                 assert count == len(blocks)
@@ -124,8 +124,8 @@ class Prefetcher(object):
                 # Special handling for genesis block
                 if first == 0:
                     blocks[0] = self.coin.genesis_block(blocks[0])
-                    self.logger.info('verified genesis block with hash {}'
-                                     .format(hex_hashes[0]))
+                    self.logger.info(f'verified genesis block with hash '
+                                     f'{hex_hashes[0]}')
 
                 # Update our recent average block size estimate
                 size = sum(len(block) for block in blocks)
@@ -372,10 +372,9 @@ class BlockProcessor(object):
         utxo_MB = (db_deletes_size + utxo_cache_size) // one_MB
         hist_MB = (hist_cache_size + tx_hash_size) // one_MB
 
-        self.logger.info('our height: {:,d} daemon: {:,d} '
-                         'UTXOs {:,d}MB hist {:,d}MB'
-                         .format(self.height, self.daemon.cached_height(),
-                                 utxo_MB, hist_MB))
+        self.logger.info(f'our height: {self.height:,d} daemon: '
+                         f'{self.daemon.cached_height():,d} '
+                         f'UTXOs {utxo_MB:,d}MB hist {hist_MB:,d}MB')
 
         # Flush history if it takes up over 20% of cache memory.
         # Flush UTXOs once they take up 80% of cache memory.
@@ -404,7 +403,7 @@ class BlockProcessor(object):
 
         headers = [block.header for block in blocks]
         self.height = height
-        self.headers.extend(headers)
+        self.headers += headers
         self.tip = self.coin.header_hash(headers[-1])
 
     def advance_txs(self, txs, is_unspendable):
@@ -475,10 +474,10 @@ class BlockProcessor(object):
             block = coin.block(raw_block, self.height)
             header_hash = coin.header_hash(block.header)
             if header_hash != self.tip:
-                raise ChainError('backup block {} not tip {} at height {:,d}'
-                                 .format(hash_to_hex_str(header_hash),
-                                         hash_to_hex_str(self.tip),
-                                         self.height))
+                raise ChainError(
+                    f'backup block {hash_to_hex_str(header_hash)} not tip '
+                    f'{hash_to_hex_str(self.tip)} at height {self.height:,d}'
+                )
             self.tip = coin.header_prevhash(block.header)
             is_unspendable = (is_unspendable_genesis if self.height >= genesis_activation
                               else is_unspendable_legacy)
@@ -486,15 +485,15 @@ class BlockProcessor(object):
             self.height -= 1
             self.db.tx_counts.pop()
 
-        self.logger.info('backed up to height {:,d}'.format(self.height))
+        self.logger.info(f'backed up to height {self.height:,d}')
 
     def backup_txs(self, txs, is_unspendable):
         # Prevout values, in order down the block (coinbase first if present)
         # undo_info is in reverse block order
         undo_info = self.db.read_undo_info(self.height)
         if undo_info is None:
-            raise ChainError('no undo information found for height {:,d}'
-                             .format(self.height))
+            raise ChainError(f'no undo information found for height '
+                             f'{self.height:,d}')
         n = len(undo_info)
 
         # Use local vars for speed in the loops
@@ -607,7 +606,7 @@ class BlockProcessor(object):
             tx_num_packed = hdb_key[-5:]
 
             if len(candidates) > 1:
-                tx_num, = unpack_le_uint64(tx_num_packed + bytes(3))
+                tx_num, = unpack_le_uint64(tx_num_packed + b'\0\0\0')
                 hash, _height = self.db.fs_tx_hash(tx_num)
                 if hash != tx_hash:
                     assert hash is not None  # Should always be found
@@ -623,8 +622,8 @@ class BlockProcessor(object):
                 self.db_deletes.append(udb_key)
                 return hashX + tx_num_packed + utxo_value_packed
 
-        raise ChainError('UTXO {} / {:,d} not found in "h" table'
-                         .format(hash_to_hex_str(tx_hash), tx_idx))
+        raise ChainError(f'UTXO {hash_to_hex_str(tx_hash)} / {tx_idx:,d} not '
+                         f'found in "h" table')
 
     async def _process_prefetched_blocks(self):
         '''Loop forever processing blocks as they arrive.'''
@@ -799,8 +798,9 @@ class LTORBlockProcessor(BlockProcessor):
     def backup_txs(self, txs, is_unspendable):
         undo_info = self.db.read_undo_info(self.height)
         if undo_info is None:
-            raise ChainError('no undo information found for height {:,d}'
-                             .format(self.height))
+            raise ChainError(
+                f'no undo information found for height {self.height:,d}'
+            )
 
         # Use local vars for speed in the loops
         put_utxo = self.utxo_cache.__setitem__

@@ -411,7 +411,7 @@ class SessionManager:
         real_name: "bch.electrumx.cash t50001 s50002" for example
         '''
         await self.peer_mgr.add_localRPC_peer(real_name)
-        return "peer '{}' added".format(real_name)
+        return f"peer '{real_name}' added"
 
     async def rpc_disconnect(self, session_ids):
         '''Disconnect sesssions.
@@ -603,8 +603,9 @@ class SessionManager:
 
             self.logger.info(f'max response size {self.env.max_send:,d} bytes')
             if self.env.drop_client is not None:
-                self.logger.info('drop clients matching: {}'
-                                 .format(self.env.drop_client.pattern))
+                self.logger.info(
+                    f'drop clients matching: {self.env.drop_client.pattern}'
+                )
             for service in self.env.report_services:
                 self.logger.info(f'advertising service {service}')
             # Start notifications; initialize hsub_results
@@ -1197,7 +1198,7 @@ class ElectrumX(SessionBase):
         major, minor = divmod(ni_version, 1000000)
         minor, revision = divmod(minor, 10000)
         revision //= 100
-        daemon_version = '{:d}.{:d}.{:d}'.format(major, minor, revision)
+        daemon_version = f'{major:d}.{minor:d}.{revision:d}'
         for pair in [
                 ('$SERVER_VERSION', electrumx.version_short),
                 ('$SERVER_SUBVERSION', electrumx.version),
@@ -1464,9 +1465,9 @@ class DashElectrumX(ElectrumX):
         await super().notify(touched, height_changed)
         for mn in self.mns.copy():
             status = await self.daemon_request('masternode_list',
-                                               ['status', mn])
+                                               ('status', mn))
             await self.send_notification('masternode.subscribe',
-                                         [mn, status.get(mn)])
+                                         (mn, status.get(mn)))
 
     # Masternode command handlers
     async def masternode_announce_broadcast(self, signmnb):
@@ -1476,7 +1477,7 @@ class DashElectrumX(ElectrumX):
         signmnb: signed masternode broadcast message.'''
         try:
             return await self.daemon_request('masternode_broadcast',
-                                             ['relay', signmnb])
+                                             ('relay', signmnb))
         except DaemonError as e:
             error, = e.args
             message = error['message']
@@ -1490,7 +1491,7 @@ class DashElectrumX(ElectrumX):
         collateral: masternode collateral.
         '''
         result = await self.daemon_request('masternode_list',
-                                           ['status', collateral])
+                                           ('status', collateral))
         if result is not None:
             self.mns.add(collateral)
             return result.get(collateral)
@@ -1555,26 +1556,29 @@ class DashElectrumX(ElectrumX):
         cache = self.session_mgr.mn_cache
         if not cache or self.session_mgr.mn_cache_height != self.db.db_height:
             full_mn_list = await self.daemon_request('masternode_list',
-                                                     ['full'])
+                                                     ('full',))
             mn_payment_queue = get_masternode_payment_queue(full_mn_list)
             mn_payment_count = len(mn_payment_queue)
             mn_list = []
             for key, value in full_mn_list.items():
                 mn_data = value.split()
-                mn_info = {}
-                mn_info['vin'] = key
-                mn_info['status'] = mn_data[0]
-                mn_info['protocol'] = mn_data[1]
-                mn_info['payee'] = mn_data[2]
-                mn_info['lastseen'] = mn_data[3]
-                mn_info['activeseconds'] = mn_data[4]
-                mn_info['lastpaidtime'] = mn_data[5]
-                mn_info['lastpaidblock'] = mn_data[6]
-                mn_info['ip'] = mn_data[7]
+                mn_info = {
+                    'vin': key,
+                    'status': mn_data[0],
+                    'protocol': mn_data[1],
+                    'payee': mn_data[2],
+                    'lastseen': mn_data[3],
+                    'activeseconds': mn_data[4],
+                    'lastpaidtime': mn_data[5],
+                    'lastpaidblock': mn_data[6],
+                    'ip': mn_data[7]
+                }
                 mn_info['paymentposition'] = get_payment_position(
-                    mn_payment_queue, mn_info['payee'])
+                    mn_payment_queue, mn_info['payee']
+                )
                 mn_info['inselection'] = (
-                    mn_info['paymentposition'] < mn_payment_count // 10)
+                    mn_info['paymentposition'] < mn_payment_count // 10
+                )
                 hashX = self.coin.address_to_hashX(mn_info['payee'])
                 balance = await self.get_balance(hashX)
                 mn_info['balance'] = (sum(balance.values())
@@ -1639,7 +1643,7 @@ class SmartCashElectrumX(DashElectrumX):
 
     async def smartrewards_current(self):
         '''Returns the current smartrewards info.'''
-        result = await self.daemon_request('smartrewards', ['current'])
+        result = await self.daemon_request('smartrewards', ('current',))
         if result is not None:
             return result
         return None
@@ -1650,7 +1654,7 @@ class SmartCashElectrumX(DashElectrumX):
 
         addr: a single smartcash address
         '''
-        result = await self.daemon_request('smartrewards', ['check', addr])
+        result = await self.daemon_request('smartrewards', ('check', addr))
         if result is not None:
             return result
         return None
@@ -1694,7 +1698,7 @@ class AuxPoWElectrumX(ElectrumX):
         headers = bytearray()
 
         while cursor < len(headers_full):
-            headers.extend(headers_full[cursor:cursor+self.coin.TRUNCATED_HEADER_SIZE])
+            headers += headers_full[cursor:cursor+self.coin.TRUNCATED_HEADER_SIZE]
             cursor += self.db.dynamic_header_len(height)
             height += 1
 

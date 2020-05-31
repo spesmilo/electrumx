@@ -105,9 +105,11 @@ class Env(EnvBase):
             # We give the DB 250 files; allow ElectrumX 100 for itself
             value = max(0, min(env_value, nofile_limit - 350))
             if value < env_value:
-                self.logger.warning('lowered maximum sessions from {:,d} to {:,d} '
-                                    'because your open file limit is {:,d}'
-                                    .format(env_value, value, nofile_limit))
+                self.logger.warning(
+                    f'lowered maximum sessions from {env_value:,d} to '
+                    f'{value:,d} because your open file limit is '
+                    f'{nofile_limit:,d}'
+                )
         except ImportError:
             value = 512  # that is what returned by stdio's _getmaxstdio()
         return value

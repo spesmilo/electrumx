@@ -48,6 +48,6 @@ script:
 # Dont report coverage from nightly
 after_success:
   - if [[ $(python3 -V 2>&1) == *"Python 3.7"* ]]; then
-      pip install python-coveralls;
+      pip install coveralls;
       coveralls;
     fi

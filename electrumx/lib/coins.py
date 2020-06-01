@@ -583,8 +583,8 @@ class BitcoinCash(BitcoinMixin, Coin):
         return False
 
 
-class BitcoinSegwit(BitcoinMixin, Coin):
-    NAME = "BitcoinSegwit"
+class Bitcoin(BitcoinMixin, Coin):
+    NAME = "Bitcoin"
     DESERIALIZER = lib_tx.DeserializerSegWit
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
     TX_COUNT = 318337769
@@ -620,6 +620,10 @@ class BitcoinSegwit(BitcoinMixin, Coin):
                     'https://electrum.org/'
                     '<br/><br/>')
         return False
+
+
+class BitcoinSegwit(Bitcoin):
+    NAME = "BitcoinSegwit"  # support legacy name
 
 
 class BitcoinGold(EquihashMixin, BitcoinMixin, Coin):
@@ -688,7 +692,7 @@ class BitcoinGoldRegtest(BitcoinGold):
     PEERS = []
 
 
-class BitcoinDiamond(BitcoinSegwit, Coin):
+class BitcoinDiamond(Bitcoin, Coin):
     NAME = "BitcoinDiamond"
     SHORTNAME = "BCD"
     TX_VERSION = 12
@@ -836,9 +840,9 @@ class BitcoinSVRegtest(BitcoinSVTestnet):
     GENESIS_ACTIVATION = 10_000
 
 
-class BitcoinSegwitTestnet(BitcoinTestnetMixin, Coin):
+class BitcoinTestnet(BitcoinTestnetMixin, Coin):
     '''Bitcoin Testnet for Core bitcoind >= 0.13.1.'''
-    NAME = "BitcoinSegwit"
+    NAME = "Bitcoin"
     DESERIALIZER = lib_tx.DeserializerSegWit
     CRASH_CLIENT_VER = (3, 2, 3)
     PEERS = [
@@ -862,14 +866,22 @@ class BitcoinSegwitTestnet(BitcoinTestnetMixin, Coin):
         return False
 
 
-class BitcoinSegwitRegtest(BitcoinSegwitTestnet):
-    NAME = "BitcoinSegwit"
+class BitcoinSegwitTestnet(BitcoinTestnet):
+    NAME = "BitcoinSegwit"  # support legacy name
+
+
+class BitcoinRegtest(BitcoinTestnet):
+    NAME = "Bitcoin"
     NET = "regtest"
     GENESIS_HASH = ('0f9188f13cb7b2c71f2a335e3a4fc328'
                     'bf5beb436012afca590b1a11466e2206')
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+
+
+class BitcoinSegwitRegtest(BitcoinRegtest):
+    NAME = "BitcoinSegwit"  # support legacy name
 
 
 class BitcoinNolnet(BitcoinCash):

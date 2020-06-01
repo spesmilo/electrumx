@@ -69,7 +69,7 @@ A typical result is as follows (with annotated comments)::
 
   $ electrumx_rpc getinfo
   {
-      "coin": "BitcoinSegwit",
+      "coin": "Bitcoin",
       "daemon": "127.0.0.1:9334/",
       "daemon height": 572154,         # The daemon's height when last queried
       "db height": 572154,             # The height to which the DB is flushed

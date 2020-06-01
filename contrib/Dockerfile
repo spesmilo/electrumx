@@ -14,7 +14,7 @@ RUN apt-get update && \
 RUN cd /electrumx* && python3 setup.py install
 
 ENV SERVICES="tcp://:50001"
-ENV COIN=BitcoinSV
+ENV COIN=Bitcoin
 ENV DB_DIRECTORY=/db
 ENV DAEMON_URL="http://username:password@hostname:port/"
 ENV ALLOW_ROOT=true

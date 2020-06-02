@@ -317,8 +317,9 @@ class ScryptMixin(object):
     def header_hash(cls, header):
         '''Given a header return the hash.'''
         if cls.HEADER_HASH is None:
-            import scrypt
-            cls.HEADER_HASH = lambda x: scrypt.hash(x, x, 1024, 1, 1, 32)
+            # Requires OpenSSL 1.1.0+
+            from hashlib import scrypt
+            cls.HEADER_HASH = lambda x: scrypt(x, salt=x, n=1024, r=1, p=1, dklen=32)
 
         version, = util.unpack_le_uint32_from(header)
         if version > 6:
@@ -2541,42 +2542,6 @@ class ZcoinTestnet(Zcoin):
     RPC_PORT = 18888
 
 
-class GINCoin(Coin):
-    NAME = "GINCoin"
-    SHORTNAME = "GIN"
-    NET = "mainnet"
-    XPUB_VERBYTES = bytes.fromhex("0488B21E")
-    XPRV_VERBYTES = bytes.fromhex("0488ADE4")
-    GENESIS_HASH = ('00000cd6bde619b2c3b23ad2e384328a'
-                    '450a37fa28731debf748c3b17f91f97d')
-    P2PKH_VERBYTE = bytes.fromhex("37")
-    P2SH_VERBYTES = [bytes.fromhex("38")]
-    WIF_BYTE = bytes.fromhex("3c")
-    TX_COUNT_HEIGHT = 225000
-    TX_COUNT = 470784
-    TX_PER_BLOCK = 4
-    RPC_PORT = 10211
-    PEERS = [
-        'electrum.polispay.com'
-    ]
-    SESSIONCLS = DashElectrumX
-    DAEMON = daemon.DashDaemon
-
-    # Seems that the main lyra2z_hash python package doesn't works.
-    # Tested and working with: https://github.com/LapoLab/lyra2z-py
-    @classmethod
-    def header_hash(cls, header):
-        timestamp = util.unpack_le_uint32_from(header, 68)[0]
-        if timestamp > 1550246400:
-            import x16rt_hash
-            return x16rt_hash.getPoWHash(header)
-        elif timestamp > 1525651200:
-            import lyra2z_hash
-            return lyra2z_hash.getPoWHash(header)
-        import neoscrypt
-        return neoscrypt.getPoWHash(header)
-
-
 class Polis(Coin):
     NAME = "Polis"
     SHORTNAME = "POLIS"
@@ -3035,30 +3000,6 @@ class MyriadcoinTestnet(Myriadcoin):
                     '2b20678c354b34085f62b762084b9788')
 
 
-class Sparks(Coin):
-    NAME = "Sparks"
-    SHORTNAME = "SPK"
-    NET = "mainnet"
-    XPUB_VERBYTES = bytes.fromhex("0488B21E")
-    XPRV_VERBYTES = bytes.fromhex("0488ADE4")
-    GENESIS_HASH = ('00000a5c6ddfaac5097218560d5b92d4'
-                    '16931cfeba1abf10c81d1d6a232fc8ea')
-    P2PKH_VERBYTE = bytes.fromhex("26")
-    P2SH_VERBYTES = [bytes.fromhex("0A")]
-    WIF_BYTE = bytes.fromhex("C6")
-    TX_COUNT_HEIGHT = 117400
-    TX_COUNT = 162310
-    TX_PER_BLOCK = 4
-    RPC_PORT = 8818
-    SESSIONCLS = DashElectrumX
-    DAEMON = daemon.DashDaemon
-
-    @classmethod
-    def header_hash(cls, header):
-        import neoscrypt
-        return neoscrypt.getPoWHash(header)
-
-
 # Source: https://github.com/LIMXTEC/BitSend
 class Bitsend(Coin):
     NAME = "Bitsend"
@@ -3313,9 +3254,9 @@ class ECCoin(Coin):
 
     @classmethod
     def header_hash(cls, header):
-        # you have to install scryp python module (pip install scrypt)
-        import scrypt
-        return scrypt.hash(header, header, 1024, 1, 1, 32)
+        # Requires OpenSSL 1.1.0+
+        from hashlib import scrypt
+        return scrypt(header, salt=header, n=1024, r=1, p=1, dklen=32)
 
 
 class Bellcoin(Coin):
@@ -3509,8 +3450,9 @@ class Myce(Coin):
         version, = util.unpack_le_uint32_from(header)
 
         if version < 7:
-            import scrypt
-            return scrypt.hash(header, header, 1024, 1, 1, 32)
+            # Requires OpenSSL 1.1.0+
+            from hashlib import scrypt
+            return scrypt(header, salt=header, n=1024, r=1, p=1, dklen=32)
         else:
             return double_sha256(header)
 

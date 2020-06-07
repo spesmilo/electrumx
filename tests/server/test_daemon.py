@@ -54,14 +54,14 @@ class JSONResponse(ResponseBase):
         self.result = result
         self.msg_id = msg_id
 
-    async def json(self):
+    async def json(self, loads=json.loads):
         if isinstance(self.msg_id, int):
             message = JSONRPCv1.response_message(self.result, self.msg_id)
         else:
             parts = [JSONRPCv1.response_message(item, msg_id)
                      for item, msg_id in zip(self.result, self.msg_id)]
             message = JSONRPCv1.batch_message_from_parts(parts)
-        return json.loads(message.decode())
+        return loads(message.decode())
 
 
 class HTMLResponse(ResponseBase):

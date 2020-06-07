@@ -10,7 +10,6 @@
 import codecs
 import datetime
 import itertools
-import json
 import math
 import os
 import ssl
@@ -20,21 +19,19 @@ from functools import partial
 from ipaddress import IPv4Address, IPv6Address
 
 import attr
-from aiorpcx import (
-    RPCSession, JSONRPCAutoDetect, JSONRPCConnection, serve_rs, serve_ws,
-    TaskGroup, handler_invocation, RPCError, Request, sleep, Event, ReplyAndDisconnect
-)
 import pylru
+from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
+                     ReplyAndDisconnect, Request, RPCError, RPCSession,
+                     TaskGroup, handler_invocation, serve_rs, serve_ws, sleep)
 
 import electrumx
+import electrumx.lib.util as util
+from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
+                                hex_str_to_hash, sha256)
 from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
-import electrumx.lib.util as util
-from electrumx.lib.hash import (sha256, hash_to_hex_str, hex_str_to_hash,
-                                HASHX_LEN, Base58Error)
 from electrumx.server.daemon import DaemonError
 from electrumx.server.peers import PeerManager
-
 
 BAD_REQUEST = 1
 DAEMON_ERROR = 2
@@ -234,7 +231,7 @@ class SessionManager:
                 data = self._session_data(for_log=True)
                 for line in sessions_lines(data):
                     self.logger.info(line)
-                self.logger.info(json.dumps(self._get_info()))
+                self.logger.info(util.json_serialize(self._get_info()))
 
     async def _disconnect_sessions(self, sessions, reason, *, force_after=1.0):
         if sessions:

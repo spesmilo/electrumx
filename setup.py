@@ -9,7 +9,9 @@ setuptools.setup(
     install_requires=['aiorpcX[ws]>=0.18.3,<0.19', 'attrs',
                       'plyvel', 'pylru', 'aiohttp>=3.3'],
     extras_require={
+        'rapidjson': ['python-rapidjson>=0.4.1,<1.0.0'],
         'rocksdb': ['python-rocksdb>=0.6.9'],
+        'ujson': ['ujson>=2.0.0,<4.0.0'],
         'uvloop': ['uvloop>=0.14'],
         # For various coins
         'blake256': ['blake256>=0.1.1'],

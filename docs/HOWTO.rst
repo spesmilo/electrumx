@@ -69,8 +69,12 @@ was much worse.
 
 You will need to install one of:
 
-+ `plyvel <https://plyvel.readthedocs.io/en/latest/installation.html>`_ for LevelDB
-+ `python-rocksdb <https://pypi.python.org/pypi/python-rocksdb>`_ for RocksDB (`pip3 install python-rocksdb`)
++ `plyvel <https://plyvel.readthedocs.io/en/latest/installation.html>`_ for LevelDB.
+
+  Included as part of a regular pip or ``setup.py`` installation of ElectrumX.
++ `python-rocksdb <https://pypi.python.org/pypi/python-rocksdb>`_ for RocksDB
+
+  ``pip3 install python-rocksdb`` or use the rocksdb extra install option to ElectrumX.
 + `pyrocksdb <http://pyrocksdb.readthedocs.io/en/v0.4/installation.html>`_ for an unmaintained version that doesn't work with recent releases of RocksDB
 
 Running
@@ -83,8 +87,20 @@ Check out the code from Github::
     git clone https://github.com/spesmilo/electrumx.git
     cd electrumx
 
-You can install with :file:`setup.py` or run the code from the source
-tree or a copy of it.
+You can install with::
+
+    pip3 install .
+
+There are many extra Python dependencies available to fit the needs of your
+system or coins. For example, to install the RocksDB dependencies and a faster
+JSON parsing library::
+
+    pip3 install .[rocksdb,ujson]
+
+see setup.py's ``extra_requires`` for a complete list.
+
+You can also run the code from the source tree or a copy of it.
+
 
 You should create a standard user account to run the server under;
 your own is probably adequate unless paranoid.  The paranoid might

@@ -10,7 +10,6 @@ daemon.'''
 
 import asyncio
 import itertools
-import json
 import time
 from calendar import timegm
 from struct import pack
@@ -18,10 +17,11 @@ from struct import pack
 import aiohttp
 from aiorpcx import JSONRPC
 
-from electrumx.lib.util import hex_to_bytes, class_logger,\
-    unpack_le_uint16_from, pack_varint
-from electrumx.lib.hash import hex_str_to_hash, hash_to_hex_str
+from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
 from electrumx.lib.tx import DeserializerDecred
+from electrumx.lib.util import (class_logger, hex_to_bytes, json_deserialize,
+                                json_serialize, pack_varint,
+                                unpack_le_uint16_from)
 
 
 class DaemonError(Exception):
@@ -105,7 +105,7 @@ class Daemon(object):
             async with self.session.post(self.current_url(), data=data) as resp:
                 kind = resp.headers.get('Content-Type', None)
                 if kind == 'application/json':
-                    return await resp.json()
+                    return await resp.json(loads=json_deserialize)
                 text = await resp.text()
                 text = text.strip() or resp.reason
                 raise ServiceRefusedError(text)
@@ -127,7 +127,7 @@ class Daemon(object):
 
         on_good_message = None
         last_error_log = 0
-        data = json.dumps(payload)
+        data = json_serialize(payload)
         retry = self.init_retry
         while True:
             try:

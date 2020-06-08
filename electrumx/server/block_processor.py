@@ -23,6 +23,7 @@ from electrumx.lib.util import (
 )
 from electrumx.server.db import FlushData
 
+from .utreexo import Forest
 
 class Prefetcher(object):
     '''Prefetches blocks (in the forward direction only).'''
@@ -189,6 +190,8 @@ class BlockProcessor(object):
 
         # Signalled after backing up during a reorg
         self.backed_up_event = asyncio.Event()
+        # utreexo
+        self.utreexo = Forest()
 
     async def run_in_thread_with_lock(self, func, *args):
         # Run in a thread to prevent blocking.  Shielded so that
@@ -435,6 +438,8 @@ class BlockProcessor(object):
                 cache_value = spend_utxo(txin.prev_hash, txin.prev_idx)
                 undo_info_append(cache_value)
                 append_hashX(cache_value[:-13])
+                #self.logger.info(f'remove_utxo {txin.prev_hash.hex()}:{txin.prev_idx}')
+                self.utreexo.remove_utxo(txin.prev_hash, txin.prev_idx)
 
             # Add the new UTXOs
             for idx, txout in enumerate(tx.outputs):
@@ -447,6 +452,8 @@ class BlockProcessor(object):
                 append_hashX(hashX)
                 put_utxo(tx_hash + to_le_uint32(idx),
                          hashX + tx_numb + to_le_uint64(txout.value))
+                #self.logger.info(f'add_utxo {tx_hash.hex()}:{idx}')
+                self.utreexo.add_utxo(tx_hash, idx)
 
             append_hashXs(hashXs)
             update_touched(hashXs)
@@ -589,6 +596,7 @@ class BlockProcessor(object):
         all UTXOs so not finding one indicates a logic error or DB
         corruption.
         '''
+
         # Fast track is it being in the cache
         idx_packed = pack_le_uint32(tx_idx)
         cache_value = self.utxo_cache.pop(tx_hash + idx_packed, None)

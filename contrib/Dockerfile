@@ -1,17 +1,16 @@
 # example of Dockerfile that builds release of electrumx-1.13.0
 # ENV variables can be overrided on the `docker run` command
 
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
 WORKDIR /
-ADD https://github.com/spesmilo/electrumx/archive/1.13.0.tar.gz /
+ADD https://github.com/spesmilo/electrumx/archive/1.15.0.tar.gz /
 RUN tar zxvf *.tar.gz
 
 RUN apt-get update && \
-        apt-get -y install python3.7 python3-pip librocksdb-dev libsnappy-dev libbz2-dev libz-dev liblz4-dev && \
-        pip3 install aiohttp pylru python-rocksdb
+        apt-get -y install python3.8 python3-pip librocksdb-dev libsnappy-dev libbz2-dev libz-dev liblz4-dev
 
-RUN cd /electrumx* && python3 setup.py install
+RUN cd /electrumx* && pip3 install .[rocksdb]
 
 ENV SERVICES="tcp://:50001"
 ENV COIN=Bitcoin

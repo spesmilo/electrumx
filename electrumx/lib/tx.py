@@ -233,11 +233,18 @@ class DeserializerSegWit(Deserializer):
         start = self.cursor
         marker = self.binary[self.cursor + 4]
         if marker:
-            tx = super().read_tx()
+            # We could call super().read_tx here but the call stack is
+            # expensive when executed millions of times.
+            tx = Tx(
+                self._read_le_int32(),  # version
+                self._read_inputs(),    # inputs
+                self._read_outputs(),   # outputs
+                self._read_le_uint32()  # locktime
+            )
             tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
             return tx, tx_hash, self.binary_length
 
-        # Ugh, this is nasty.
+        # Ugh, this is tasty.
         version = self._read_le_int32()
         orig_ser = self.binary[start:self.cursor]
 

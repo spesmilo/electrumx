@@ -25,21 +25,12 @@ class Accumulator:
             x, y = y, x
         return sha256(x + y)
 
-    def reset_parent(self, x):
-        pass
-
-    def add_parent(self, *args):
-        return self.parent(*args)
-
-    def add_leaf(self, *args):
-        return self.leaf(*args)
-
     def add(self, utxo):
-        n = self.add_leaf(utxo)
+        n = self.leaf(utxo)
         h = 0
         r = self.acc.pop(h, None)
         while r != None:
-            n = self.add_parent(r, n, False)  # n is not left
+            n = self.parent(r, n, False)  # n is not left
             h += 1
             r = self.acc.pop(h, None)
         self.acc[h] = n
@@ -52,7 +43,7 @@ class Accumulator:
             p, is_left = proof[h]
             n = self.parent(p, n, is_left)
             h += 1
-        assert self.acc.get(h) == n, (self.acc.get(h), n)
+        assert self.acc.get(h)._hash == n, (self.acc.get(h), n)
 
     def delete(self, utxo, proof):
         n = None
@@ -60,18 +51,20 @@ class Accumulator:
         while h < len(proof):
             p, is_left = proof[h]
             if n is not None:
-                n = self.add_parent(p, n, is_left)
+                n = self.parent(p, n, is_left)
             else:
                 r = self.acc.pop(h, None)
                 if r is None:
                     self.acc[h] = p
-                    self.reset_parent(p)
                 else:
-                    n = self.add_parent(p, r, is_left)
+                    n = self.parent(p, r, is_left)
             h += 1
         self.acc[h] = n
         self.counter -= 1
 
+    def dump(self):
+        n = max(self.acc.keys())
+        return [self.acc.get(i) for i in range(0, n + 1)]
 
 
 #######################
@@ -80,9 +73,9 @@ class Node:
     def sibling(self):
         assert self.parent is not None
         if self.parent.right is self:
-            return self.parent.left._hash, False
+            return self.parent.left, False
         else:
-            return self.parent.right._hash, True
+            return self.parent.right, True
 
 class Leaf(Node):
     def __init__(self, utxo):
@@ -99,57 +92,73 @@ class Parent(Node):
         self._hash = sha256(x._hash + y._hash)
 
 
-class Forest(Accumulator):
-    # accumulator with proofs
+class Forest:
 
     def __init__(self):
-        Accumulator.__init__(self)
-        self.nodes = {}   # hash -> Node
+        self.acc = {}     # n -> hash
+        self.counter = 0
+        self.utxos = {}   # hash -> Node
 
     def get_leaf(self, utxo):
-        return self.nodes.get(sha256(utxo))
+        return self.utxos.get(sha256(utxo))
 
     def get_proof(self, utxo):
         l = self.get_leaf(utxo)
         proof = []
         while l.parent is not None:
-            proof.append(l.sibling())
+            S, b = l.sibling()
+            proof.append((S._hash, b))
             l = l.parent
         return proof
 
     def add_leaf(self, utxo):
         leaf = Leaf(utxo)
-        self.nodes[leaf._hash] = leaf
-        return leaf._hash
-
-    def reset_parent(self, x):
-        self.nodes[x].parent = None
+        self.utxos[leaf._hash] = leaf
+        return leaf
 
     def add_parent(self, x, y, is_left):
         if is_left:
             x, y = y, x
-        node_x = self.nodes[x]
-        node_y = self.nodes[y]
-        parent = Parent(node_x, node_y)
-        self.nodes[parent._hash] = parent
-        return parent._hash
+        parent = Parent(x, y)
+        return parent
+
+    def add(self, utxo):
+        n = self.add_leaf(utxo)
+        h = 0
+        r = self.acc.pop(h, None)
+        while r != None:
+            n = self.add_parent(r, n, False)  # n is not left
+            h += 1
+            r = self.acc.pop(h, None)
+        self.acc[h] = n
+        self.counter += 1
 
     def verify_leaf(self, utxo):
         proof = self.get_proof(utxo)
         self.verify(utxo, proof)
 
     def remove(self, utxo):
-        proof = self.get_proof(utxo)
-        self.verify(utxo, proof)
-        # delete from accumulator
-        self.delete(utxo, proof)
-        # delete from nodes
-        key = sha256(utxo)
-        while True:
-            node = self.nodes.pop(key)
-            if node.parent is None:
-                break
-            key = node.parent._hash
+        n = None
+        h = 0
+        N = self.get_leaf(utxo)
+        while N.parent is not None:
+            P, is_left = N.sibling()
+            if n is not None:
+                n = self.add_parent(P, n, is_left)
+            else:
+                r = self.acc.pop(h, None)
+                if r is None:
+                    self.acc[h] = P
+                    P.parent = None
+                else:
+                    n = self.add_parent(P, r, is_left)
+            h += 1
+            N = N.parent
+        self.acc[h] = n
+        self.counter -= 1
+        # we need to store the proof, for block verification
+        node = self.get_leaf(utxo)
+        self.utxos.pop(node._hash)
 
     def serialize_utxo(self, tx_hash: bytes, index: int):
         return tx_hash[::-1] + index.to_bytes(4, 'big')
@@ -161,4 +170,6 @@ class Forest(Accumulator):
         self.remove(self.serialize_utxo(tx_hash, index))
 
     def dump(self):
-        return dict([(x, y) for x, y in self.acc.items() if y is not None])
+        n = max(self.acc.keys())
+        roots = [self.acc.get(i) for i in range(0, n + 1)]
+        return [r._hash if r else None for r in roots]

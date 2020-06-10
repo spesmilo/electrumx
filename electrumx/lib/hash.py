@@ -33,6 +33,7 @@ from electrumx.lib.util import bytes_to_int, int_to_bytes, hex_to_bytes
 
 _sha256 = hashlib.sha256
 _sha512 = hashlib.sha512
+_blake2b = hashlib.blake2b
 _new_hash = hashlib.new
 _new_hmac = hmac.new
 HASHX_LEN = 11
@@ -41,6 +42,11 @@ HASHX_LEN = 11
 def sha256(x):
     '''Simple wrapper of hashlib sha256.'''
     return _sha256(x).digest()
+
+
+def blake2b(x):
+    '''Simple wrapper of hashlib blake2b.'''
+    return _blake2b(x, digest_size=32).digest()
 
 
 def ripemd160(x):

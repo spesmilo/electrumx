@@ -7,7 +7,8 @@
 #   c1   c2   children
 #
 
-from electrumx.lib.hash import sha256
+
+from electrumx.lib.hash import blake2b as Hash
 
 
 class Accumulator:
@@ -17,13 +18,13 @@ class Accumulator:
         self.counter = 0
 
     def leaf(self, utxo):
-        return sha256(utxo)
+        return Hash(utxo)
 
     def parent(self, x, y, is_left):
         # is_left: whether y is the left leaf
         if is_left:
             x, y = y, x
-        return sha256(x + y)
+        return Hash(x + y)
 
     def add(self, utxo):
         n = self.leaf(utxo)
@@ -80,7 +81,7 @@ class Node:
 class Leaf(Node):
     def __init__(self, utxo):
         self.parent = None
-        self._hash = sha256(utxo)
+        self._hash = Hash(utxo)
 
 class Parent(Node):
     def __init__(self, x, y):
@@ -89,7 +90,7 @@ class Parent(Node):
         self.right = y
         x.parent = self
         y.parent = self
-        self._hash = sha256(x._hash + y._hash)
+        self._hash = Hash(x._hash + y._hash)
 
 
 class Forest:
@@ -100,7 +101,7 @@ class Forest:
         self.utxos = {}   # hash -> Node
 
     def get_leaf(self, utxo):
-        return self.utxos.get(sha256(utxo))
+        return self.utxos.get(utxo)
 
     def get_proof(self, utxo):
         l = self.get_leaf(utxo)
@@ -113,7 +114,7 @@ class Forest:
 
     def add_leaf(self, utxo):
         leaf = Leaf(utxo)
-        self.utxos[leaf._hash] = leaf
+        self.utxos[utxo] = leaf
         return leaf
 
     def add_parent(self, x, y, is_left):
@@ -157,8 +158,7 @@ class Forest:
         self.acc[h] = n
         self.counter -= 1
         # we need to store the proof, for block verification
-        node = self.get_leaf(utxo)
-        self.utxos.pop(node._hash)
+        self.utxos.pop(utxo)
 
     def serialize_utxo(self, tx_hash: bytes, index: int):
         return tx_hash[::-1] + index.to_bytes(4, 'big')
@@ -173,3 +173,213 @@ class Forest:
         n = max(self.acc.keys())
         roots = [self.acc.get(i) for i in range(0, n + 1)]
         return [r._hash if r else None for r in roots]
+
+
+
+######################
+#
+#  
+
+
+    
+HSIZE = 32
+
+
+def treesize(h):
+    return pow(2, h+1) - 1
+
+
+def first_zero_bit(n):
+    i = 0
+    while n % 2:
+        n = n >> 1
+        i += 1
+    return i
+
+
+class HashTree:
+
+    def __init__(self, data, offset, h):
+        self.h = h
+        self.data = data
+        self.offset = offset
+        self.size = treesize(self.h)
+        self.zero = bytearray().zfill(HSIZE)
+
+    def read(self, pos, n):
+        return self.data[(self.offset + pos)*HSIZE:(self.offset + pos + n)*HSIZE]
+
+    def write(self, pos, data):
+        self.data[(self.offset + pos)*HSIZE:(self.offset + pos)*HSIZE + len(data)] = data
+
+    def get_data(self):
+        return self.read(0, self.size)
+
+    def get_hash(self, index):
+        return self.read(index, 1)
+
+    def set_hash(self, index, _hash):
+        assert len(_hash) == HSIZE, (len(_hash), HSIZE)
+        self.write(index, _hash)
+
+    def get_root(self):
+        return self.get_hash(self.size - 1)
+
+    def set_root(self, _hash):
+        return self.set_hash(self.size - 1, _hash)
+
+    def blank(self):
+        self.set_root(self.zero)
+
+    def is_empty(self):
+        return self.get_root() == self.zero
+
+    def _get_offset(self, s, offset, n):
+        if len(s) == 0:
+            return offset
+        if s[0] == False:
+            pass
+        else:
+            offset += treesize(self.h - n)
+        return self._get_offset(s[1:], offset, n + 1)
+
+    def get_offset(self, s):
+        size = treesize(self.h - len(s))
+        offset = self._get_offset(s, 0, 1)
+        return offset, size
+
+    def write_tree(self, s, data):
+        offset, size = self.get_offset(s)
+        assert len(data) == size *HSIZE
+        self.write(offset, data)
+
+    def read_tree(self, s):
+        offset, size = self.get_offset(s)
+        return self.read(offset, size)
+
+    def read_root(self, s):
+        offset, size = self.get_offset(s)
+        return self.read(offset + size - 1, 1)
+
+    def write_root(self, s, data):
+        offset, size = self.get_offset(s)
+        self.write(offset + size - 1, data)
+
+    def update_root(self, s):
+        r1 = self.read_root(s + [False])
+        r2 = self.read_root(s + [True])
+        self.write_root(s, Hash(r1, r2))
+
+    def get_leaves(self, s=[]):
+        if len(s) == self.h:
+            return [bytes(self.read_tree(s))]
+        else:
+            l1 = self.get_leaves(s + [False])
+            l2 = self.get_leaves(s + [True])
+            return l1 + l2
+
+            
+
+
+
+# todo: use BytesIO
+# from io import BytesIO
+
+
+
+class HashForest:
+
+    def __init__(self):
+        self.acc = {}
+        self.counter = 0
+        self.utxos = {} # hash -> index
+
+    def get_hashtree(self, h):
+        # allocate data if needed
+        if h not in self.acc:
+            size = treesize(h) * HSIZE
+            data = bytearray().zfill(size)
+            self.acc[h] = HashTree(data, 0, h)
+        return self.acc[h]
+
+    def decrement_indices(self, r, prefix):
+        n = len(prefix)
+        for l in r.get_leaves([]):
+            h, s = self.utxos[l]
+            assert s[0:n] == prefix
+            s = s[n:]
+            self.utxos[l] = (h-n, s)
+
+    def increment_indices(self, r, prefix):
+        n = len(prefix)
+        for l in r.get_leaves([]):
+            h, s = self.utxos[l]
+            s = prefix + s
+            self.utxos[l] = (h+n, s)
+
+    def increase_indices(self, target, h, s):
+        for l in target.get_leaves(s + [False]):
+            _, ss = self.utxos[l]
+            ss.insert(0, False)
+            self.utxos[l] = (h+1, ss)
+        for l in target.get_leaves(s + [True]):
+            _, ss = self.utxos[l]
+            ss.insert(0, True)
+            self.utxos[l] = (h+1, ss)
+
+    def add(self, utxo):
+        target = self.get_hashtree(first_zero_bit(self.counter))
+        _hash = Hash(utxo)
+        # write leaf into target
+        s = [False]*target.h
+        target.write_tree(s, _hash)
+        self.utxos[_hash] = (target.h, [])
+        for h in range(target.h):
+            r = self.acc[h]
+            s = s[0:-1]
+            target.write_tree(s + [True], r.get_data())
+            target.update_root(s)
+            self.increase_indices(target, h, s)
+            r.blank()
+        self.counter += 1
+
+    def remove(self, utxo):
+        # we know which tree the utxo belongs to
+        # we build and 'import' a subtree
+        utxo_hash = Hash(utxo)
+        target_h, s = self.utxos.pop(utxo_hash)
+        target = self.acc[target_h]
+        print('removing leaf %s:'% utxo.decode(), target.h, s)
+        assert target.read_tree(s) == utxo_hash
+
+        n = None
+        h = 0
+        for h in range(target_h):
+            parent, is_left = s[0:-1], s[-1]
+            if n is not None:
+                target.update_root(parent)
+                n = parent
+            else:
+                r = self.acc[h]
+                if r.is_empty():
+                    sibling = parent + [not is_left]
+                    data = target.read_tree(sibling)
+                    r.write_tree([], data)
+                    self.decrement_indices(r, sibling) # remove parent path to leaves of r 
+                else:
+                    target.write_tree(s, r.get_data())
+                    target.update_root(parent) # should maybe update all roots..
+                    self.increment_indices(r, s) # prepend parent path to indices of r
+                    n = parent
+                    r.blank()
+            #
+            s = parent
+
+        if n is not None:
+            n_data = target.read_tree(n)
+            self.acc[target_h].write_tree([], n_data)
+        else:
+            self.acc[target_h].blank()
+        self.counter -= 1
+        # we need to store the proof, for block verification
+        #self.utxos.pop(utxo)

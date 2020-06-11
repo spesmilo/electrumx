@@ -329,6 +329,10 @@ def offset(s):
 
 """
 
+FORBIDDEN = [
+    bytes.fromhex('d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599')[::-1],
+    bytes.fromhex('e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468')[::-1]
+]
 
 
 
@@ -352,7 +356,7 @@ class HashForest:
             s = self.utxos.get(l)
             if s is None:
                 continue
-            #assert s[0:n] == prefix
+            assert s[0:n] == prefix
             #s >> n
             s = s[n:]
             self.utxos[l] = s
@@ -421,7 +425,9 @@ class HashForest:
         return tx_hash[::-1] + index.to_bytes(4, 'big')
 
     def add_utxo(self, tx_hash, index):
-        self.add(self.serialize_utxo(tx_hash, index))
+        if tx_hash not in FORBIDDEN:
+            self.add(self.serialize_utxo(tx_hash, index))
 
     def remove_utxo(self, tx_hash, index):
-        self.remove(self.serialize_utxo(tx_hash, index))
+        if tx_hash not in FORBIDDEN:
+            self.remove(self.serialize_utxo(tx_hash, index))

@@ -25,6 +25,7 @@ from electrumx.server.db import FlushData
 
 from .utreexo import HashForest
 
+
 class Prefetcher(object):
     '''Prefetches blocks (in the forward direction only).'''
 

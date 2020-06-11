@@ -243,18 +243,12 @@ class HashTree:
     def is_empty(self):
         return self.get_root() == self.zero
 
-    def _get_offset(self, s, offset, n):
-        if len(s) == 0:
-            return offset
-        if s[0] == False:
-            pass
-        else:
-            offset += treesize(self.h - n)
-        return self._get_offset(s[1:], offset, n + 1)
-
     def get_offset(self, s):
         size = treesize(self.h - len(s))
-        offset = self._get_offset(s, 0, 1)
+        offset = 0
+        for i in range(len(s)):
+            if s[i]:
+                offset += treesize(self.h - 1 - i)
         return offset, size
 
     def write_tree(self, s, data):
@@ -287,9 +281,48 @@ class HashTree:
             l2 = self.get_leaves(s + [True])
             return l1 + l2
 
-            
+"""
+indices of leaves:     
+0 : 0
+1 : 0, 1
+2 : 0, 1, -, 3, 4, -, -
+3 : 0, 1, -, 3, 4, -, -, 7, 8, -, 10, 11, -, -, -
+
+0 : 0
+1 : -, 1, 2
+2 : -, -, 
 
 
+
+size(h) = pow(2, h+1) - 1
+
+offset(s) = sum( s_i * size(i) )
+
+
+simpler mapping:
+ - each row has the same width
+
+0
+
+0, 
+1, 
+(01)
+
+0, 1, (01)
+2, 3, (23)
+(0123), -, -
+
+
+    size(h) = size(h-1) * 3
+=>  size(h) = pow(3,h)
+
+
+def offset(s):
+
+   size(h)
+
+
+"""
 
 
 

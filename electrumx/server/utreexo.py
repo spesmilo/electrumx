@@ -247,7 +247,7 @@ class HashTree:
         size = treesize(self.h - len(s))
         offset = 0
         for i in range(len(s)):
-            if s[i]:
+            if s[i] == '1':
                 offset += treesize(self.h - 1 - i)
         return offset, size
 
@@ -269,16 +269,16 @@ class HashTree:
         self.write(offset + size - 1, data)
 
     def update_root(self, s):
-        r1 = self.read_root(s + [False])
-        r2 = self.read_root(s + [True])
+        r1 = self.read_root(s + '0')
+        r2 = self.read_root(s + '1')
         self.write_root(s, Hash(r1, r2))
 
-    def get_leaves(self, s=[]):
+    def get_leaves(self, s=''):
         if len(s) == self.h:
             return [bytes(self.read_tree(s))]
         else:
-            l1 = self.get_leaves(s + [False])
-            l2 = self.get_leaves(s + [True])
+            l1 = self.get_leaves(s + '0')
+            l2 = self.get_leaves(s + '1')
             return l1 + l2
 
     def maybe_get_leaves(self):
@@ -374,15 +374,15 @@ class HashForest:
         target = self.get_hashtree(first_zero_bit(self.counter))
         _hash = Hash(utxo)
         # write leaf into target
-        s = [False]*target.h
+        s = '0'*target.h
         target.write_tree(s, _hash)
         self.utxos[_hash] = s
         for h in range(target.h):
             r = self.acc[h]
             s = s[0:-1]
-            target.write_tree(s + [True], r.get_data())
+            target.write_tree(s + '1', r.get_data())
             target.update_root(s)
-            self.increment_indices(r, s + [True])
+            self.increment_indices(r, s + '1')
             r.blank()
         self.counter += 1
 
@@ -402,9 +402,9 @@ class HashForest:
             else:
                 r = self.acc[h]
                 if r.is_empty():
-                    sibling = parent + [not is_left]
+                    sibling = parent + ('1' if is_left == '0' else '0')
                     data = target.read_tree(sibling)
-                    r.write_tree([], data)
+                    r.write_tree('', data)
                     self.decrement_indices(r, sibling) # remove parent path to leaves of r 
                 else:
                     target.write_tree(s, r.get_data())
@@ -415,7 +415,7 @@ class HashForest:
             s = parent
         if n is not None:
             n_data = target.read_tree(n)
-            self.acc[target_h].write_tree([], n_data)
+            self.acc[target_h].write_tree('', n_data)
         else:
             self.acc[target_h].blank()
         self.counter -= 1

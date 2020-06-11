@@ -281,6 +281,11 @@ class HashTree:
             l2 = self.get_leaves(s + [True])
             return l1 + l2
 
+    def maybe_get_leaves(self):
+        self.data.seek(0)
+        for i in range(self.size):
+            yield self.data.read(HSIZE)
+
 """
 indices of leaves:     
 0 : 0
@@ -342,18 +347,24 @@ class HashForest:
 
     def decrement_indices(self, r, prefix):
         n = len(prefix)
-        for l in r.get_leaves([]):
-            h, s = self.utxos[l]
+        #for l in r.get_leaves([]):
+        for l in r.maybe_get_leaves():
+            s = self.utxos.get(l)
+            if s is None:
+                continue
             #assert s[0:n] == prefix
+            #s >> n
             s = s[n:]
-            self.utxos[l] = (h-n, s)
+            self.utxos[l] = s
 
     def increment_indices(self, r, prefix):
         n = len(prefix)
-        for l in r.get_leaves([]):
-            h, s = self.utxos[l]
-            s = prefix + s
-            self.utxos[l] = (h+n, s)
+        #for l in r.get_leaves([]):
+        for l in r.maybe_get_leaves():
+            s = self.utxos.get(l)
+            if s is None:
+                continue
+            self.utxos[l] = prefix + s
 
     def add(self, utxo):
         target = self.get_hashtree(first_zero_bit(self.counter))
@@ -361,7 +372,7 @@ class HashForest:
         # write leaf into target
         s = [False]*target.h
         target.write_tree(s, _hash)
-        self.utxos[_hash] = (target.h, s)
+        self.utxos[_hash] = s
         for h in range(target.h):
             r = self.acc[h]
             s = s[0:-1]
@@ -373,7 +384,8 @@ class HashForest:
 
     def remove(self, utxo):
         utxo_hash = Hash(utxo)
-        target_h, s = self.utxos.pop(utxo_hash)
+        s = self.utxos.pop(utxo_hash)
+        target_h = len(s)
         target = self.acc[target_h]
         assert target.read_tree(s) == utxo_hash
         n = None

@@ -47,11 +47,11 @@ def dump_leaves(acc):
         print('%d:'% h, [hash2str(x) for x in acc[h].get_leaves()])
 
 def dump_utxos(F):
-    for k, v in F.utxos.items():
-        h, s = v
+    for k, s in F.utxos.items():
+        h = len(s)
         leaf = F.acc[h].read_tree(s)
         assert leaf == k, (leaf, k)
-        print(hash2str(k), '->', v)
+        print(hash2str(k), '->', s)
 
         
 def test_utreexo2():

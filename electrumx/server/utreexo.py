@@ -404,7 +404,6 @@ class HashForest:
             self.acc[target_h].blank()
         self.counter -= 1
         # we need to store the proof, for block verification
-        #self.utxos.pop(utxo)
 
     def serialize_utxo(self, tx_hash: bytes, index: int):
         return tx_hash[::-1] + index.to_bytes(4, 'big')

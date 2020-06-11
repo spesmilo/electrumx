@@ -70,6 +70,7 @@ def test_utreexo2():
     print('------')
     random.shuffle(items)
     for l in items:
+        print('deleting', l)
         F.remove(l.encode())
         dump(F.acc)
 

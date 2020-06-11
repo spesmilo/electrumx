@@ -8,7 +8,10 @@
 #
 
 
-from electrumx.lib.hash import blake2b as Hash
+from electrumx.lib.hash import blake2b
+
+def Hash(x, y=b''):
+    return blake2b(x+y)
 
 
 class Accumulator:
@@ -181,6 +184,8 @@ class Forest:
 #  
 
 
+from io import BytesIO
+
     
 HSIZE = 32
 
@@ -199,18 +204,22 @@ def first_zero_bit(n):
 
 class HashTree:
 
-    def __init__(self, data, offset, h):
+    def __init__(self, h):
         self.h = h
-        self.data = data
-        self.offset = offset
         self.size = treesize(self.h)
         self.zero = bytearray().zfill(HSIZE)
+        data = bytearray().zfill(self.size * HSIZE)
+        self.data = BytesIO(data)
 
     def read(self, pos, n):
-        return self.data[(self.offset + pos)*HSIZE:(self.offset + pos + n)*HSIZE]
+        self.data.seek(pos*HSIZE)
+        return self.data.read(n*HSIZE)
+        #return self.data[pos*HSIZE:(pos + n)*HSIZE]
 
     def write(self, pos, data):
-        self.data[(self.offset + pos)*HSIZE:(self.offset + pos)*HSIZE + len(data)] = data
+        self.data.seek(pos*HSIZE)
+        return self.data.write(data)
+        #self.data[pos*HSIZE:pos*HSIZE + len(data)] = data
 
     def get_data(self):
         return self.read(0, self.size)
@@ -282,8 +291,6 @@ class HashTree:
 
 
 
-# todo: use BytesIO
-# from io import BytesIO
 
 
 
@@ -297,16 +304,14 @@ class HashForest:
     def get_hashtree(self, h):
         # allocate data if needed
         if h not in self.acc:
-            size = treesize(h) * HSIZE
-            data = bytearray().zfill(size)
-            self.acc[h] = HashTree(data, 0, h)
+            self.acc[h] = HashTree(h)
         return self.acc[h]
 
     def decrement_indices(self, r, prefix):
         n = len(prefix)
         for l in r.get_leaves([]):
             h, s = self.utxos[l]
-            assert s[0:n] == prefix
+            #assert s[0:n] == prefix
             s = s[n:]
             self.utxos[l] = (h-n, s)
 
@@ -317,41 +322,27 @@ class HashForest:
             s = prefix + s
             self.utxos[l] = (h+n, s)
 
-    def increase_indices(self, target, h, s):
-        for l in target.get_leaves(s + [False]):
-            _, ss = self.utxos[l]
-            ss.insert(0, False)
-            self.utxos[l] = (h+1, ss)
-        for l in target.get_leaves(s + [True]):
-            _, ss = self.utxos[l]
-            ss.insert(0, True)
-            self.utxos[l] = (h+1, ss)
-
     def add(self, utxo):
         target = self.get_hashtree(first_zero_bit(self.counter))
         _hash = Hash(utxo)
         # write leaf into target
         s = [False]*target.h
         target.write_tree(s, _hash)
-        self.utxos[_hash] = (target.h, [])
+        self.utxos[_hash] = (target.h, s)
         for h in range(target.h):
             r = self.acc[h]
             s = s[0:-1]
             target.write_tree(s + [True], r.get_data())
             target.update_root(s)
-            self.increase_indices(target, h, s)
+            self.increment_indices(r, s + [True])
             r.blank()
         self.counter += 1
 
     def remove(self, utxo):
-        # we know which tree the utxo belongs to
-        # we build and 'import' a subtree
         utxo_hash = Hash(utxo)
         target_h, s = self.utxos.pop(utxo_hash)
         target = self.acc[target_h]
-        print('removing leaf %s:'% utxo.decode(), target.h, s)
         assert target.read_tree(s) == utxo_hash
-
         n = None
         h = 0
         for h in range(target_h):
@@ -372,9 +363,7 @@ class HashForest:
                     self.increment_indices(r, s) # prepend parent path to indices of r
                     n = parent
                     r.blank()
-            #
             s = parent
-
         if n is not None:
             n_data = target.read_tree(n)
             self.acc[target_h].write_tree([], n_data)
@@ -383,3 +372,12 @@ class HashForest:
         self.counter -= 1
         # we need to store the proof, for block verification
         #self.utxos.pop(utxo)
+
+    def serialize_utxo(self, tx_hash: bytes, index: int):
+        return tx_hash[::-1] + index.to_bytes(4, 'big')
+
+    def add_utxo(self, tx_hash, index):
+        self.add(self.serialize_utxo(tx_hash, index))
+
+    def remove_utxo(self, tx_hash, index):
+        self.remove(self.serialize_utxo(tx_hash, index))

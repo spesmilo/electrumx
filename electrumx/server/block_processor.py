@@ -23,7 +23,7 @@ from electrumx.lib.util import (
 )
 from electrumx.server.db import FlushData
 
-from .utreexo import Forest
+from .utreexo import HashForest
 
 class Prefetcher(object):
     '''Prefetches blocks (in the forward direction only).'''
@@ -191,7 +191,7 @@ class BlockProcessor(object):
         # Signalled after backing up during a reorg
         self.backed_up_event = asyncio.Event()
         # utreexo
-        self.utreexo = Forest()
+        self.utreexo = HashForest()
 
     async def run_in_thread_with_lock(self, func, *args):
         # Run in a thread to prevent blocking.  Shielded so that
@@ -439,7 +439,7 @@ class BlockProcessor(object):
                 undo_info_append(cache_value)
                 append_hashX(cache_value[:-13])
                 #self.logger.info(f'remove_utxo {txin.prev_hash.hex()}:{txin.prev_idx}')
-                self.utreexo.remove_utxo(txin.prev_hash, txin.prev_idx)
+                #self.utreexo.remove_utxo(txin.prev_hash, txin.prev_idx)
 
             # Add the new UTXOs
             for idx, txout in enumerate(tx.outputs):

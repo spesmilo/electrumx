@@ -76,4 +76,4 @@ def test_utreexo2():
 
 if __name__ == '__main__':
 
-    test_utreexo2()
+    test_utreexo()

@@ -73,27 +73,21 @@ class Accumulator:
 
 #######################
 
-class Node:
-    def sibling(self):
-        assert self.parent is not None
-        if self.parent.right is self:
-            return self.parent.left, False
-        else:
-            return self.parent.right, True
-
-class Leaf(Node):
+class Leaf:
     def __init__(self, utxo):
         self.parent = None
         self._hash = Hash(utxo)
 
-class Parent(Node):
-    def __init__(self, x, y):
+class Parent:
+    def __init__(self, x, y, is_left):
+        if is_left:
+            x, y = y, x
         self.parent = None
-        self.left = x
-        self.right = y
+        self._hash = Hash(x._hash + y._hash)
         x.parent = self
         y.parent = self
-        self._hash = Hash(x._hash + y._hash)
+        x.sibling = y, True
+        y.sibling = x, False
 
 
 class Forest:
@@ -110,28 +104,18 @@ class Forest:
         l = self.get_leaf(utxo)
         proof = []
         while l.parent is not None:
-            S, b = l.sibling()
+            S, b = l.sibling
             proof.append((S._hash, b))
             l = l.parent
         return proof
 
-    def add_leaf(self, utxo):
-        leaf = Leaf(utxo)
-        self.utxos[utxo] = leaf
-        return leaf
-
-    def add_parent(self, x, y, is_left):
-        if is_left:
-            x, y = y, x
-        parent = Parent(x, y)
-        return parent
-
     def add(self, utxo):
-        n = self.add_leaf(utxo)
+        n = Leaf(utxo)
+        self.utxos[utxo] = n
         h = 0
         r = self.acc.pop(h, None)
         while r != None:
-            n = self.add_parent(r, n, False)  # n is not left
+            n = Parent(r, n, False)  # n is not left
             h += 1
             r = self.acc.pop(h, None)
         self.acc[h] = n
@@ -146,16 +130,16 @@ class Forest:
         h = 0
         N = self.get_leaf(utxo)
         while N.parent is not None:
-            P, is_left = N.sibling()
+            P, is_left = N.sibling
             if n is not None:
-                n = self.add_parent(P, n, is_left)
+                n = Parent(P, n, is_left)
             else:
                 r = self.acc.pop(h, None)
                 if r is None:
                     self.acc[h] = P
                     P.parent = None
                 else:
-                    n = self.add_parent(P, r, is_left)
+                    n = Parent(P, r, is_left)
             h += 1
             N = N.parent
         self.acc[h] = n

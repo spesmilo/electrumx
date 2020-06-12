@@ -29,13 +29,13 @@
 Anything coin-specific should go in this file and be subclassed where
 necessary for appropriate handling.
 '''
-
-from collections import namedtuple
 import re
 import struct
+from dataclasses import dataclass
 from decimal import Decimal
-from hashlib import sha256
 from functools import partial
+from hashlib import sha256
+from typing import Sequence
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import Base58, hash160, double_sha256, hash_to_hex_str
@@ -51,7 +51,12 @@ from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX)
 
 
-Block = namedtuple("Block", "raw header transactions")
+@dataclass
+class Block:
+    __slots__ = "raw", "header", "transactions"
+    raw: bytes
+    header: bytes
+    transactions: Sequence
 
 
 class CoinError(Exception):
@@ -1352,7 +1357,7 @@ class FairCoin(Coin):
 
     @classmethod
     def block(cls, raw_block, height):
-        '''Return a Block namedtuple given a raw block and its height.'''
+        '''Return a Block given a raw block and its height.'''
         if height > 0:
             return super().block(raw_block, height)
         else:

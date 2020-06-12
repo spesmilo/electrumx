@@ -14,7 +14,7 @@ import ast
 import os
 import time
 from bisect import bisect_right
-from collections import namedtuple
+from dataclasses import dataclass
 from glob import glob
 from struct import Struct
 
@@ -32,7 +32,14 @@ from electrumx.server.storage import db_class
 from electrumx.server.history import History
 
 
-UTXO = namedtuple("UTXO", "tx_num tx_pos tx_hash height value")
+@dataclass
+class UTXO:
+    __slots__ = 'tx_num', 'tx_pos', 'tx_hash', 'height', 'height', 'value'
+    tx_num: int
+    tx_pos: int
+    tx_hash: bytes
+    height: int
+    value: int
 
 
 @attr.s(slots=True)

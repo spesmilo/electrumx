@@ -444,7 +444,12 @@ class BlockProcessor(object):
                 cache_value = spend_utxo(txin.prev_hash, txin.prev_idx)
                 undo_info_append(cache_value)
                 append_hashX(cache_value[:-13])
-                utreexo_del.add(self.serialize_utxo(txin.prev_hash, txin.prev_idx))
+
+                u = self.serialize_utxo(txin.prev_hash, txin.prev_idx)
+                if u in utreexo_add:
+                    utreexo_add.remove(u)
+                else:
+                    utreexo_del.add(u)
 
             # Add the new UTXOs
             for idx, txout in enumerate(tx.outputs):
@@ -463,11 +468,9 @@ class BlockProcessor(object):
             update_touched(hashXs)
             tx_num += 1
 
+        self.utreexo.batch_delete(utreexo_del)
         for utxo in utreexo_add:
             self.utreexo.add(utxo)
-        #for utxo in utreexo_del:
-        #    self.utreexo.remove(utxo)
-        self.utreexo.batch_delete(utreexo_del)
 
         self.db.history.add_unflushed(hashXs_by_tx, self.tx_count)
 

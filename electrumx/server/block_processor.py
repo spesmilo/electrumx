@@ -411,6 +411,9 @@ class BlockProcessor(object):
         self.headers.extend(headers)
         self.tip = self.coin.header_hash(headers[-1])
 
+    def serialize_utxo(self, tx_hash: bytes, index: int):
+        return tx_hash[::-1] + index.to_bytes(4, 'big')
+
     def advance_txs(self, txs, is_unspendable):
         self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
 
@@ -426,6 +429,8 @@ class BlockProcessor(object):
         append_hashXs = hashXs_by_tx.append
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
+        utreexo_add = set()
+        utreexo_del = set()
 
         for tx, tx_hash in txs:
             hashXs = []
@@ -439,8 +444,7 @@ class BlockProcessor(object):
                 cache_value = spend_utxo(txin.prev_hash, txin.prev_idx)
                 undo_info_append(cache_value)
                 append_hashX(cache_value[:-13])
-                #self.logger.info(f'remove_utxo {txin.prev_hash.hex()}:{txin.prev_idx}')
-                self.utreexo.remove_utxo(txin.prev_hash, txin.prev_idx)
+                utreexo_del.add(self.serialize_utxo(txin.prev_hash, txin.prev_idx))
 
             # Add the new UTXOs
             for idx, txout in enumerate(tx.outputs):
@@ -453,12 +457,17 @@ class BlockProcessor(object):
                 append_hashX(hashX)
                 put_utxo(tx_hash + to_le_uint32(idx),
                          hashX + tx_numb + to_le_uint64(txout.value))
-                #self.logger.info(f'add_utxo {tx_hash.hex()}:{idx}')
-                self.utreexo.add_utxo(tx_hash, idx)
+                utreexo_add.add(self.serialize_utxo(tx_hash, idx))
 
             append_hashXs(hashXs)
             update_touched(hashXs)
             tx_num += 1
+
+        for utxo in utreexo_add:
+            self.utreexo.add(utxo)
+        #for utxo in utreexo_del:
+        #    self.utreexo.remove(utxo)
+        self.utreexo.batch_delete(utreexo_del)
 
         self.db.history.add_unflushed(hashXs_by_tx, self.tx_count)
 

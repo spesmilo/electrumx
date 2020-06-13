@@ -8,20 +8,23 @@ def test_utreexo():
     utreexo.Hash = lambda x: '('+x+')'    
     f = utreexo.Forest()
     acc = utreexo.Accumulator()
-    leaves = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+    leaves = ['1', '2', '3', '4', '5', '6', '7']
     for l in leaves:
         acc.add(l)
         f.add(l)
         print('adding', l, ': ', acc.dump())
     print('------')
-    random.shuffle(leaves)
-    for l in leaves:
-        p = f.get_proof(l)
-        f.remove(l)
-        acc.delete(l, p)
-        assert acc.dump() == f.dump()
-        print('removing', l, ': ', f.dump())
-    assert len(f.utxos) == 0
+    #random.shuffle(leaves)
+    leaves = ['7', '6']
+    f.batch_delete(leaves)
+    print('f: ', f.dump())
+    #for l in leaves:
+    #    p = f.get_proof(l)
+    #    f.remove(l)
+    #    acc.delete(l, p)
+    #    assert acc.dump() == f.dump()
+    #    print('removing', l, ': ', f.dump())
+    #assert len(f.utxos) == 0
 
     #
 def test_hash(x: bytes, y=None):

@@ -109,6 +109,17 @@ class Forest:
             l = l.parent
         return proof
 
+    def get_pos(self, l:Leaf):
+        p = 0
+        h = 0
+        while l.parent is not None:
+            s, b = l.sibling
+            p |= int(b) * pow(2, h)
+            h += 1
+            l = l.parent
+        p += pow(2, h)
+        return p
+
     def add(self, utxo):
         n = Leaf(utxo)
         self.utxos[utxo] = n
@@ -147,14 +158,98 @@ class Forest:
         # we need to store the proof, for block verification
         self.utxos.pop(utxo)
 
-    def serialize_utxo(self, tx_hash: bytes, index: int):
-        return tx_hash[::-1] + index.to_bytes(4, 'big')
+    def batch_delete(self, utxo_set):
+        if not utxo_set:
+            return
+        #print('batch_delete', len(utxo_set))
+        leaves = [self.utxos.pop(utxo) for utxo in utxo_set]
+        to_delete = [(self.get_pos(l), l) for l in leaves]
+        to_delete = sorted(to_delete)
+        # height of the highest tree
+        max_h = max([x[0].bit_length() for x in to_delete])
+        touched = set()
+        for h in range(max_h):
+            #print('h=%d:'% h, 'to_delete=', [(x[0], x[1]._hash) for x in to_delete])
+            if not to_delete:
+                #print('terminating at level', h)
+                break
+            #print('to delete0', h, [x[0] for x in to_delete])
+            # delete roots marked for deletion
+            k0, node_0 = to_delete[0]
+            if node_0 == self.acc.get(h):
+                self.acc.pop(h)
+                to_delete = to_delete[1:]
+            next_keys = []
+            # 1. twins:
+            for i in range(len(to_delete) - 1):
+                if to_delete[i] is None:
+                    continue
+                ki, node_i = to_delete[i]
+                kj, node_j = to_delete[i+1]
+                if kj == ki ^ 1:
+                    #print('twins')
+                    assert node_i.parent == node_j.parent
+                    #delete them:
+                    to_delete[i] = None
+                    to_delete[i+1] = None
+                    #mark parent for deletion
+                    next_keys.append((ki >> 1, node_i.parent))
+            to_delete = list(filter(None, to_delete))
 
-    def add_utxo(self, tx_hash, index):
-        self.add(self.serialize_utxo(tx_hash, index))
+            # 2. swaps
+            for i in range(0, len(to_delete) - 1, 2):
+                ki, node_i = to_delete[i]
+                kj, node_j = to_delete[i+1]
+                assert kj != ki ^ 1, (ki, kj)
+                assert node_i.parent is not None, (ki, 'h=%d'%h)
+                assert node_j.parent is not None, (kj, 'h=%d'%h)
+                # move node from kj^1 to ki
+                si, bi = node_i.sibling
+                sj, bj = node_j.sibling
+                #print('swap', sj._hash, '->', node_i._hash )
+                sj.sibling = si, bi
+                si.sibling = sj, not bi
+                sj.parent = si.parent
+                touched.add(si)
+                to_delete[i] = None
+                to_delete[i+1] = None
+                # mark parent for deletion
+                next_keys.append((kj >> 1, node_j.parent))
+                #
+                del node_j
 
-    def remove_utxo(self, tx_hash, index):
-        self.remove(self.serialize_utxo(tx_hash, index))
+            # 3. root
+            to_delete = list(filter(None, to_delete))
+            if to_delete:
+                assert len(to_delete) == 1
+                ki, node_i = to_delete[0]
+                si, b = node_i.sibling
+                r = self.acc.pop(h, None)
+                #print('root', bin(ki), r)
+                if r is not None:
+                    assert r.parent is None
+                    r.parent = si.parent
+                    r.sibling = si, b
+                    si.sibling = r, not b
+                    touched.add(si)
+                else:
+                    si.parent = None
+                    self.acc[h] = si
+                    # mark parent for deletion
+                    next_keys.append((ki >> 1, node_i.parent))
+                del node_i
+
+            # 4. climb
+            next_touched = set()
+            for ni in touched:
+                if ni.parent:
+                    si, b = ni.sibling
+                    x = Hash(si._hash + ni._hash)
+                    ni.parent._hash = x
+                    next_touched.add(ni.parent)
+            touched = next_touched
+            to_delete = sorted(next_keys) # need to be sorted again
+
 
     def dump(self):
         n = max(self.acc.keys())

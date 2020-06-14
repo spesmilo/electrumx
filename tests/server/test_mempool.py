@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import logging
 import os
@@ -400,7 +401,10 @@ async def test_unordered_UTXOs():
     for hashX in api.hashXs:
         mempool_result = await mempool.unordered_UTXOs(hashX)
         our_result = utxos.get(hashX, [])
-        assert set(our_result) == set(mempool_result)
+        assert set(our_result) == {
+            dataclasses.astuple(mr)
+            for mr in mempool_result
+        }
 
 
 @pytest.mark.asyncio

@@ -34,3 +34,12 @@ account in the code.
 
 - retrieving a previously stored length of a bytes object can be over 200%
   faster than a new call to len(b)
+
+- The cpython and pypy stdlibs use a Python-based JSON serializer/deserializer,
+  which is stable and easy to use and install, but much slower than
+  system-compiled variants. ElectrumX now looks for either of the popular
+  C-based JSON libraries for Python, python-rapidjson or ujson. If it finds
+  one, it's used instead of the stdlib module for improved performance.
+
+  To install a known-compatible system-compiled JSON lib, install ElectrumX
+  with either the "rapidjson" or "ujson" extras parameter.

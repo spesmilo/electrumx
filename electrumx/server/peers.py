@@ -8,21 +8,20 @@
 '''Peer management.'''
 
 import asyncio
-from ipaddress import IPv4Address, IPv6Address
-import json
 import random
 import socket
 import ssl
 import time
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
+from ipaddress import IPv4Address, IPv6Address
 
 import aiohttp
-from aiorpcx import (connect_rs, RPCSession, SOCKSProxy, Notification, handler_invocation,
-                     SOCKSError, RPCError, TaskTimeout, TaskGroup, Event,
-                     sleep, ignore_after)
+from aiorpcx import (Event, Notification, RPCError, RPCSession, SOCKSError,
+                     SOCKSProxy, TaskGroup, TaskTimeout, connect_rs,
+                     handler_invocation, ignore_after, sleep)
 
 from electrumx.lib.peer import Peer
-from electrumx.lib.util import class_logger
+from electrumx.lib.util import class_logger, json_deserialize
 
 PEER_GOOD, PEER_STALE, PEER_NEVER, PEER_BAD = range(4)
 STATUS_DESCS = ('good', 'stale', 'never', 'bad')
@@ -144,7 +143,7 @@ class PeerManager:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     text = await response.text()
-            return {entry.lower() for entry in json.loads(text)}
+            return {entry.lower() for entry in json_deserialize(text)}
 
         while True:
             try:

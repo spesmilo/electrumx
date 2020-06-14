@@ -37,6 +37,18 @@ from collections.abc import Container, Mapping
 from struct import Struct
 
 
+# Use system-compiled JSON lib if available, fallback to stdlib
+try:
+    import rapidjson as json
+except ImportError:
+    try:
+        import ujson as json
+    except ImportError:
+        import json
+
+json_deserialize = json.loads
+json_serialize = json.dumps
+
 # Logging utilities
 
 

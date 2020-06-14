@@ -111,13 +111,13 @@ class Forest:
 
     def get_pos(self, l:Leaf):
         p = 0
-        h = 0
+        x = 1
         while l.parent is not None:
             s, b = l.sibling
-            p |= int(b) * pow(2, h)
-            h += 1
+            if b: p |= x
+            x = x << 1
             l = l.parent
-        p += pow(2, h)
+        p |= x
         return p
 
     def add(self, utxo):
@@ -175,9 +175,7 @@ class Forest:
             # delete roots marked for deletion
             k0 = to_delete_keys[0]
             if k0 == 1:
-                node_0 = to_delete[k0]
-                n = self.acc.pop(h)
-                assert n == node_0
+                self.acc.pop(h)
                 to_delete_keys = to_delete_keys[1:]
 
             next_keys = {}
@@ -261,6 +259,8 @@ class Forest:
 
 
     def dump(self):
+        if not self.acc:
+            return []
         n = max(self.acc.keys())
         roots = [self.acc.get(i) for i in range(0, n + 1)]
         return [r._hash if r else None for r in roots]

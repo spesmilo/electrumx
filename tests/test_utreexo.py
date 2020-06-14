@@ -14,8 +14,9 @@ def test_utreexo():
         f.add(l)
         print('adding', l, ': ', acc.dump())
     print('------')
-    #random.shuffle(leaves)
-    leaves = ['7', '6']
+    random.shuffle(leaves)
+    #leaves = ['7', '6']
+    print('deleting', leaves)
     f.batch_delete(leaves)
     print('f: ', f.dump())
     #for l in leaves:

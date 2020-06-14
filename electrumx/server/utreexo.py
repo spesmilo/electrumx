@@ -10,8 +10,8 @@
 
 from electrumx.lib.hash import blake2b
 
-def Hash(x, y=b''):
-    return blake2b(x+y)
+def Hash(x, y=b'', b=True):
+    return blake2b(x+y if b else y+x)
 
 
 class Accumulator:
@@ -162,52 +162,60 @@ class Forest:
         if not utxo_set:
             return
         leaves = [self.utxos.pop(utxo) for utxo in utxo_set]
-        to_delete = dict([(self.get_pos(l), l) for l in leaves])
-        to_delete_keys = sorted(to_delete.keys())
-        # height of the highest tree
-        max_h = to_delete_keys[-1].bit_length()
+        to_delete = sorted([(self.get_pos(l), l) for l in leaves])
+        del leaves
 
+        max_height = to_delete[-1][0].bit_length()
         touched = set()
-        for h in range(max_h):
-            if not to_delete_keys:
+
+        for h in range(max_height):
+            if not to_delete:
                 break
 
-            # delete roots marked for deletion
-            k0 = to_delete_keys[0]
-            if k0 == 1:
-                self.acc.pop(h)
-                to_delete_keys = to_delete_keys[1:]
+            next_keys = []
 
-            next_keys = {}
             # 1. twins:
-            for i in range(len(to_delete_keys) - 1):
-                if to_delete_keys[i] is None:
+            tdl = []
+            i = 0
+            l = len(to_delete)
+            while i < l:
+                ki, node_i = to_delete[i]
+                if i == 0 and ki == 1: # delete root
+                    self.acc.pop(h)
+                    i += 1
                     continue
-                ki = to_delete_keys[i]
-                kj = to_delete_keys[i+1]
+                if ki % 2 == 1 or i == l-1:
+                    tdl.append((ki, node_i))
+                    i += 1
+                    continue
+                kj, node_j = to_delete[i+1]
+                if kj % 2 == 0:
+                    tdl.append((ki, node_i))
+                    i += 1
+                    continue
                 if kj == ki ^ 1:
-                    node_i = to_delete[ki]
-                    node_j = to_delete[kj]
-                    assert node_i.parent == node_j.parent
-                    # mark parent for deletion
-                    next_keys[ki >> 1] = node_i.parent
-                    # remove from list:
-                    to_delete_keys[i] = None
-                    to_delete_keys[i+1] = None
-                    del node_i
-                    del node_j
+                    next_keys.append((ki >> 1, node_i.parent))
+                    i += 2
+                    #node_i.sibling = None
+                    #node_j.sibling = None
+                    #del node_i
+                    #del node_j
+                else:
+                    tdl.append((ki, node_i))
+                    tdl.append((kj, node_j))
+                    i += 2
 
-            to_delete_keys = list(filter(None, to_delete_keys))
+            to_delete = tdl
 
             # 2. swaps
-            for i in range(0, len(to_delete_keys) - 1, 2):
-                ki = to_delete_keys[i]
-                kj = to_delete_keys[i+1]
-                node_i = to_delete[ki]
-                node_j = to_delete[kj]
-                assert kj != ki ^ 1, (ki, kj)
-                assert node_i.parent is not None, (ki, 'h=%d'%h)
-                assert node_j.parent is not None, (kj, 'h=%d'%h)
+            i = 0
+            l = len(to_delete)
+            while i < l - 1:
+                ki, node_i = to_delete[i]
+                kj, node_j = to_delete[i+1]
+                #assert kj != ki ^ 1, (ki, kj)
+                #assert node_i.parent is not None, (ki, 'h=%d'%h)
+                #assert node_j.parent is not None, (kj, 'h=%d'%h)
                 # move node from kj^1 to ki
                 si, bi = node_i.sibling
                 sj, bj = node_j.sibling
@@ -215,20 +223,18 @@ class Forest:
                 si.sibling = sj, not bi
                 sj.parent = si.parent
                 touched.add(si)
-                to_delete_keys[i] = None
-                to_delete_keys[i+1] = None
                 # mark parent for deletion
-                next_keys[kj >> 1] = node_j.parent
+                next_keys.append((kj >> 1, node_j.parent))
                 #
-                del node_i
-                del node_j
+                #node_i.sibling = None
+                #node_j.sibling = None
+                #del node_i
+                #del node_j
+                i += 2
 
             # 3. root
-            to_delete_keys = list(filter(None, to_delete_keys))
-            if to_delete_keys:
-                assert len(to_delete_keys) == 1
-                ki = to_delete_keys[0]
-                node_i = to_delete[ki]
+            if l % 2 == 1:
+                ki, node_i = to_delete[l-1]
                 si, b = node_i.sibling
                 r = self.acc.pop(h, None)
                 if r is not None:
@@ -241,21 +247,23 @@ class Forest:
                     si.parent = None
                     self.acc[h] = si
                     # mark parent for deletion
-                    next_keys[ki >> 1] = node_i.parent
-                del node_i
+                    next_keys.append((ki >> 1, node_i.parent))
+                #
+                #node_i.sibling = None
+                #del node_i
 
             # 4. climb
             next_touched = set()
             for ni in touched:
-                if ni.parent:
+                parent = ni.parent
+                if parent:
                     si, b = ni.sibling
-                    x = Hash(si._hash + ni._hash)
-                    ni.parent._hash = x
-                    next_touched.add(ni.parent)
+                    parent._hash = Hash(si._hash, ni._hash, b)
+                    next_touched.add(parent)
             touched = next_touched
 
-            to_delete = next_keys
-            to_delete_keys = sorted(to_delete.keys())
+            #assert len(to_delete) == 0, to_delete
+            to_delete = sorted(next_keys)
 
 
     def dump(self):

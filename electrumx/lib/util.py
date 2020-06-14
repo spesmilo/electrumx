@@ -27,7 +27,7 @@
 '''Miscellaneous utility classes and functions.'''
 
 
-import array
+from array import array
 import inspect
 from ipaddress import ip_address
 import logging
@@ -95,7 +95,7 @@ def formatted_time(t, sep=' '):
             parts.append(fmt.format(val))
         t %= n
     if len(parts) < 3:
-        parts.append('{:02d}s'.format(t))
+        parts.append(f'{t:02d}s')
     return sep.join(parts)
 
 
@@ -122,7 +122,7 @@ def deep_getsizeof(obj):
         r = sys.getsizeof(o)
         ids.add(id(o))
 
-        if isinstance(o, (str, bytes, bytearray, array.array)):
+        if isinstance(o, (str, bytes, bytearray, array)):
             return r
 
         if isinstance(o, Mapping):
@@ -173,18 +173,17 @@ def increment_byte_string(bs):
     '''Return the lexicographically next byte string of the same length.
 
     Return None if there is none (when the input is all 0xff bytes).'''
-    for n in range(1, len(bs) + 1):
-        if bs[-n] != 0xff:
-            return bs[:-n] + bytes([bs[-n] + 1]) + bytes(n - 1)
-    return None
+    try:
+        return (int.from_bytes(bs, 'big') + 1).to_bytes(len(bs), 'big')
+    except OverflowError:
+        return None
 
 
 class LogicalFile(object):
     '''A logical binary file split across several separate files on disk.'''
 
     def __init__(self, prefix, digits, file_size):
-        digit_fmt = '{' + ':0{:d}d'.format(digits) + '}'
-        self.filename_fmt = prefix + digit_fmt
+        self.filename_fmt = f'{prefix}{{:0{digits:d}d}}'
         self.file_size = file_size
 
     def read(self, start, size=-1):
@@ -245,7 +244,6 @@ def open_truncate(filename):
 
 def address_string(address):
     '''Return an address as a correctly formatted string.'''
-    fmt = '{}:{:d}'
     host, port = address
     try:
         host = ip_address(host)
@@ -253,8 +251,8 @@ def address_string(address):
         pass
     else:
         if host.version == 6:
-            fmt = '[{}]:{:d}'
-    return fmt.format(host, port)
+            return f'[{host}]:{port:d}'
+    return f'{host}:{port:d}'
 
 
 def protocol_tuple(s):

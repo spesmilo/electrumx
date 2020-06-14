@@ -127,8 +127,9 @@ async def run_test(db_dir):
     compact_history(history)
     check_written(history, histories)
 
+
 def test_compaction(tmpdir):
     db_dir = str(tmpdir)
-    print('Temp dir: {}'.format(db_dir))
+    print(f'Temp dir: {db_dir}')
     loop = asyncio.get_event_loop()
     loop.run_until_complete(run_test(db_dir))

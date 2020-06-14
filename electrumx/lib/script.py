@@ -104,10 +104,10 @@ class ScriptPubKey(object):
     necessary for spending.
     '''
 
-    TO_ADDRESS_OPS = [OpCodes.OP_DUP, OpCodes.OP_HASH160, -1,
-                      OpCodes.OP_EQUALVERIFY, OpCodes.OP_CHECKSIG]
-    TO_P2SH_OPS = [OpCodes.OP_HASH160, -1, OpCodes.OP_EQUAL]
-    TO_PUBKEY_OPS = [-1, OpCodes.OP_CHECKSIG]
+    TO_ADDRESS_OPS = (OpCodes.OP_DUP, OpCodes.OP_HASH160, -1,
+                      OpCodes.OP_EQUALVERIFY, OpCodes.OP_CHECKSIG)
+    TO_P2SH_OPS = (OpCodes.OP_HASH160, -1, OpCodes.OP_EQUAL)
+    TO_PUBKEY_OPS = (-1, OpCodes.OP_CHECKSIG)
 
     PayToHandlers = namedtuple('PayToHandlers', 'address script_hash pubkey '
                                'unspendable strange')
@@ -143,15 +143,15 @@ class ScriptPubKey(object):
 
     @classmethod
     def P2SH_script(cls, hash160):
-        return (bytes([OpCodes.OP_HASH160])
+        return (bytes((OpCodes.OP_HASH160,))
                 + Script.push_data(hash160)
-                + bytes([OpCodes.OP_EQUAL]))
+                + bytes((OpCodes.OP_EQUAL,)))
 
     @classmethod
     def P2PKH_script(cls, hash160):
-        return (bytes([OpCodes.OP_DUP, OpCodes.OP_HASH160])
+        return (bytes((OpCodes.OP_DUP, OpCodes.OP_HASH160))
                 + Script.push_data(hash160)
-                + bytes([OpCodes.OP_EQUALVERIFY, OpCodes.OP_CHECKSIG]))
+                + bytes((OpCodes.OP_EQUALVERIFY, OpCodes.OP_CHECKSIG)))
 
 
 class Script(object):
@@ -200,21 +200,21 @@ class Script(object):
 
         n = len(data)
         if n < OpCodes.OP_PUSHDATA1:
-            return bytes([n]) + data
+            return bytes((n,)) + data
         if n < 256:
-            return bytes([OpCodes.OP_PUSHDATA1, n]) + data
+            return bytes((OpCodes.OP_PUSHDATA1, n)) + data
         if n < 65536:
-            return bytes([OpCodes.OP_PUSHDATA2]) + pack_le_uint16(n) + data
-        return bytes([OpCodes.OP_PUSHDATA4]) + pack_le_uint32(n) + data
+            return bytes((OpCodes.OP_PUSHDATA2,)) + pack_le_uint16(n) + data
+        return bytes((OpCodes.OP_PUSHDATA4,)) + pack_le_uint32(n) + data
 
     @classmethod
     def opcode_name(cls, opcode):
         if OpCodes.OP_0 < opcode < OpCodes.OP_PUSHDATA1:
-            return 'OP_{:d}'.format(opcode)
+            return f'OP_{opcode:d}'
         try:
             return OpCodes.whatis(opcode)
         except KeyError:
-            return 'OP_UNKNOWN:{:d}'.format(opcode)
+            return f'OP_UNKNOWN:{opcode:d}'
 
     @classmethod
     def dump(cls, script):
@@ -224,5 +224,4 @@ class Script(object):
             if data is None:
                 print(name)
             else:
-                print('{} {} ({:d} bytes)'
-                      .format(name, data.hex(), len(data)))
+                print(f'{name} {data.hex()} ({len(data):d} bytes)')

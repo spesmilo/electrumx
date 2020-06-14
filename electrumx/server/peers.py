@@ -25,6 +25,7 @@ from electrumx.lib.peer import Peer
 from electrumx.lib.util import class_logger
 
 PEER_GOOD, PEER_STALE, PEER_NEVER, PEER_BAD = range(4)
+STATUS_DESCS = ('good', 'stale', 'never', 'bad')
 STALE_SECS = 3 * 3600
 WAKEUP_SECS = 300
 PEER_ADD_PAUSE = 600
@@ -143,7 +144,7 @@ class PeerManager:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     text = await response.text()
-            return set(entry.lower() for entry in json.loads(text))
+            return {entry.lower() for entry in json.loads(text)}
 
         while True:
             try:
@@ -536,8 +537,11 @@ class PeerManager:
 
         # Always report ourselves if valid (even if not public)
         cutoff = time.time() - STALE_SECS
-        peers = set(myself for myself in self.myselves
-                    if myself.last_good > cutoff)
+        peers = {
+            myself
+            for myself in self.myselves
+            if myself.last_good > cutoff
+        }
 
         # Bucket the clearnet peers and select up to two from each
         onion_peers = []
@@ -567,11 +571,10 @@ class PeerManager:
     def rpc_data(self):
         '''Peer data for the peers RPC method.'''
         self._set_peer_statuses()
-        descs = ['good', 'stale', 'never', 'bad']
 
         def peer_data(peer):
             data = peer.serialize()
-            data['status'] = descs[peer.status]
+            data['status'] = STATUS_DESCS[peer.status]
             return data
 
         def peer_key(peer):

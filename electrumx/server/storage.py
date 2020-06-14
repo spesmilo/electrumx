@@ -19,7 +19,7 @@ def db_class(name):
         if db_class.__name__.lower() == name.lower():
             db_class.import_module()
             return db_class
-    raise RuntimeError('unrecognised DB engine "{}"'.format(name))
+    raise RuntimeError(f'unrecognised DB engine "{name}"')
 
 
 class Storage(object):

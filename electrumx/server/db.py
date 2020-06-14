@@ -9,7 +9,7 @@
 '''Interface to the blockchain database.'''
 
 
-import array
+from array import array
 import ast
 import os
 import time
@@ -55,7 +55,7 @@ class DB(object):
     it was shutdown uncleanly.
     '''
 
-    DB_VERSIONS = [6, 7, 8]
+    DB_VERSIONS = (6, 7, 8)
 
     class DBError(Exception):
         '''Raised on general DB errors generally indicating corruption.'''
@@ -113,7 +113,7 @@ class DB(object):
         size = (self.db_height + 1) * 8
         tx_counts = self.tx_counts_file.read(0, size)
         assert len(tx_counts) == size
-        self.tx_counts = array.array('Q', tx_counts)
+        self.tx_counts = array('Q', tx_counts)
         if self.tx_counts:
             assert self.db_tx_count == self.tx_counts[-1]
         else:
@@ -132,7 +132,7 @@ class DB(object):
                 f.write(f'ElectrumX databases and metadata for '
                         f'{self.coin.NAME} {self.coin.NET}'.encode())
             if not self.coin.STATIC_BLOCK_HEADERS:
-                self.headers_offsets_file.write(0, bytes(8))
+                self.headers_offsets_file.write(0, b'\0\0\0\0\0\0\0\0')
         else:
             self.logger.info(f'opened UTXO DB (for sync: {for_sync})')
         self.read_utxo_state()
@@ -447,8 +447,8 @@ class DB(object):
     async def fs_block_hashes(self, height, count):
         headers_concat, headers_count = await self.read_headers(height, count)
         if headers_count != count:
-            raise self.DBError('only got {:,d} headers starting at {:,d}, not '
-                               '{:,d}'.format(headers_count, height, count))
+            raise self.DBError(f'only got {headers_count:,d} headers starting '
+                               f'at {height:,d}, not {count:,d}')
         offset = 0
         headers = []
         for n in range(count):
@@ -568,17 +568,16 @@ class DB(object):
                 raise self.DBError('failed reading state from DB')
             self.db_version = state['db_version']
             if self.db_version not in self.DB_VERSIONS:
-                raise self.DBError('your UTXO DB version is {} but this '
-                                   'software only handles versions {}'
-                                   .format(self.db_version, self.DB_VERSIONS))
+                raise self.DBError(f'your UTXO DB version is {self.db_version} '
+                                   f'but this software only handles versions '
+                                   f'{self.DB_VERSIONS}')
             # backwards compat
             genesis_hash = state['genesis']
             if isinstance(genesis_hash, bytes):
                 genesis_hash = genesis_hash.decode()
             if genesis_hash != self.coin.GENESIS_HASH:
-                raise self.DBError('DB genesis hash {} does not match coin {}'
-                                   .format(genesis_hash,
-                                           self.coin.GENESIS_HASH))
+                raise self.DBError(f'DB genesis hash {genesis_hash} does not '
+                                   f'match coin {self.coin.GENESIS_HASH}')
             self.db_height = state['height']
             self.db_tx_count = state['tx_count']
             self.db_tip = state['tip']
@@ -596,17 +595,18 @@ class DB(object):
             self.upgrade_db()
 
         # Log some stats
-        self.logger.info('UTXO DB version: {:d}'.format(self.db_version))
-        self.logger.info('coin: {}'.format(self.coin.NAME))
-        self.logger.info('network: {}'.format(self.coin.NET))
-        self.logger.info('height: {:,d}'.format(self.db_height))
-        self.logger.info('tip: {}'.format(hash_to_hex_str(self.db_tip)))
-        self.logger.info('tx count: {:,d}'.format(self.db_tx_count))
+        self.logger.info(f'UTXO DB version: {self.db_version:d}')
+        self.logger.info(f'coin: {self.coin.NAME}')
+        self.logger.info(f'network: {self.coin.NET}')
+        self.logger.info(f'height: {self.db_height:,d}')
+        self.logger.info(f'tip: {hash_to_hex_str(self.db_tip)}')
+        self.logger.info(f'tx count: {self.db_tx_count:,d}')
         if self.utxo_db.for_sync:
             self.logger.info(f'flushing DB cache at {self.env.cache_MB:,d} MB')
         if self.first_sync:
-            self.logger.info('sync time so far: {}'
-                             .format(util.formatted_time(self.wall_time)))
+            self.logger.info(
+                f'sync time so far: {util.formatted_time(self.wall_time)}'
+            )
 
     def upgrade_db(self):
         self.logger.info(f'UTXO DB version: {self.db_version}')
@@ -683,8 +683,8 @@ class DB(object):
         size = (self.db_height + 1) * 8
         tx_counts = self.tx_counts_file.read(0, size)
         if len(tx_counts) == (self.db_height + 1) * 4:
-            tx_counts = array.array('I', tx_counts)
-            tx_counts = array.array('Q', tx_counts)
+            tx_counts = array('I', tx_counts)
+            tx_counts = array('Q', tx_counts)
             self.tx_counts_file.write(0, tx_counts.tobytes())
 
         self.db_version = max(self.DB_VERSIONS)
@@ -721,7 +721,7 @@ class DB(object):
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
                 tx_pos, = unpack_le_uint32(db_key[-9:-5])
-                tx_num, = unpack_le_uint64(db_key[-5:] + bytes(3))
+                tx_num, = unpack_le_uint64(db_key[-5:] + b'\0\0\0')
                 value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
                 utxos_append(UTXO(tx_num, tx_pos, tx_hash, height, value))
@@ -755,7 +755,7 @@ class DB(object):
                 # Find which entry, if any, the TX_HASH matches.
                 for db_key, hashX in self.utxo_db.iterator(prefix=prefix):
                     tx_num_packed = db_key[-5:]
-                    tx_num, = unpack_le_uint64(tx_num_packed + bytes(3))
+                    tx_num, = unpack_le_uint64(tx_num_packed + b'\0\0\0')
                     hash, _height = self.fs_tx_hash(tx_num)
                     if hash == tx_hash:
                         return hashX, idx_packed + tx_num_packed

@@ -34,7 +34,7 @@ from electrumx.lib.util import bytes_to_int, int_to_bytes, hex_to_bytes
 _sha256 = hashlib.sha256
 _sha512 = hashlib.sha512
 _new_hash = hashlib.new
-_new_hmac = hmac.new
+_hmac_digest = hmac.digest
 HASHX_LEN = 11
 
 
@@ -45,9 +45,7 @@ def sha256(x):
 
 def ripemd160(x):
     '''Simple wrapper of hashlib ripemd160.'''
-    h = _new_hash('ripemd160')
-    h.update(x)
-    return h.digest()
+    return _new_hash('ripemd160', x).digest()
 
 
 def double_sha256(x):
@@ -57,7 +55,7 @@ def double_sha256(x):
 
 def hmac_sha512(key, msg):
     '''Use SHA-512 to provide an HMAC.'''
-    return _new_hmac(key, msg, _sha512).digest()
+    return _hmac_digest(key, msg, _sha512)
 
 
 def hash160(x):
@@ -95,7 +93,7 @@ class Base58(object):
     def char_value(c):
         val = Base58.cmap.get(c)
         if val is None:
-            raise Base58Error('invalid base 58 character "{}"'.format(c))
+            raise Base58Error(f'invalid base 58 character "{c}"')
         return val
 
     @staticmethod
@@ -148,7 +146,7 @@ class Base58(object):
         be_bytes = Base58.decode(txt)
         result, check = be_bytes[:-4], be_bytes[-4:]
         if check != hash_fn(result)[:4]:
-            raise Base58Error('invalid base 58 checksum for {}'.format(txt))
+            raise Base58Error(f'invalid base 58 checksum for {txt}')
         return result
 
     @staticmethod

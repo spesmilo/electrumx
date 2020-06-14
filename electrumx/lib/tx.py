@@ -62,8 +62,8 @@ class TxInput(namedtuple("TxInput", "prev_hash prev_idx script sequence")):
     def __str__(self):
         script = self.script.hex()
         prev_hash = hash_to_hex_str(self.prev_hash)
-        return ("Input({}, {:d}, script={}, sequence={:d})"
-                .format(prev_hash, self.prev_idx, script, self.sequence))
+        return (f"Input({prev_hash}, {self.prev_idx:d}, script={script}, "
+                f"sequence={self.sequence:d})")
 
     def is_generation(self):
         '''Test if an input is generation/coinbase like'''
@@ -233,11 +233,18 @@ class DeserializerSegWit(Deserializer):
         start = self.cursor
         marker = self.binary[self.cursor + 4]
         if marker:
-            tx = super().read_tx()
+            # We could call super().read_tx here but the call stack is
+            # expensive when executed millions of times.
+            tx = Tx(
+                self._read_le_int32(),  # version
+                self._read_inputs(),    # inputs
+                self._read_outputs(),   # outputs
+                self._read_le_uint32()  # locktime
+            )
             tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
             return tx, tx_hash, self.binary_length
 
-        # Ugh, this is nasty.
+        # Ugh, this is tasty.
         version = self._read_le_int32()
         orig_ser = self.binary[start:self.cursor]
 
@@ -568,8 +575,7 @@ class DeserializerTrezarcoin(Deserializer):
         _input112 = data + _full_merkle
         _key = keyTwo + ntime + _nBits + _nonce + keyOne
         # Prepare 112Byte Header
-        blake2s_hash = blake2s(key=_key, digest_size=32)
-        blake2s_hash.update(_input112)
+        blake2s_hash = blake2s(_input112, digest_size=32, key=_key)
         # TrezarFlips - Only for Genesis
         return ''.join(map(str.__add__, blake2s_hash.hexdigest()[-2::-2],
                            blake2s_hash.hexdigest()[-1::-2]))
@@ -585,8 +591,7 @@ class DeserializerTrezarcoin(Deserializer):
         _input112 = data + _full_merkle
         _key = keyTwo + ntime + _nBits + _nonce + keyOne
         # Prepare 112Byte Header
-        blake2s_hash = blake2s(key=_key, digest_size=32)
-        blake2s_hash.update(_input112)
+        blake2s_hash = blake2s(_input112, digest_size=32, key=_key)
         # TrezarFlips
         return blake2s_hash.digest()
 
@@ -685,8 +690,8 @@ class TxInputTokenPayStealth(
     def __str__(self):
         script = self.script.hex()
         keyimage = bytes(self.keyimage).hex()
-        return ("Input({}, {:d}, script={}, sequence={:d})"
-                .format(keyimage, self.ringsize[1], script, self.sequence))
+        return (f"Input({keyimage}, {self.ringsize[1]:d}, script={script}, "
+                f"sequence={self.sequence:d})")
 
     def is_generation(self):
         return True
@@ -730,8 +735,8 @@ class TxInputDcr(namedtuple("TxInput", "prev_hash prev_idx tree sequence")):
 
     def __str__(self):
         prev_hash = hash_to_hex_str(self.prev_hash)
-        return ("Input({}, {:d}, tree={}, sequence={:d})"
-                .format(prev_hash, self.prev_idx, self.tree, self.sequence))
+        return (f"Input({prev_hash}, {self.prev_idx:d}, tree={self.tree}, "
+                f"sequence={self.sequence:d})")
 
     def is_generation(self):
         '''Test if an input is generation/coinbase like'''
@@ -841,8 +846,7 @@ class DeserializerSmartCash(Deserializer):
     @staticmethod
     def keccak(data):
         from Cryptodome.Hash import keccak
-        keccak_hash = keccak.new(digest_bits=256)
-        keccak_hash.update(data)
+        keccak_hash = keccak.new(data=data, digest_bits=256)
         return keccak_hash.digest()
 
     def read_tx_and_hash(self):

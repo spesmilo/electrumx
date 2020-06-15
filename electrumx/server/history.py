@@ -8,21 +8,19 @@
 
 '''History by script hash (address).'''
 
-from array import array
 import ast
 import bisect
 import time
+from array import array
 from collections import defaultdict
-from functools import partial
 
 import electrumx.lib.util as util
-from electrumx.lib.util import (
-    pack_be_uint16, pack_le_uint64, unpack_be_uint16_from, unpack_le_uint64,
-)
-from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN
+from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
+from electrumx.lib.util import (pack_be_uint16, pack_le_uint64,
+                                unpack_be_uint16_from, unpack_le_uint64)
 
 
-class History(object):
+class History:
 
     DB_VERSIONS = (0, 1)
 

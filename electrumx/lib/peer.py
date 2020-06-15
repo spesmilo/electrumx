@@ -32,7 +32,7 @@ from aiorpcx import is_valid_hostname
 from electrumx.lib.util import cachedproperty, protocol_tuple, version_string
 
 
-class Peer(object):
+class Peer:
 
     # Protocol version
     ATTRS = ('host', 'features',

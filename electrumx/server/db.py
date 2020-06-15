@@ -16,7 +16,6 @@ import time
 from bisect import bisect_right
 from dataclasses import dataclass
 from glob import glob
-from struct import Struct
 
 import attr
 from aiorpcx import run_in_thread, sleep
@@ -43,7 +42,7 @@ class UTXO:
 
 
 @attr.s(slots=True)
-class FlushData(object):
+class FlushData:
     height = attr.ib()
     tx_count = attr.ib()
     headers = attr.ib()
@@ -55,7 +54,7 @@ class FlushData(object):
     tip = attr.ib()
 
 
-class DB(object):
+class DB:
     '''Simple wrapper of the backend database for querying.
 
     Performs no DB update, though the DB will be cleaned on opening if

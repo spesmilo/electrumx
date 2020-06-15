@@ -144,7 +144,7 @@ def test_branch_and_root_from_level_bad():
         merkle.branch_and_root_from_level(hashes, [hashes[0]], 1, 0)
 
 
-class Source(object):
+class Source:
 
     def __init__(self, length):
         self._hashes = [os.urandom(32) for _ in range(length)]

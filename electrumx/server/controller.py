@@ -17,7 +17,7 @@ from electrumx.server.mempool import MemPool, MemPoolAPI
 from electrumx.server.session import SessionManager
 
 
-class Notifications(object):
+class Notifications:
     # hashX notifications come from two sources: new blocks and
     # mempool refreshes.
     #

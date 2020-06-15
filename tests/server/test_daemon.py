@@ -5,14 +5,9 @@ import logging
 
 import pytest
 
-from aiorpcx import (
-    JSONRPCv1, JSONRPCLoose, RPCError, ignore_after,
-    Request, Batch,
-)
+from aiorpcx import JSONRPCv1, JSONRPCLoose, RPCError, ignore_after, Request
 from electrumx.lib.coins import BitcoinCash, CoinError, Bitzeny, Dash
-from electrumx.server.daemon import (
-    Daemon, FakeEstimateFeeDaemon, DaemonError
-)
+from electrumx.server.daemon import Daemon, FakeEstimateFeeDaemon
 
 
 coin = BitcoinCash
@@ -34,7 +29,7 @@ def dash_daemon(request):
     return coin.DAEMON(coin, ','.join(urls))
 
 
-class ResponseBase(object):
+class ResponseBase:
 
     def __init__(self, headers, status):
         self.headers = headers
@@ -241,13 +236,6 @@ async def test_broadcast_transaction(daemon):
     tx_hash = 'hash'
     daemon.session = ClientSessionGood(('sendrawtransaction', [raw_tx], tx_hash))
     assert await daemon.broadcast_transaction(raw_tx) == tx_hash
-
-
-@pytest.mark.asyncio
-async def test_relayfee(daemon):
-    response = {"relayfee": sats, "other:": "cruft"}
-    daemon.session = ClientSessionGood(('getnetworkinfo', [], response))
-    assert await daemon.getnetworkinfo() == response
 
 
 @pytest.mark.asyncio

@@ -14,7 +14,6 @@ Not currently documented; might become easier to use in future.
 
 import argparse
 import asyncio
-import sys
 
 from electrumx import Env
 from electrumx.server.db import DB
@@ -106,8 +105,7 @@ def main():
     parser.add_argument('scripts', nargs='*', default=[], type=str,
                         help='hex scripts to query')
     args = parser.parse_args()
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(query(args))
+    asyncio.run(query(args))
 
 if __name__ == '__main__':
     main()

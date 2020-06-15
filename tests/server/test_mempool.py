@@ -7,13 +7,12 @@ from functools import partial
 from random import randrange, choice, seed
 
 import pytest
-from aiorpcx import Event, TaskGroup, sleep, spawn, ignore_after
+from aiorpcx import Event, TaskGroup, sleep, ignore_after
 
 from electrumx.server.mempool import MemPool, MemPoolAPI
 from electrumx.lib.coins import BitcoinCash
 from electrumx.lib.hash import HASHX_LEN, hex_str_to_hash, hash_to_hex_str
 from electrumx.lib.tx import Tx, TxInput, TxOutput
-from electrumx.lib.util import make_logger
 
 
 coin = BitcoinCash

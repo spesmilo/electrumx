@@ -577,6 +577,6 @@ class PeerManager:
             return data
 
         def peer_key(peer):
-            return (peer.bad, -peer.last_good)
+            return peer.bad, -peer.last_good
 
         return [peer_data(peer) for peer in sorted(self.peers, key=peer_key)]

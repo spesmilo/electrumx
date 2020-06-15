@@ -1293,7 +1293,7 @@ class ElectrumX(SessionBase):
                 BAD_REQUEST, f'unsupported protocol version: {protocol_version}'))
         self.set_request_handlers(ptuple)
 
-        return (electrumx.version, self.protocol_version_string())
+        return electrumx.version, self.protocol_version_string()
 
     async def crash_old_client(self, ptuple, crash_client_ver):
         if crash_client_ver:
@@ -1342,7 +1342,7 @@ class ElectrumX(SessionBase):
         '''
         assert_tx_hash(tx_hash)
         if verbose not in (True, False):
-            raise RPCError(BAD_REQUEST, f'"verbose" must be a boolean')
+            raise RPCError(BAD_REQUEST, '"verbose" must be a boolean')
 
         self.bump_cost(1.0)
         return await self.daemon_request('getrawtransaction', tx_hash, verbose)
@@ -1370,7 +1370,7 @@ class ElectrumX(SessionBase):
         tx_pos = non_negative_integer(tx_pos)
         height = non_negative_integer(height)
         if merkle not in (True, False):
-            raise RPCError(BAD_REQUEST, f'"merkle" must be a boolean')
+            raise RPCError(BAD_REQUEST, '"merkle" must be a boolean')
 
         if merkle:
             branch, tx_hash, cost = await self.session_mgr.merkle_branch_for_tx_pos(

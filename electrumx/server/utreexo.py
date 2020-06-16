@@ -74,11 +74,16 @@ class Accumulator:
 #######################
 
 class Leaf:
+    __slots__ = ('parent', '_hash', 'sibling')
+
     def __init__(self, utxo):
         self.parent = None
         self._hash = Hash(utxo)
 
+
 class Parent:
+    __slots__ = ('parent', '_hash', 'sibling')
+
     def __init__(self, x, y, is_left):
         if is_left:
             x, y = y, x

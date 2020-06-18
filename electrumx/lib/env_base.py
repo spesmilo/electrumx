@@ -13,7 +13,7 @@ from os import environ
 from electrumx.lib.util import class_logger
 
 
-class EnvBase(object):
+class EnvBase:
     '''Wraps environment configuration.'''
 
     class Error(Exception):

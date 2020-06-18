@@ -32,7 +32,6 @@ import pytest
 
 from electrumx.lib.coins import Coin
 from electrumx.lib.hash import hex_str_to_hash
-from electrumx.lib.util import pack_be_uint32
 
 BLOCKS_DIR = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 'blocks')

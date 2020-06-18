@@ -32,7 +32,6 @@ import hmac
 from electrumx.lib.util import bytes_to_int, int_to_bytes, hex_to_bytes
 
 _sha256 = hashlib.sha256
-_sha512 = hashlib.sha512
 _new_hash = hashlib.new
 _hmac_digest = hmac.digest
 HASHX_LEN = 11
@@ -43,26 +42,9 @@ def sha256(x):
     return _sha256(x).digest()
 
 
-def ripemd160(x):
-    '''Simple wrapper of hashlib ripemd160.'''
-    return _new_hash('ripemd160', x).digest()
-
-
 def double_sha256(x):
     '''SHA-256 of SHA-256, as used extensively in bitcoin.'''
     return sha256(sha256(x))
-
-
-def hmac_sha512(key, msg):
-    '''Use SHA-512 to provide an HMAC.'''
-    return _hmac_digest(key, msg, _sha512)
-
-
-def hash160(x):
-    '''RIPEMD-160 of SHA-256.
-
-    Used to make bitcoin addresses from pubkeys.'''
-    return ripemd160(sha256(x))
 
 
 def hash_to_hex_str(x):
@@ -82,7 +64,7 @@ class Base58Error(Exception):
     '''Exception used for Base58 errors.'''
 
 
-class Base58(object):
+class Base58:
     '''Class providing base 58 functionality.'''
 
     chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'

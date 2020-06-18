@@ -31,7 +31,6 @@ from array import array
 import inspect
 from ipaddress import ip_address
 import logging
-import re
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
@@ -83,8 +82,7 @@ def class_logger(path, classname):
 # Method decorator.  To be used for calculations that will always
 # deliver the same result.  The method cannot take any arguments
 # and should be accessed as an attribute.
-class cachedproperty(object):
-
+class cachedproperty:
     def __init__(self, f):
         self.f = f
 
@@ -191,7 +189,7 @@ def increment_byte_string(bs):
         return None
 
 
-class LogicalFile(object):
+class LogicalFile:
     '''A logical binary file split across several separate files on disk.'''
 
     def __init__(self, prefix, digits, file_size):

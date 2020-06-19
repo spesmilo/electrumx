@@ -19,6 +19,7 @@ import aiohttp
 from aiorpcx import (Event, Notification, RPCError, RPCSession, SOCKSError,
                      SOCKSProxy, TaskGroup, TaskTimeout, connect_rs,
                      handler_invocation, ignore_after, sleep)
+from aiorpcx.jsonrpc import CodeMessageError
 
 from electrumx.lib.peer import Peer
 from electrumx.lib.util import class_logger, json_deserialize
@@ -286,7 +287,7 @@ class PeerManager:
                 self.logger.error(f'{peer_text} marking bad: ({e})')
                 peer.mark_bad()
                 break
-            except RPCError as e:
+            except CodeMessageError as e:
                 self.logger.error(f'{peer_text} RPC error: {e.message} '
                                   f'({e.code})')
             except (OSError, SOCKSError, ConnectionError, TaskTimeout) as e:

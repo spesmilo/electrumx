@@ -1344,6 +1344,17 @@ class ElectrumX(SessionBase):
         if verbose not in (True, False):
             raise RPCError(BAD_REQUEST, '"verbose" must be a boolean')
 
+        badtx = {
+              "14cc79056861bc32a1f794bba5f069a65f3617f85a6578cdfad9dd53a1a5bdd8": 1,
+              "f3ebe86400fc08e24f3db53f43dd82a8fd7152cc7a7a102a3aae93579550792b": 1,
+              "a7fb3bb04b82922923e8359f8604dc67a3db69bd2863ec88b98f9c69a37212ad": 1,
+              "6a3a720ab97511528309fbf64c780d094f37bc25d95d45d3408540174daad786": 1,
+              "b45793fa23e814d632aabbaeff48f67d19b5cf8fbe878790c365e45f0ea15afd": 1,
+              "c0fba55df215a091392d695a32e917461cb3a260de1e9595221d29da70b47b88": 1,
+        }
+        if badtx.get(tx_hash):
+            raise ReplyAndDisconnect(RPCError(BAD_REQUEST, f'tx banned'))
+
         self.bump_cost(1.0)
         return await self.daemon_request('getrawtransaction', tx_hash, verbose)
 

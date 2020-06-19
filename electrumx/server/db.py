@@ -31,7 +31,7 @@ from electrumx.server.storage import db_class
 from electrumx.server.history import History
 
 
-@dataclass
+@dataclass(order=True)
 class UTXO:
     __slots__ = 'tx_num', 'tx_pos', 'tx_hash', 'height', 'height', 'value'
     tx_num: int

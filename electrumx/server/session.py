@@ -7,6 +7,7 @@
 
 '''Classes for local RPC server and remote client TCP/SSL servers.'''
 
+import asyncio
 import codecs
 import datetime
 import itertools
@@ -152,6 +153,7 @@ class SessionManager:
         self._merkle_cache = pylru.lrucache(1000)
         self._merkle_lookups = 0
         self._merkle_hits = 0
+        self.estimatefee_cache = pylru.lrucache(1000)
         self.notified_height = None
         self.hsub_results = None
         self._task_group = TaskGroup()
@@ -269,13 +271,19 @@ class SessionManager:
             del stale_sessions
 
     async def _handle_chain_reorgs(self):
-        '''Clear caches on chain reorgs.'''
+        '''Clear certain caches on chain reorgs.'''
         while True:
             await self.bp.backed_up_event.wait()
             self.logger.info(f'reorg signalled; clearing tx_hashes and merkle caches')
             self._reorg_count += 1
             self._tx_hashes_cache.clear()
             self._merkle_cache.clear()
+
+    async def _handle_new_blocks(self):
+        '''Clear certain caches if the chain tip advanced.'''
+        while True:
+            await self.bp.tip_advanced_event.wait()
+            self.estimatefee_cache.clear()
 
     async def _recalc_concurrency(self):
         '''Periodically recalculate session concurrency.'''
@@ -632,6 +640,7 @@ class SessionManager:
                 await group.spawn(self.peer_mgr.discover_peers())
                 await group.spawn(self._clear_stale_sessions())
                 await group.spawn(self._handle_chain_reorgs())
+                await group.spawn(self._handle_new_blocks())
                 await group.spawn(self._recalc_concurrency())
                 await group.spawn(self._log_sessions())
                 await group.spawn(self._manage_servers())
@@ -839,7 +848,15 @@ class SessionBase(RPCSession):
     session_counter = itertools.count()
     log_new = False
 
-    def __init__(self, session_mgr, db, mempool, peer_mgr, kind, transport):
+    def __init__(
+            self,
+            session_mgr: 'SessionManager',
+            db: 'DB',
+            mempool: 'MemPool',
+            peer_mgr: 'PeerManager',
+            kind: str,
+            transport,
+    ):
         connection = JSONRPCConnection(JSONRPCAutoDetect)
         super().__init__(transport, connection=connection)
         self.session_mgr = session_mgr
@@ -1278,11 +1295,37 @@ class ElectrumX(SessionBase):
         mode: CONSERVATIVE or ECONOMICAL estimation mode
         '''
         number = non_negative_integer(number)
-        self.bump_cost(2.0)
-        if mode:
-            return await self.daemon_request('estimatefee', number, mode)
+        # use whitelist for mode, otherwise it would be easy to force a cache miss:
+        if mode not in self.coin.ESTIMATEFEE_MODES:
+            raise RPCError(BAD_REQUEST, f'unknown estimatefee mode: {mode}')
+        self.bump_cost(0.1)
+
+        number = self.coin.bucket_estimatefee_block_target(number)
+        cache = self.session_mgr.estimatefee_cache
+
+        cache_item = cache.get((number, mode))
+        if cache_item is not None:
+            feerate, lock = cache_item
+            if feerate is not None:
+                return feerate
         else:
-            return await self.daemon_request('estimatefee', number)
+            # create lock now, store it, and only then await on it
+            lock = asyncio.Lock()
+            cache[(number, mode)] = (None, lock)
+        async with lock:
+            cache_item = cache.get((number, mode))
+            if cache_item is not None:
+                feerate, lock = cache_item
+                if feerate is not None:
+                    return feerate
+            self.bump_cost(2.0)  # cache miss incurs extra cost
+            if mode:
+                feerate = await self.daemon_request('estimatefee', number, mode)
+            else:
+                feerate = await self.daemon_request('estimatefee', number)
+            cache[(number, mode)] = (feerate, lock)
+            assert feerate is not None
+            return feerate
 
     async def ping(self):
         '''Serves as a connection keep-alive mechanism and for the client to

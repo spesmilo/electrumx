@@ -169,6 +169,7 @@ class BlockProcessor:
         self.notifications = notifications
 
         self.coin = env.coin
+        # blocks_event: set when new blocks are put on the queue by the Prefetcher, to be processed
         self.blocks_event = asyncio.Event()
         self.prefetcher = Prefetcher(daemon, env.coin, self.blocks_event)
         self.logger = class_logger(__name__, self.__class__.__name__)
@@ -179,6 +180,7 @@ class BlockProcessor:
         self.reorg_count = 0
         self.height = -1
         self.tip = None  # type: Optional[bytes]
+        self.tip_advanced_event = asyncio.Event()
         self.tx_count = 0
         self._caught_up_event = None
 
@@ -413,6 +415,8 @@ class BlockProcessor:
         self.height = height
         self.headers += headers
         self.tip = self.coin.header_hash(headers[-1])
+        self.tip_advanced_event.set()
+        self.tip_advanced_event.clear()
 
     def advance_txs(
             self,

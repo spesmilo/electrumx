@@ -57,6 +57,7 @@ class Daemon:
         self._height = None
         self.available_rpcs = {}
         self.session = None
+        self.cache = {}
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(connector=self.connector())
@@ -232,17 +233,23 @@ class Daemon:
         '''Update our record of the daemon's mempool hashes.'''
         return await self._send_single('getrawmempool')
 
-    async def estimatefee(self, block_count, estimate_mode=None):
+    async def flushcache(self):
+        '''Flush daemon cache every new block.'''
+        self.cache = {}
+
+    async def estimatefee(self, block_count, estimate_mode='CONSERVATIVE'):
         '''Return the fee estimate for the block count.  Units are whole
         currency units per KB, e.g. 0.00000995, or -1 if no estimate
         is available.
         '''
-        if estimate_mode:
-            args = (block_count, estimate_mode)
-        else:
-            args = (block_count, )
+        args = (block_count, estimate_mode)
+        key = estimate_mode + str(block_count)
+        if self.cache.get(key, None):
+            return self.cache.get(key)
+
         if await self._is_rpc_available('estimatesmartfee'):
             estimate = await self._send_single('estimatesmartfee', args)
+            self.cache[key] = estimate.get('feerate', -1)
             return estimate.get('feerate', -1)
         return await self._send_single('estimatefee', args)
 

@@ -1562,6 +1562,8 @@ class ElectrumX(SessionBase):
         start_height and count must be non-negative integers.  At most
         MAX_CHUNK_SIZE headers will be returned.
         '''
+        if self.protocol_tuple >= (1, 5):
+            return await self.block_headers_array(start_height, count, cp_height)
         start_height = non_negative_integer(start_height)
         count = non_negative_integer(count)
         cp_height = non_negative_integer(cp_height)
@@ -1575,6 +1577,38 @@ class ElectrumX(SessionBase):
             cost += 1.0
             last_height = start_height + count - 1
             result.update(await self._merkle_proof(cp_height, last_height))
+        self.bump_cost(cost)
+        return result
+
+    async def block_headers_array(self, start_height, count, cp_height=0):
+        '''Return block headers in an array for the main chain;
+        starting at start_height.
+        start_height and count must be non-negative integers.  At most
+        MAX_CHUNK_SIZE headers will be returned.
+        '''
+        start_height = non_negative_integer(start_height)
+        count = non_negative_integer(count)
+        cp_height = non_negative_integer(cp_height)
+        cost = count / 50
+
+        max_size = self.MAX_CHUNK_SIZE
+        count = min(count, max_size)
+        headers, count = await self.db.read_headers(start_height, count)
+        cursor = 0
+        result = {'count': count, 'max': max_size, 'headers': []}
+        if count and cp_height:
+            cost += 1.0
+            last_height = start_height + count - 1
+            result.update(await self._merkle_proof(cp_height, last_height))
+
+        height = 0
+        while cursor < len(headers):
+            next_cursor = self.db.header_offset(height + 1)
+            header = headers[cursor:next_cursor]
+            result['headers'].append(header)
+            cursor = next_cursor
+            height += 1
+
         self.bump_cost(cost)
         return result
 
@@ -2128,7 +2162,17 @@ class AuxPoWElectrumX(ElectrumX):
             return result
 
         # Covered by a checkpoint; truncate AuxPoW data
+        if self.protocol_tuple >= (1, 5):
+            result['headers'] = self.truncate_auxpow_headers(result['headers'])
+            return
+
         result['hex'] = self.truncate_auxpow(result['hex'], start_height)
+        return result
+
+    def truncate_auxpow_headers(self, headers):
+        result = []
+        for header in headers:
+            result.append(header[:self.coin.TRUNCATED_HEADER_SIZE])
         return result
 
     def truncate_auxpow(self, headers_full_hex, start_height):

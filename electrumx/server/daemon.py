@@ -255,7 +255,9 @@ class Daemon:
 
     async def getnetworkinfo(self):
         '''Return the result of the 'getnetworkinfo' RPC call.'''
-        return await self._send_single('getnetworkinfo')
+        if self.cache.get('networkinfo') is None:
+           self.cache['networkinfo'] = await self._send_single('getnetworkinfo')
+        return self.cache.get('networkinfo')
 
     async def relayfee(self):
         '''The minimum fee a low-priority tx must pay in order to be accepted

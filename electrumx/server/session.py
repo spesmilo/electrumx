@@ -1245,6 +1245,8 @@ class ElectrumX(SessionBase):
         mode: CONSERVATIVE or ECONOMICAL estimation mode
         '''
         number = non_negative_integer(number)
+        if number > 1008:
+            raise RPCError(BAD_REQUEST, 'number out of range')
         self.bump_cost(2.0)
         if mode:
             return await self.daemon_request('estimatefee', number, mode)

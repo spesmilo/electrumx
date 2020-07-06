@@ -273,7 +273,7 @@ async def test_estimatefee(daemon):
         result = -1
     daemon.session = ClientSessionGood(
             ('estimatesmartfee', [], method_not_found),
-            ('estimatefee', [2], result)
+            ('estimatefee', [2, 'CONSERVATIVE'], result)
     )
     assert await daemon.estimatefee(2) == result
 
@@ -287,12 +287,12 @@ async def test_estimatefee_smart(daemon):
     result = {'feerate': rate}
     daemon.session = ClientSessionGood(
         ('estimatesmartfee', [], bad_args),
-        ('estimatesmartfee', [2], result)
+        ('estimatesmartfee', [2, 'CONSERVATIVE'], result)
     )
     assert await daemon.estimatefee(2) == rate
 
     # Test the rpc_available_cache is used
-    daemon.session = ClientSessionGood(('estimatesmartfee', [2], result))
+    daemon.session = ClientSessionGood(('estimatesmartfee', [2, 'CONSERVATIVE'], result))
     assert await daemon.estimatefee(2) == rate
 
 

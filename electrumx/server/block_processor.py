@@ -117,6 +117,7 @@ class Prefetcher:
                 if self.caught_up:
                     self.logger.info(f'new block height {first + count-1:,d} '
                                      f'hash {hex_hashes[-1]}')
+                    await daemon.flushcache()
                 blocks = await daemon.raw_blocks(hex_hashes)
 
                 assert count == len(blocks)

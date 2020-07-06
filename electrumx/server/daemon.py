@@ -57,6 +57,7 @@ class Daemon:
         self._height = None
         self.available_rpcs = {}
         self.session = None
+        self.cache = {}
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(connector=self.connector())
@@ -232,23 +233,29 @@ class Daemon:
         '''Update our record of the daemon's mempool hashes.'''
         return await self._send_single('getrawmempool')
 
-    async def estimatefee(self, block_count, estimate_mode=None):
+    async def estimatefee(self, block_count, mode='CONSERVATIVE'):
         '''Return the fee estimate for the block count.  Units are whole
         currency units per KB, e.g. 0.00000995, or -1 if no estimate
         is available.
         '''
-        if estimate_mode:
-            args = (block_count, estimate_mode)
-        else:
-            args = (block_count, )
+        args = (block_count, mode)
+        key = mode + str(block_count)
+
+        if self.cache.get(key) is not None:
+            return self.cache.get(key)
+
         if await self._is_rpc_available('estimatesmartfee'):
             estimate = await self._send_single('estimatesmartfee', args)
+            self.cache[key] = estimate.get('feerate', None)
             return estimate.get('feerate', -1)
         return await self._send_single('estimatefee', args)
 
     async def getnetworkinfo(self):
         '''Return the result of the 'getnetworkinfo' RPC call.'''
-        return await self._send_single('getnetworkinfo')
+        key = 'getnetworkinfo'
+        if self.cache.get(key) is None:
+            self.cache[key] = await self._send_single('getnetworkinfo')
+        return self.cache.get(key)
 
     async def relayfee(self):
         '''The minimum fee a low-priority tx must pay in order to be accepted
@@ -286,6 +293,10 @@ class Daemon:
 
         If the daemon has not been queried yet this returns None.'''
         return self._height
+
+    async def flushcache(self):
+        '''Flush daemon cache every new block.'''
+        self.cache = {}
 
 
 class DashDaemon(Daemon):

@@ -1245,7 +1245,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         return await self.daemon_request('relayfee')
 
-    async def estimatefee(self, number, mode=None):
+    async def estimatefee(self, number, mode='CONSERVATIVE'):
         '''The estimated transaction fee per kilobyte to be paid for a
         transaction to be included within a certain number of blocks.
 
@@ -1253,11 +1253,12 @@ class ElectrumX(SessionBase):
         mode: CONSERVATIVE or ECONOMICAL estimation mode
         '''
         number = non_negative_integer(number)
+        if number > 1008:
+            raise RPCError(BAD_REQUEST, 'number out of range')
+        if mode not in ('CONSERVATIVE', 'ECONOMICAL'):
+            raise RPCError(BAD_REQUEST, f'unknown estimatefee mode: {mode}')
         self.bump_cost(2.0)
-        if mode:
-            return await self.daemon_request('estimatefee', number, mode)
-        else:
-            return await self.daemon_request('estimatefee', number)
+        return await self.daemon_request('estimatefee', number, mode)
 
     async def ping(self):
         '''Serves as a connection keep-alive mechanism and for the client to

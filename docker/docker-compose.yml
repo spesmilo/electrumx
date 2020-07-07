@@ -1,0 +1,18 @@
+version: "3.8"
+services:
+  electrumx:
+    build:
+      context: ../
+    image: electrumx
+    environment:
+      DB_DIRECTORY: /electrumx-db
+      DAEMON_URL: http://username:password@bitcoin_url:port/
+      SERVICES: tcp://:50001
+      COIN: Bitcoin
+    ulimits:
+      nofile:
+        soft: 2500
+        hard: 2500
+    volumes:
+      - ./electrumx-db:/electrumx-db
+    command: electrumx_server

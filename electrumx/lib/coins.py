@@ -1530,8 +1530,10 @@ class Verus(KomodoMixin, EquihashMixin, Coin):
             if header[0] == 4 and header[2] >= 1:
                 if len(header) < 144 or header[143] < 3:
                     return verushash.verushash_v2b(header)
-                else:
+                elif header[143] < 4:
                     return verushash.verushash_v2b1(header)
+                else:
+                    return verushash.verushash_v2b2(header)
             else:
                 return verushash.verushash(header)
 

@@ -1216,7 +1216,6 @@ class ElectrumX(SessionBase):
         '''
         if self.protocol_tuple >= (1, 5, 0):
             return await self.block_headers_array(start_height, count, cp_height)
-
         start_height = non_negative_integer(start_height)
         count = non_negative_integer(count)
         cp_height = non_negative_integer(cp_height)
@@ -1234,13 +1233,11 @@ class ElectrumX(SessionBase):
         return result
 
     async def block_headers_array(self, start_height, count, cp_height=0):
-        """
-        Return block headers in an array for the main chain;
+        '''Return block headers in an array for the main chain;
         starting at start_height.
         start_height and count must be non-negative integers.  At most
         MAX_CHUNK_SIZE headers will be returned.
-        """
-
+        '''
         start_height = non_negative_integer(start_height)
         count = non_negative_integer(count)
         cp_height = non_negative_integer(cp_height)
@@ -1258,11 +1255,12 @@ class ElectrumX(SessionBase):
 
         height = 0
         while cursor < len(headers):
-            next_cursor = self.db.dynamic_header_offset(height + 1)
+            next_cursor = self.db.header_offset(height + 1)
             header = headers[cursor:next_cursor]
             result['headers'].append(header)
-            cursor = next_cursor
+            cursor += next_cursor
             height += 1
+
         self.bump_cost(cost)
         return result
 
@@ -1787,15 +1785,22 @@ class AuxPoWElectrumX(ElectrumX):
         return result
 
     async def block_headers(self, start_height, count, cp_height=0):
-        # Older protocol versions don't truncate AuxPoW or
+        result = await super().block_headers(start_height, count, cp_height)
+
+        # Older protocol versions don't truncate AuxPoW
+        if self.protocol_tuple < (1, 4, 1):
+            return result
+
         # Not covered by a checkpoint; return full AuxPoW data
-        if self.protocol_tuple < (1, 5, 0) or cp_height == 0:
-            result = await super().block_headers(start_height, count, cp_height)
+        if cp_height == 0:
             return result
 
         # Covered by a checkpoint; truncate AuxPoW data
-        result = await super().block_headers_array(start_height, count, cp_height)
-        result['headers'] = self.truncate_auxpow_headers(result['headers'])
+        if self.protocol_tuple >= (1, 5, 0):
+            result['headers'] = self.truncate_auxpow_headers(result['headers'])
+            return
+
+        result['hex'] = self.truncate_auxpow(result['hex'], start_height)
         return result
 
     def truncate_auxpow_headers(self, headers):

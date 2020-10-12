@@ -362,7 +362,11 @@ class PeerManager:
 
         # server.version goes first
         message = 'server.version'
-        result = await session.send_request(message, self.server_version_args)
+        try:
+            result = await session.send_request(message, self.server_version_args)
+        except asyncio.CancelledError:
+            raise BadPeerError('terminated before server.version response')
+
         assert_good(message, result, list)
 
         # Protocol version 1.1 returns a pair with the version first
@@ -386,7 +390,10 @@ class PeerManager:
         if features:
             self.logger.info(f'registering ourself with {peer}')
             # We only care to wait for the response
-            await session.send_request('server.add_peer', [features])
+            try:
+                await session.send_request('server.add_peer', [features])
+            except asyncio.CancelledError:
+                raise BadPeerError('terminated before server.add_peer response')
 
     async def _send_headers_subscribe(self, session):
         message = 'blockchain.headers.subscribe'

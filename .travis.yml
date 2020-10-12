@@ -3,7 +3,7 @@ dist: bionic
 language: python
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -yq libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev liblz4-dev librocksdb-dev libleveldb-dev libsodium-dev
+  - sudo apt-get install -yq libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev liblz4-dev librocksdb-dev libleveldb-dev libboost-all-dev libsodium-dev
 python:
   - "3.7-dev"
   - "3.8-dev"

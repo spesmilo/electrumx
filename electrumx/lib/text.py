@@ -62,7 +62,7 @@ def peers_lines(data):
         return util.formatted_time(now - t)
 
     now = time.time()
-    fmt = ('{:<30} {:<6} {:>5} {:>5} {:<17} {:>4} '
+    fmt = ('{:<62} {:<6} {:>5} {:>5} {:<17} {:>4} '
            '{:>4} {:>8} {:>11} {:>11} {:>5} {:>20} {:<15}')
     yield fmt.format('Host', 'Status', 'TCP', 'SSL', 'Server', 'Min',
                      'Max', 'Pruning', 'Last Good', 'Last Try',
@@ -71,7 +71,7 @@ def peers_lines(data):
         features = item['features']
         hostname = item['host']
         host = features['hosts'][hostname]
-        yield fmt.format(hostname[:30],
+        yield fmt.format(hostname[:62],
                          item['status'],
                          host.get('tcp_port') or '',
                          host.get('ssl_port') or '',

@@ -393,7 +393,7 @@ class PeerManager:
             try:
                 await session.send_request('server.add_peer', [features])
             except asyncio.CancelledError:
-                BadPeerError('terminated before server.add_peer response')
+                raise BadPeerError('terminated before server.add_peer response')
 
     async def _send_headers_subscribe(self, session):
         message = 'blockchain.headers.subscribe'

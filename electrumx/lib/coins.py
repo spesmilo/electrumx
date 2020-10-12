@@ -578,13 +578,12 @@ class Bitcoin(BitcoinMixin, Coin):
     NAME = "Bitcoin"
     DESERIALIZER = lib_tx.DeserializerSegWit
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
-    TX_COUNT = 318337769
-    TX_COUNT_HEIGHT = 524213
-    TX_PER_BLOCK = 1400
+    TX_COUNT = 565436782
+    TX_COUNT_HEIGHT = 646855
+    TX_PER_BLOCK = 2200
     CRASH_CLIENT_VER = (3, 2, 3)
     BLACKLIST_URL = 'https://electrum.org/blacklist.json'
     PEERS = [
-        'E-X.not.fyi s t',
         'electrum.vom-stausee.de s t',
         'electrum.hsmiths.com s t',
         'helicarrier.bauerj.eu s t',

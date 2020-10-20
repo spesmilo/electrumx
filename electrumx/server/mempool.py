@@ -12,6 +12,7 @@ import time
 from abc import ABC, abstractmethod
 from asyncio import Lock
 from collections import defaultdict
+from typing import Sequence, Tuple
 
 import attr
 from aiorpcx import TaskGroup, run_in_thread, sleep
@@ -23,7 +24,7 @@ from electrumx.server.db import UTXO
 
 @attr.s(slots=True)
 class MemPoolTx:
-    prevouts = attr.ib()
+    prevouts = attr.ib()  # type: Sequence[Tuple[bytes, int]]
     # A pair is a (hashX, value) tuple
     in_pairs = attr.ib()
     out_pairs = attr.ib()

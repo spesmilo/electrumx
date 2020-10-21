@@ -13,11 +13,15 @@ import bisect
 import time
 from array import array
 from collections import defaultdict
+from typing import TYPE_CHECKING, Type, Optional
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
 from electrumx.lib.util import (pack_be_uint16, pack_le_uint64,
                                 unpack_be_uint16_from, unpack_le_uint64)
+
+if TYPE_CHECKING:
+    from electrumx.server.storage import Storage
 
 
 TXNUM_LEN = 5
@@ -27,6 +31,8 @@ FLUSHID_LEN = 2
 class History:
 
     DB_VERSIONS = (0, 1)
+
+    db: Optional['Storage']
 
     def __init__(self):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
@@ -44,7 +50,13 @@ class History:
         # Value: sorted "list" of tx_nums in history of hashX
         self.db = None
 
-    def open_db(self, db_class, for_sync, utxo_flush_count, compacting):
+    def open_db(
+            self,
+            db_class: Type['Storage'],
+            for_sync: bool,
+            utxo_flush_count: int,
+            compacting: bool,
+    ):
         self.db = db_class('hist', for_sync)
         self.read_state()
         self.clear_excess(utxo_flush_count)

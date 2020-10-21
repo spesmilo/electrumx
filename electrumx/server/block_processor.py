@@ -11,26 +11,31 @@
 
 import asyncio
 import time
-from typing import Sequence, Tuple, List, Callable
+from typing import Sequence, Tuple, List, Callable, Optional, TYPE_CHECKING, Type
 
 from aiorpcx import TaskGroup, run_in_thread, CancelledError
 
 import electrumx
-from electrumx.server.daemon import DaemonError
+from electrumx.server.daemon import DaemonError, Daemon
 from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN
 from electrumx.lib.script import is_unspendable_legacy, is_unspendable_genesis
 from electrumx.lib.util import (
     chunks, class_logger, pack_le_uint32, pack_le_uint64, unpack_le_uint64
 )
 from electrumx.lib.tx import Tx
-from electrumx.server.db import FlushData, COMP_TXID_LEN
+from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
 from electrumx.server.history import TXNUM_LEN
+
+if TYPE_CHECKING:
+    from electrumx.lib.coins import Coin
+    from electrumx.server.env import Env
+    from electrumx.server.controller import Notifications
 
 
 class Prefetcher:
     '''Prefetches blocks (in the forward direction only).'''
 
-    def __init__(self, daemon, coin, blocks_event):
+    def __init__(self, daemon: 'Daemon', coin: Type['Coin'], blocks_event: asyncio.Event):
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.daemon = daemon
         self.coin = coin
@@ -157,7 +162,7 @@ class BlockProcessor:
     Coordinate backing up in case of chain reorganisations.
     '''
 
-    def __init__(self, env, db, daemon, notifications):
+    def __init__(self, env: 'Env', db: DB, daemon: Daemon, notifications: 'Notifications'):
         self.env = env
         self.db = db
         self.daemon = daemon
@@ -173,7 +178,7 @@ class BlockProcessor:
         self.touched = set()
         self.reorg_count = 0
         self.height = -1
-        self.tip = None
+        self.tip = None  # type: Optional[bytes]
         self.tx_count = 0
         self._caught_up_event = None
 
@@ -252,7 +257,7 @@ class BlockProcessor:
             self.logger.info(f'faking a reorg of {count:,d} blocks')
         await self.flush(True)
 
-        async def get_raw_blocks(last_height, hex_hashes):
+        async def get_raw_blocks(last_height, hex_hashes) -> Sequence[bytes]:
             heights = range(last_height, last_height - len(hex_hashes), -1)
             try:
                 blocks = [self.db.read_raw_block(height) for height in heights]
@@ -465,7 +470,7 @@ class BlockProcessor:
 
         return undo_info
 
-    def backup_blocks(self, raw_blocks):
+    def backup_blocks(self, raw_blocks: Sequence[bytes]):
         '''Backup the raw blocks and flush.
 
         The blocks should be in order of decreasing height, starting at.
@@ -494,7 +499,11 @@ class BlockProcessor:
 
         self.logger.info(f'backed up to height {self.height:,d}')
 
-    def backup_txs(self, txs, is_unspendable):
+    def backup_txs(
+            self,
+            txs: Sequence[Tuple[Tx, bytes]],
+            is_unspendable: Callable[[bytes], bool],
+    ):
         # Prevout values, in order down the block (coinbase first if present)
         # undo_info is in reverse block order
         undo_info = self.db.read_undo_info(self.height)

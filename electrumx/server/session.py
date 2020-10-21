@@ -17,7 +17,8 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+import asyncio
 
 import attr
 import pylru
@@ -33,6 +34,14 @@ from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
 from electrumx.server.daemon import DaemonError
 from electrumx.server.peers import PeerManager
+
+if TYPE_CHECKING:
+    from electrumx.server.db import DB
+    from electrumx.server.env import Env
+    from electrumx.server.block_processor import BlockProcessor
+    from electrumx.server.daemon import Daemon
+    from electrumx.server.mempool import MemPool
+
 
 BAD_REQUEST = 1
 DAEMON_ERROR = 2
@@ -108,7 +117,15 @@ class SessionReferences:
 class SessionManager:
     '''Holds global state about all sessions.'''
 
-    def __init__(self, env, db, bp, daemon, mempool, shutdown_event):
+    def __init__(
+            self,
+            env: 'Env',
+            db: 'DB',
+            bp: 'BlockProcessor',
+            daemon: 'Daemon',
+            mempool: 'MemPool',
+            shutdown_event: asyncio.Event,
+    ):
         env.max_send = max(350000, env.max_send)
         self.env = env
         self.db = db

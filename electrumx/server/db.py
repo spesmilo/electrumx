@@ -16,7 +16,7 @@ import time
 from bisect import bisect_right
 from dataclasses import dataclass
 from glob import glob
-from typing import Dict, Sequence, Tuple
+from typing import Dict, Sequence, Tuple, Optional, TYPE_CHECKING
 
 import attr
 from aiorpcx import run_in_thread, sleep
@@ -28,8 +28,11 @@ from electrumx.lib.util import (
     formatted_time, pack_be_uint16, pack_be_uint32, pack_le_uint64, pack_le_uint32,
     unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
 )
-from electrumx.server.storage import db_class
+from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import History, TXNUM_LEN
+
+if TYPE_CHECKING:
+    from electrumx.server.env import Env
 
 
 @dataclass(order=True)
@@ -51,7 +54,7 @@ class FlushData:
     # The following are flushed to the UTXO DB if undo_infos is not None
     undo_infos = attr.ib()  # type: Sequence[Tuple[Sequence[bytes], int]]
     adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
-    deletes = attr.ib()
+    deletes = attr.ib()  # type: Sequence[bytes]  # b'h' db keys, and b'u' db keys
     tip = attr.ib()
 
 
@@ -67,10 +70,12 @@ class DB:
 
     DB_VERSIONS = (6, 7, 8)
 
+    utxo_db: Optional['Storage']
+
     class DBError(Exception):
         '''Raised on general DB errors generally indicating corruption.'''
 
-    def __init__(self, env):
+    def __init__(self, env: 'Env'):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
         self.env = env
         self.coin = env.coin
@@ -107,7 +112,7 @@ class DB:
         self.fs_tx_count = 0
         self.db_height = -1
         self.db_tx_count = 0
-        self.db_tip = None
+        self.db_tip = None  # type: Optional[bytes]
         self.tx_counts = None
         self.last_flush = time.time()
         self.last_flush_tx_count = 0

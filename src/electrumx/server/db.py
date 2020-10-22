@@ -106,13 +106,11 @@ class DB:
         # "undo data: list of UTXOs spent at block height"
         self.utxo_db = None
 
-        self.utxo_flush_count = 0
         self.fs_height = -1
         self.fs_tx_count = 0
         self.db_height = -1
         self.db_tx_count = 0
         self.db_tip = None  # type: Optional[bytes]
-        self.tx_counts = None
         self.last_flush = time.time()
         self.last_flush_tx_count = 0
         self.wall_time = 0
@@ -128,6 +126,7 @@ class DB:
         # on-disk: raw block headers in chain order
         self.headers_file = util.LogicalFile('meta/headers', 2, 16000000)
         # on-disk: cumulative number of txs at the end of height N
+        self.tx_counts = None  # type: Optional[array]
         self.tx_counts_file = util.LogicalFile('meta/txcounts', 2, 2000000)
         # on-disk: 32 byte txids in chain order, allows (tx_num -> txid) map
         self.hashes_file = util.LogicalFile('meta/hashes', 4, 16000000)
@@ -149,7 +148,7 @@ class DB:
         else:
             assert self.db_tx_count == 0
 
-    async def _open_dbs(self, for_sync: bool, compacting: bool):
+    async def _open_dbs(self, *, for_sync: bool):
         assert self.utxo_db is None
 
         # First UTXO DB
@@ -168,16 +167,15 @@ class DB:
         self.read_utxo_state()
 
         # Then history DB
-        self.utxo_flush_count = self.history.open_db(self.db_class, for_sync,
-                                                     self.utxo_flush_count,
-                                                     compacting)
+        self.history.open_db(
+            db_class=self.db_class,
+            for_sync=for_sync,
+            utxo_db_tx_count=self.db_tx_count,
+        )
         self.clear_excess_undo_info()
 
         # Read TX counts (requires meta directory)
         await self._read_tx_counts()
-
-    async def open_for_compacting(self):
-        await self._open_dbs(True, True)
 
     async def open_for_sync(self):
         '''Open the databases to sync to the daemon.
@@ -186,7 +184,7 @@ class DB:
         synchronization.  When serving clients we want the open files for
         serving network connections.
         '''
-        await self._open_dbs(True, False)
+        await self._open_dbs(for_sync=True)
 
     async def open_for_serving(self):
         '''Open the databases for serving.  If they are already open they are
@@ -197,7 +195,7 @@ class DB:
             self.utxo_db.close()
             self.history.close_db()
             self.utxo_db = None
-        await self._open_dbs(False, False)
+        await self._open_dbs(for_sync=False)
 
     # Header merkle cache
 
@@ -253,7 +251,7 @@ class DB:
         self.flush_state(self.utxo_db)
 
         elapsed = self.last_flush - start_time
-        self.logger.info(f'flush #{self.history.flush_count:,d} took '
+        self.logger.info(f'flush took '
                          f'{elapsed:.1f}s.  Height {flush_data.height:,d} '
                          f'txs: {flush_data.tx_count:,d} ({tx_delta:+,d})')
 
@@ -352,7 +350,6 @@ class DB:
                              f'{spend_count:,d} spends in '
                              f'{elapsed:.1f}s, committing...')
 
-        self.utxo_flush_count = self.history.flush_count
         self.db_height = flush_data.height
         self.db_tx_count = flush_data.tx_count
         self.db_tip = flush_data.tip
@@ -383,7 +380,7 @@ class DB:
             self.flush_state(batch)
 
         elapsed = self.last_flush - start_time
-        self.logger.info(f'backup flush #{self.history.flush_count:,d} took '
+        self.logger.info(f'backup flush took '
                          f'{elapsed:.1f}s.  Height {flush_data.height:,d} '
                          f'txs: {flush_data.tx_count:,d} ({tx_delta:+,d})')
 
@@ -594,7 +591,6 @@ class DB:
             self.db_tx_count = 0
             self.db_tip = b'\0' * 32
             self.db_version = max(self.DB_VERSIONS)
-            self.utxo_flush_count = 0
             self.wall_time = 0
             self.first_sync = True
         else:
@@ -616,7 +612,6 @@ class DB:
             self.db_height = state['height']
             self.db_tx_count = state['tx_count']
             self.db_tip = state['tip']
-            self.utxo_flush_count = state['utxo_flush_count']
             self.wall_time = state['wall_time']
             self.first_sync = state['first_sync']
 
@@ -734,17 +729,11 @@ class DB:
             'height': self.db_height,
             'tx_count': self.db_tx_count,
             'tip': self.db_tip,
-            'utxo_flush_count': self.utxo_flush_count,
             'wall_time': self.wall_time,
             'first_sync': self.first_sync,
             'db_version': self.db_version,
         }
         batch.put(b'state', repr(state).encode())
-
-    def set_flush_count(self, count):
-        self.utxo_flush_count = count
-        with self.utxo_db.write_batch() as batch:
-            self.write_utxo_state(batch)
 
     async def all_utxos(self, hashX):
         '''Return all UTXOs for an address sorted in no particular order.'''

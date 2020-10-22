@@ -337,7 +337,6 @@ class SessionManager:
             'daemon': self.daemon.logged_url(),
             'daemon height': self.daemon.cached_height(),
             'db height': self.db.db_height,
-            'db_flush_count': self.db.history.flush_count,
             'groups': len(self.session_groups),
             'history cache': cache_fmt(self._history_cache),
             'merkle txid cache': cache_fmt(self._merkle_txid_cache),

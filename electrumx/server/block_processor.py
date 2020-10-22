@@ -186,7 +186,7 @@ class BlockProcessor:
 
         # Caches of unflushed items.
         self.headers = []
-        self.tx_hashes = []
+        self.tx_hashes = []  # type: List[bytes]
         self.undo_infos = []  # type: List[Tuple[Sequence[bytes], int]]
 
         # UTXO cache
@@ -347,9 +347,16 @@ class BlockProcessor:
     def flush_data(self):
         '''The data for a flush.  The lock must be taken.'''
         assert self.state_lock.locked()
-        return FlushData(self.height, self.tx_count, self.headers,
-                         self.tx_hashes, self.undo_infos, self.utxo_cache,
-                         self.db_deletes, self.tip)
+        return FlushData(
+            height=self.height,
+            tx_count=self.tx_count,
+            headers=self.headers,
+            block_tx_hashes=self.tx_hashes,
+            undo_infos=self.undo_infos,
+            adds=self.utxo_cache,
+            deletes=self.db_deletes,
+            tip=self.tip,
+        )
 
     async def flush(self, flush_utxos):
         def flush():
@@ -368,7 +375,7 @@ class BlockProcessor:
                 await self.flush(flush_arg)
             self.next_cache_check = time.monotonic() + 30
 
-    def check_cache_size(self):
+    def check_cache_size(self) -> Optional[bool]:
         '''Flush a cache if it gets too big.'''
         # Good average estimates based on traversal of subobjects and
         # requesting size from Python (see deep_getsizeof).

@@ -4,7 +4,7 @@ version = '1.15.0'
 setuptools.setup(
     name='e-x',
     version=version,
-    scripts=['electrumx_server', 'electrumx_rpc', 'electrumx_compact_history'],
+    scripts=['electrumx_server', 'electrumx_rpc'],
     python_requires='>=3.7',
     install_requires=['aiorpcX[ws]>=0.18.3,<0.19', 'attrs',
                       'plyvel', 'pylru', 'aiohttp>=3.3'],

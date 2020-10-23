@@ -12,6 +12,7 @@ import time
 from abc import ABC, abstractmethod
 from asyncio import Lock
 from collections import defaultdict
+from typing import Sequence, Tuple, TYPE_CHECKING, Type
 
 import attr
 from aiorpcx import TaskGroup, run_in_thread, sleep
@@ -20,10 +21,13 @@ from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
 from electrumx.lib.util import class_logger, chunks
 from electrumx.server.db import UTXO
 
+if TYPE_CHECKING:
+    from electrumx.lib.coins import Coin
+
 
 @attr.s(slots=True)
 class MemPoolTx:
-    prevouts = attr.ib()
+    prevouts = attr.ib()  # type: Sequence[Tuple[bytes, int]]
     # A pair is a (hashX, value) tuple
     in_pairs = attr.ib()
     out_pairs = attr.ib()
@@ -101,7 +105,7 @@ class MemPool:
        hashXs: hashX   -> set of all hashes of txs touching the hashX
     '''
 
-    def __init__(self, coin, api, refresh_secs=5.0, log_status_secs=60.0):
+    def __init__(self, coin: Type['Coin'], api: MemPoolAPI, refresh_secs=5.0, log_status_secs=60.0):
         assert isinstance(api, MemPoolAPI)
         self.coin = coin
         self.api = api

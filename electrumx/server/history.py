@@ -13,16 +13,26 @@ import bisect
 import time
 from array import array
 from collections import defaultdict
+from typing import TYPE_CHECKING, Type, Optional
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
 from electrumx.lib.util import (pack_be_uint16, pack_le_uint64,
                                 unpack_be_uint16_from, unpack_le_uint64)
 
+if TYPE_CHECKING:
+    from electrumx.server.storage import Storage
+
+
+TXNUM_LEN = 5
+FLUSHID_LEN = 2
+
 
 class History:
 
     DB_VERSIONS = (0, 1)
+
+    db: Optional['Storage']
 
     def __init__(self):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
@@ -35,9 +45,18 @@ class History:
         self.comp_cursor = -1
         self.db_version = max(self.DB_VERSIONS)
         self.upgrade_cursor = -1
+
+        # Key: address_hashX + flush_id
+        # Value: sorted "list" of tx_nums in history of hashX
         self.db = None
 
-    def open_db(self, db_class, for_sync, utxo_flush_count, compacting):
+    def open_db(
+            self,
+            db_class: Type['Storage'],
+            for_sync: bool,
+            utxo_flush_count: int,
+            compacting: bool,
+    ):
         self.db = db_class('hist', for_sync)
         self.read_state()
         self.clear_excess(utxo_flush_count)
@@ -91,7 +110,7 @@ class History:
 
         keys = []
         for key, _hist in self.db.iterator(prefix=b''):
-            flush_id, = unpack_be_uint16_from(key[-2:])
+            flush_id, = unpack_be_uint16_from(key[-FLUSHID_LEN:])
             if flush_id > utxo_flush_count:
                 keys.append(key)
 
@@ -122,7 +141,7 @@ class History:
         unflushed = self.unflushed
         count = 0
         for tx_num, hashXs in enumerate(hashXs_by_tx, start=first_tx_num):
-            tx_numb = pack_le_uint64(tx_num)[:5]
+            tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
             hashXs = set(hashXs)
             for hashX in hashXs:
                 unflushed[hashX] += tx_numb
@@ -130,7 +149,7 @@ class History:
         self.unflushed_count += count
 
     def unflushed_memsize(self):
-        return len(self.unflushed) * 180 + self.unflushed_count * 5
+        return len(self.unflushed) * 180 + self.unflushed_count * TXNUM_LEN
 
     def assert_flushed(self):
         assert not self.unflushed
@@ -163,6 +182,7 @@ class History:
         bisect_left = bisect.bisect_left
         chunks = util.chunks
 
+        txnum_padding = bytes(8-TXNUM_LEN)
         with self.db.write_batch() as batch:
             for hashX in sorted(hashXs):
                 deletes = []
@@ -170,13 +190,13 @@ class History:
                 for key, hist in self.db.iterator(prefix=hashX, reverse=True):
                     a = array(
                         'Q',
-                        b''.join(item + b'\0\0\0' for item in chunks(hist, 5))
+                        b''.join(item + txnum_padding for item in chunks(hist, TXNUM_LEN))
                     )
                     # Remove all history entries >= tx_count
                     idx = bisect_left(a, tx_count)
                     nremoves += len(a) - idx
                     if idx > 0:
-                        puts[key] = hist[:5 * idx]
+                        puts[key] = hist[:TXNUM_LEN * idx]
                         break
                     deletes.append(key)
 
@@ -195,11 +215,12 @@ class History:
         limit to None to get them all.  '''
         limit = util.resolve_limit(limit)
         chunks = util.chunks
+        txnum_padding = bytes(8-TXNUM_LEN)
         for _key, hist in self.db.iterator(prefix=hashX):
-            for tx_numb in chunks(hist, 5):
+            for tx_numb in chunks(hist, TXNUM_LEN):
                 if limit == 0:
                     return
-                tx_num, = unpack_le_uint64(tx_numb + b'\0\0\0')
+                tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
                 yield tx_num
                 limit -= 1
 
@@ -245,17 +266,17 @@ class History:
                        write_items, keys_to_delete):
         '''Compres history for a hashX.  hist_list is an ordered list of
         the histories to be compressed.'''
-        # History entries (tx numbers) are 4 bytes each.  Distribute
+        # History entries (tx numbers) are TXNUM_LEN bytes each.  Distribute
         # over rows of up to 50KB in size.  A fixed row size means
         # future compactions will not need to update the first N - 1
         # rows.
-        max_row_size = self.max_hist_row_entries * 5
+        max_row_size = self.max_hist_row_entries * TXNUM_LEN
         full_hist = b''.join(hist_list)
         nrows = (len(full_hist) + max_row_size - 1) // max_row_size
         if nrows > 4:
             self.logger.info(
                 f'hashX {hash_to_hex_str(hashX)} is large: '
-                f'{len(full_hist) // 5:,d} entries across {nrows:,d} rows'
+                f'{len(full_hist) // TXNUM_LEN:,d} entries across {nrows:,d} rows'
             )
 
         # Find what history needs to be written, and what keys need to
@@ -284,13 +305,13 @@ class History:
         hist_map = {}
         hist_list = []
 
-        key_len = HASHX_LEN + 2
+        key_len = HASHX_LEN + FLUSHID_LEN
         write_size = 0
         for key, hist in self.db.iterator(prefix=prefix):
             # Ignore non-history entries
             if len(key) != key_len:
                 continue
-            hashX = key[:-2]
+            hashX = key[:-FLUSHID_LEN]
             if hashX != prior_hashX and prior_hashX:
                 write_size += self._compact_hashX(prior_hashX, hist_map,
                                                   hist_list, write_items,

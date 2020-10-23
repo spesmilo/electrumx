@@ -9,11 +9,12 @@
 
 import os
 from functools import partial
+from typing import Type
 
 import electrumx.lib.util as util
 
 
-def db_class(name):
+def db_class(name) -> Type['Storage']:
     '''Returns a DB engine class.'''
     for db_class in util.subclasses(Storage):
         if db_class.__name__.lower() == name.lower():

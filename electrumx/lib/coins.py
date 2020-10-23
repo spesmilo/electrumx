@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from functools import partial
 from hashlib import sha256
-from typing import Sequence
+from typing import Sequence, Tuple
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import Base58, double_sha256, hash_to_hex_str
@@ -43,6 +43,7 @@ from electrumx.lib.hash import HASHX_LEN, hex_str_to_hash
 from electrumx.lib.script import (_match_ops, Script, ScriptError,
                                   ScriptPubKey, OpCodes)
 import electrumx.lib.tx as lib_tx
+from electrumx.lib.tx import Tx
 import electrumx.lib.tx_dash as lib_tx_dash
 import electrumx.lib.tx_axe as lib_tx_axe
 import electrumx.server.block_processor as block_proc
@@ -56,7 +57,7 @@ class Block:
     __slots__ = "raw", "header", "transactions"
     raw: bytes
     header: bytes
-    transactions: Sequence
+    transactions: Sequence[Tuple[Tx, bytes]]
 
 
 class CoinError(Exception):
@@ -97,6 +98,13 @@ class Coin:
     PEERS = []
     CRASH_CLIENT_VER = None
     BLACKLIST_URL = None
+
+    TX_COUNT: int
+    TX_COUNT_HEIGHT: int
+    TX_PER_BLOCK: int
+    RPC_PORT: int
+    NAME: str
+    NET: str
 
     @classmethod
     def lookup_coin_class(cls, name, net):

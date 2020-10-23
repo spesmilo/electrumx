@@ -13,6 +13,7 @@ import itertools
 import time
 from calendar import timegm
 from struct import pack
+from typing import TYPE_CHECKING, Type
 
 import aiohttp
 from aiorpcx import JSONRPC
@@ -22,6 +23,9 @@ from electrumx.lib.tx import DeserializerDecred
 from electrumx.lib.util import (class_logger, hex_to_bytes, json_deserialize,
                                 json_serialize, pack_varint,
                                 unpack_le_uint16_from)
+
+if TYPE_CHECKING:
+    from electrumx.lib.coins import Coin
 
 
 class DaemonError(Exception):
@@ -43,7 +47,15 @@ class Daemon:
     WARMING_UP = -28
     id_counter = itertools.count()
 
-    def __init__(self, coin, url, *, max_workqueue=10, init_retry=0.25, max_retry=4.0):
+    def __init__(
+            self,
+            coin: Type['Coin'],
+            url,
+            *,
+            max_workqueue=10,
+            init_retry=0.25,
+            max_retry=4.0,
+    ):
         self.coin = coin
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.url_index = None

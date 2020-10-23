@@ -49,8 +49,8 @@ class Tx:
     '''Class representing a transaction.'''
     __slots__ = 'version', 'inputs', 'outputs', 'locktime'
     version: int
-    inputs: Sequence
-    outputs: Sequence
+    inputs: Sequence['TxInput']
+    outputs: Sequence['TxOutput']
     locktime: int
 
     def serialize(self):

@@ -98,6 +98,7 @@ class Coin:
     PEERS = []
     CRASH_CLIENT_VER = None
     BLACKLIST_URL = None
+    ESTIMATEFEE_MODES = (None, 'CONSERVATIVE', 'ECONOMICAL')
 
     TX_COUNT: int
     TX_COUNT_HEIGHT: int
@@ -267,6 +268,13 @@ class Coin:
     @classmethod
     def warn_old_client_on_tx_broadcast(cls, _client_ver):
         return False
+
+    @classmethod
+    def bucket_estimatefee_block_target(cls, n: int) -> int:
+        '''For caching purposes, it might be desirable to restrict the
+        set of values that can be queried as an estimatefee block target.
+        '''
+        return n
 
 
 class AuxPowMixin:
@@ -618,6 +626,21 @@ class Bitcoin(BitcoinMixin, Coin):
                     'https://electrum.org/'
                     '<br/><br/>')
         return False
+
+    @classmethod
+    def bucket_estimatefee_block_target(cls, n: int) -> int:
+        # values based on https://github.com/bitcoin/bitcoin/blob/af05bd9e1e362c3148e3b434b7fac96a9a5155a1/src/policy/fees.h#L131  # noqa
+        if n <= 1:
+            return 1
+        if n <= 12:
+            return n
+        if n == 25:  # so common that we make an exception for it
+            return n
+        if n <= 48:
+            return n // 2 * 2
+        if n <= 1008:
+            return n // 24 * 24
+        return 1008
 
 
 class BitcoinSegwit(Bitcoin):

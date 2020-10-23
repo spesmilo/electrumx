@@ -70,6 +70,9 @@ class Daemon:
         self.available_rpcs = {}
         self.session = None
 
+        self._networkinfo_cache = (None, 0)
+        self._networkinfo_lock = asyncio.Lock()
+
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(connector=self.connector())
         return self
@@ -260,7 +263,13 @@ class Daemon:
 
     async def getnetworkinfo(self):
         '''Return the result of the 'getnetworkinfo' RPC call.'''
-        return await self._send_single('getnetworkinfo')
+        async with self._networkinfo_lock:
+            cache_val, cache_time = self._networkinfo_cache
+            if time.time() - cache_time < 60:  # seconds
+                return cache_val
+            val = await self._send_single('getnetworkinfo')
+            self._networkinfo_cache = (val, time.time())
+            return val
 
     async def relayfee(self):
         '''The minimum fee a low-priority tx must pay in order to be accepted

@@ -2,7 +2,7 @@ import setuptools
 version = '1.15.0'
 
 setuptools.setup(
-    name='electrumX',
+    name='e-x',
     version=version,
     scripts=['electrumx_server', 'electrumx_rpc', 'electrumx_compact_history'],
     python_requires='>=3.7',
@@ -26,8 +26,8 @@ setuptools.setup(
     },
     packages=setuptools.find_packages(include=('electrumx*',)),
     description='ElectrumX Server',
-    author='Neil Booth',
-    author_email='kyuupichan@gmail.com',
+    author='Electrum developers',
+    author_email='electrumdev@gmail.com',
     license='MIT Licence',
     url='https://github.com/spesmilo/electrumx',
     long_description='Server implementation for the Electrum protocol',

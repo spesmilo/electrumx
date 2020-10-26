@@ -614,6 +614,7 @@ class Bitcoin(BitcoinMixin, Coin):
         'currentlane.lovebitco.in s t',
         'electrum.jochen-hoenicke.de s50005 t50003',
         'vps5.hsmiths.com s',
+        'electrum.emzy.de s',
     ]
 
     @classmethod

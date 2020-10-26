@@ -16,7 +16,7 @@ import time
 from bisect import bisect_right
 from dataclasses import dataclass
 from glob import glob
-from typing import Dict, Sequence, Tuple, Optional, TYPE_CHECKING
+from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING
 
 import attr
 from aiorpcx import run_in_thread, sleep
@@ -52,9 +52,9 @@ class FlushData:
     headers = attr.ib()
     block_tx_hashes = attr.ib()
     # The following are flushed to the UTXO DB if undo_infos is not None
-    undo_infos = attr.ib()  # type: Sequence[Tuple[Sequence[bytes], int]]
+    undo_infos = attr.ib()  # type: List[Tuple[Sequence[bytes], int]]
     adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
-    deletes = attr.ib()  # type: Sequence[bytes]  # b'h' db keys, and b'u' db keys
+    deletes = attr.ib()  # type: List[bytes]  # b'h' db keys, and b'u' db keys
     tip = attr.ib()
 
 

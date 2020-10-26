@@ -168,16 +168,24 @@ class MemPool:
         # [rate_(n-1), rate_n)], and rate_(n-1) > rate_n.
         # Intervals are chosen to create tranches containing at
         # least 100kb of transactions
+        assert bin_size > 0
         compact = []
         cum_size = 0
-        r = 0   # ?
+        prev_fee_rate = None
         for fee_rate, size in sorted(histogram.items(), reverse=True):
-            cum_size += size
-            if cum_size + r > bin_size:
-                compact.append((fee_rate, cum_size))
-                r += cum_size - bin_size
+            # if there is a big lump of txns at this specific size,
+            # consider adding the previous item now (if not added already)
+            if size > 2 * bin_size and prev_fee_rate is not None and cum_size > 0:
+                compact.append((prev_fee_rate, cum_size))
                 cum_size = 0
                 bin_size *= 1.1
+            # now consider adding this item
+            cum_size += size
+            if cum_size > bin_size:
+                compact.append((fee_rate, cum_size))
+                cum_size = 0
+                bin_size *= 1.1
+            prev_fee_rate = fee_rate
         return compact
 
     def _accept_transactions(self, tx_map, utxo_map, touched):

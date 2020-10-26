@@ -341,17 +341,7 @@ def test_compress_histogram():
         22: 1_000,
     }
     compact = MemPool._compress_histogram(histogram, bin_size=100_000)
-    assert compact == [
-        (18, 978000),
-        (17, 1000),
-        (16, 1000),
-        (15, 1000),
-        (14, 1000),
-        (13, 1000),
-        (12, 10000000),
-        (11, 1000),
-        (10, 100000),
-    ]
+    assert compact == [(19, 78000), (18, 900000), (13, 5000), (12, 10000000)]
 
     histogram = {
         1.0: 10_000_000,
@@ -362,7 +352,7 @@ def test_compress_histogram():
         11: 50_000,
     }
     compact = MemPool._compress_histogram(histogram, bin_size=100_000)
-    assert compact == [(10, 551000), (1.2, 40000), (1.1, 30000), (1.0, 10000000)]
+    assert compact == [(10.1, 51000), (10, 500000), (1.1, 70000), (1.0, 10000000)]
 
 
 @pytest.mark.asyncio

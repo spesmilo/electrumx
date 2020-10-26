@@ -39,7 +39,7 @@ class ServerBase:
                                         'SSL error in data received|'
                                         'socket.send() raised exception')
     SUPPRESS_TASK_REGEX = re.compile('accept_connection2')
-    PYTHON_MIN_VERSION = (3, 6)
+    PYTHON_MIN_VERSION = (3, 7)
 
     def __init__(self, env: 'Env'):
         '''Save the environment, perform basic sanity checks, and set the

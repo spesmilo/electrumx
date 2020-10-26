@@ -12,7 +12,7 @@ import time
 from abc import ABC, abstractmethod
 from asyncio import Lock
 from collections import defaultdict
-from typing import Sequence, Tuple, TYPE_CHECKING, Type
+from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict
 
 import attr
 from aiorpcx import TaskGroup, run_in_thread, sleep
@@ -147,6 +147,19 @@ class MemPool:
         for tx in self.txs.values():
             histogram[tx.fee // tx.size] += tx.size
 
+        compact = self._compress_histogram(histogram, bin_size=bin_size)
+        self.logger.info(f'compact fee histogram: {compact}')
+        self.cached_compact_histogram = compact
+
+    @classmethod
+    def _compress_histogram(
+            cls, histogram: Dict[float, int], *, bin_size: int
+    ) -> Sequence[Tuple[float, int]]:
+        '''Calculate and return a compact fee histogram as needed for
+        "mempool.get_fee_histogram" protocol request.
+
+        histogram: feerate (sat/byte) -> total size in bytes of txs that pay approx feerate
+        '''
         # Now compact it.  For efficiency, get_fees returns a
         # compact histogram with variable bin size.  The compact
         # histogram is an array of (fee_rate, vsize) values.
@@ -165,8 +178,7 @@ class MemPool:
                 r += cum_size - bin_size
                 cum_size = 0
                 bin_size *= 1.1
-        self.logger.info(f'compact fee histogram: {compact}')
-        self.cached_compact_histogram = compact
+        return compact
 
     def _accept_transactions(self, tx_map, utxo_map, touched):
         '''Accept transactions in tx_map to the mempool if all their inputs

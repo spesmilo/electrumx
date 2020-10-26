@@ -804,9 +804,6 @@ class SessionManager:
             return ':'.join(host.exploded.split(':')[:3])  # /48
         return 'unknown_addr'
 
-    def _timeslice_name(self, session):
-        return f't{int(session.start_time - self.start_time) // 300}'
-
     def _session_group(self, name: Optional[str], weight: float) -> Optional[SessionGroup]:
         if name is None:
             return None
@@ -820,7 +817,6 @@ class SessionManager:
         self.session_event.set()
         # Return the session groups
         groups = (
-            self._session_group(self._timeslice_name(session), 0.03),
             self._session_group(self._ip_addr_group_name(session), 1.0),
         )
         groups = (group for group in groups if group is not None)

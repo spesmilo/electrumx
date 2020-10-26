@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from asyncio import Lock
 from collections import defaultdict
 from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict
+import math
 
 import attr
 from aiorpcx import TaskGroup, run_in_thread, sleep
@@ -145,7 +146,13 @@ class MemPool:
         # Build a histogram by fee rate
         histogram = defaultdict(int)
         for tx in self.txs.values():
-            histogram[tx.fee // tx.size] += tx.size
+            fee_rate = tx.fee / tx.size
+            # use 0.1 sat/byte resolution
+            # note: rounding *down* is intentional. This ensures txs
+            #       with a given fee rate will end up counted in the expected
+            #       bucket/interval of the compact histogram.
+            fee_rate = math.floor(10 * fee_rate) / 10
+            histogram[fee_rate] += tx.size
 
         compact = self._compress_histogram(histogram, bin_size=bin_size)
         self.logger.info(f'compact fee histogram: {compact}')

@@ -137,8 +137,7 @@ connected, the number of unprocessed requests should be low, say 250 or fewer.  
 over 1,000 the server is overloaded.
 
 Sessions are put into groups, primarily as an anti-DoS measure. Each session goes into
-a group based on it's IP address subnet (the first three numbers). Example: session from
-IP 192.168.1.23 goes into group "192.168.1". Each member of a group incurs a fraction 
+a group based on its IP subnet (e.g. /24 for IPv4). Each member of a group incurs a fraction
 of the costs of the other group members. This appears in the `sessions_` list under the
 column XCost.
 

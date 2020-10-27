@@ -133,7 +133,7 @@ class Daemon:
         '''
         def log_error(error):
             nonlocal last_error_log, retry
-            now = time.time()
+            now = time.monotonic()
             if now - last_error_log > 60:
                 last_error_log = now
                 self.logger.error(f'{error}.  Retrying occasionally...')

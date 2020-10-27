@@ -12,7 +12,8 @@ import time
 from abc import ABC, abstractmethod
 from asyncio import Lock
 from collections import defaultdict
-from typing import Sequence, Tuple, TYPE_CHECKING, Type
+from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict
+import math
 
 import attr
 from aiorpcx import TaskGroup, run_in_thread, sleep
@@ -145,8 +146,27 @@ class MemPool:
         # Build a histogram by fee rate
         histogram = defaultdict(int)
         for tx in self.txs.values():
-            histogram[tx.fee // tx.size] += tx.size
+            fee_rate = tx.fee / tx.size
+            # use 0.1 sat/byte resolution
+            # note: rounding *down* is intentional. This ensures txs
+            #       with a given fee rate will end up counted in the expected
+            #       bucket/interval of the compact histogram.
+            fee_rate = math.floor(10 * fee_rate) / 10
+            histogram[fee_rate] += tx.size
 
+        compact = self._compress_histogram(histogram, bin_size=bin_size)
+        self.logger.info(f'compact fee histogram: {compact}')
+        self.cached_compact_histogram = compact
+
+    @classmethod
+    def _compress_histogram(
+            cls, histogram: Dict[float, int], *, bin_size: int
+    ) -> Sequence[Tuple[float, int]]:
+        '''Calculate and return a compact fee histogram as needed for
+        "mempool.get_fee_histogram" protocol request.
+
+        histogram: feerate (sat/byte) -> total size in bytes of txs that pay approx feerate
+        '''
         # Now compact it.  For efficiency, get_fees returns a
         # compact histogram with variable bin size.  The compact
         # histogram is an array of (fee_rate, vsize) values.
@@ -155,18 +175,25 @@ class MemPool:
         # [rate_(n-1), rate_n)], and rate_(n-1) > rate_n.
         # Intervals are chosen to create tranches containing at
         # least 100kb of transactions
+        assert bin_size > 0
         compact = []
         cum_size = 0
-        r = 0   # ?
+        prev_fee_rate = None
         for fee_rate, size in sorted(histogram.items(), reverse=True):
-            cum_size += size
-            if cum_size + r > bin_size:
-                compact.append((fee_rate, cum_size))
-                r += cum_size - bin_size
+            # if there is a big lump of txns at this specific size,
+            # consider adding the previous item now (if not added already)
+            if size > 2 * bin_size and prev_fee_rate is not None and cum_size > 0:
+                compact.append((prev_fee_rate, cum_size))
                 cum_size = 0
                 bin_size *= 1.1
-        self.logger.info(f'compact fee histogram: {compact}')
-        self.cached_compact_histogram = compact
+            # now consider adding this item
+            cum_size += size
+            if cum_size > bin_size:
+                compact.append((fee_rate, cum_size))
+                cum_size = 0
+                bin_size *= 1.1
+            prev_fee_rate = fee_rate
+        return compact
 
     def _accept_transactions(self, tx_map, utxo_map, touched):
         '''Accept transactions in tx_map to the mempool if all their inputs

@@ -823,7 +823,7 @@ class SessionManager:
             self._session_group(self._timeslice_name(session), 0.03),
             self._session_group(self._ip_addr_group_name(session), 1.0),
         )
-        groups = (group for group in groups if group is not None)
+        groups = tuple(group for group in groups if group is not None)
         self.sessions[session] = groups
         for group in groups:
             group.sessions.add(session)

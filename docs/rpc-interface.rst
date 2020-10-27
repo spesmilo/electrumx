@@ -136,10 +136,10 @@ Apart from very short intervals, typically after a new block or when a client ha
 connected, the number of unprocessed requests should be low, say 250 or fewer.  If it is
 over 1,000 the server is overloaded.
 
-Sessions are put into groups, primarily as an anti-DoS measure.  Currently each session
-goes into two groups: one for an IP subnet, and one based on the timeslice it connected
-in.  Each member of a group incurs a fraction of the costs of the other group members.
-This appears in the `sessions_` list under the column XCost.
+Sessions are put into groups, primarily as an anti-DoS measure. Each session goes into
+a group based on its IP subnet (e.g. /24 for IPv4). Each member of a group incurs a fraction
+of the costs of the other group members. This appears in the `sessions_` list under the
+column XCost.
 
 groups
 ------

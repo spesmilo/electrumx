@@ -280,12 +280,6 @@ class SessionManager:
             self._tx_hashes_cache.clear()
             self._merkle_cache.clear()
 
-    async def _handle_new_blocks(self):
-        '''Clear certain caches if the chain tip advanced.'''
-        while True:
-            await self.bp.tip_advanced_event.wait()
-            self.estimatefee_cache.clear()
-
     async def _recalc_concurrency(self):
         '''Periodically recalculate session concurrency.'''
         session_class = self.env.coin.SESSIONCLS
@@ -641,7 +635,6 @@ class SessionManager:
                 await group.spawn(self.peer_mgr.discover_peers())
                 await group.spawn(self._clear_stale_sessions())
                 await group.spawn(self._handle_chain_reorgs())
-                await group.spawn(self._handle_new_blocks())
                 await group.spawn(self._recalc_concurrency())
                 await group.spawn(self._log_sessions())
                 await group.spawn(self._manage_servers())
@@ -1302,26 +1295,28 @@ class ElectrumX(SessionBase):
 
         cache_item = cache.get((number, mode))
         if cache_item is not None:
-            feerate, lock = cache_item
-            if feerate is not None:
+            blockhash, feerate, lock = cache_item
+            if blockhash and blockhash == self.session_mgr.bp.tip:
                 return feerate
         else:
             # create lock now, store it, and only then await on it
             lock = asyncio.Lock()
-            cache[(number, mode)] = (None, lock)
+            cache[(number, mode)] = (None, None, lock)
         async with lock:
             cache_item = cache.get((number, mode))
             if cache_item is not None:
-                feerate, lock = cache_item
-                if feerate is not None:
+                blockhash, feerate, lock = cache_item
+                if blockhash == self.session_mgr.bp.tip:
                     return feerate
             self.bump_cost(2.0)  # cache miss incurs extra cost
+            blockhash = self.session_mgr.bp.tip
             if mode:
                 feerate = await self.daemon_request('estimatefee', number, mode)
             else:
                 feerate = await self.daemon_request('estimatefee', number)
-            cache[(number, mode)] = (feerate, lock)
             assert feerate is not None
+            assert blockhash is not None
+            cache[(number, mode)] = (blockhash, feerate, lock)
             return feerate
 
     async def ping(self):

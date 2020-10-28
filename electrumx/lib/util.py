@@ -34,6 +34,7 @@ import logging
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
+from typing import Optional
 
 
 # Use system-compiled JSON lib if available, fallback to stdlib
@@ -162,7 +163,7 @@ def chunks(items, size):
         yield items[i: i + size]
 
 
-def resolve_limit(limit):
+def resolve_limit(limit: Optional[int]) -> int:
     if limit is None or limit < 0:
         return -1
     assert isinstance(limit, int)

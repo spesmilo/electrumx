@@ -29,7 +29,7 @@ TXNUM_LEN = 5
 
 class History:
 
-    DB_VERSIONS = (0, 1, 2)
+    DB_VERSIONS = (3, )
 
     db: Optional['Storage']
 
@@ -42,7 +42,7 @@ class History:
         self.db_version = max(self.DB_VERSIONS)
         self.upgrade_cursor = -1
 
-        # Key: address_hashX + tx_num
+        # Key: b'H' + address_hashX + tx_num
         # Value: <null>
         self.db = None
 
@@ -96,14 +96,10 @@ class History:
         self.logger.info('DB shut down uncleanly.  Scanning for '
                          'excess history flushes...')
 
-        key_len = HASHX_LEN + TXNUM_LEN
         txnum_padding = bytes(8-TXNUM_LEN)
         keys = []
-        for db_key, db_val in self.db.iterator(prefix=b''):
-            # Ignore non-history entries
-            if len(db_key) != key_len:
-                continue
-            tx_numb = db_key[HASHX_LEN:]
+        for db_key, db_val in self.db.iterator(prefix=b'H'):
+            tx_numb = db_key[-TXNUM_LEN:]
             tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
             if tx_num >= utxo_db_tx_count:
                 keys.append(db_key)
@@ -158,7 +154,7 @@ class History:
         with self.db.write_batch() as batch:
             for hashX in sorted(unflushed):
                 for tx_num in chunks(unflushed[hashX], TXNUM_LEN):
-                    db_key = hashX + tx_num
+                    db_key = b'H' + hashX + tx_num
                     batch.put(db_key, b'')
             self.hist_db_tx_count = self.hist_db_tx_count_next
             self.write_state(batch)
@@ -179,8 +175,9 @@ class History:
         with self.db.write_batch() as batch:
             for hashX in sorted(hashXs):
                 deletes = []
-                for db_key, db_val in self.db.iterator(prefix=hashX, reverse=True):
-                    tx_numb = db_key[HASHX_LEN:]
+                prefix = b'H' + hashX
+                for db_key, db_val in self.db.iterator(prefix=prefix, reverse=True):
+                    tx_numb = db_key[-TXNUM_LEN:]
                     tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
                     if tx_num >= tx_count:
                         nremoves += 1
@@ -202,8 +199,9 @@ class History:
         limit to None to get them all.  '''
         limit = util.resolve_limit(limit)
         txnum_padding = bytes(8-TXNUM_LEN)
-        for db_key, db_val in self.db.iterator(prefix=hashX):
-            tx_numb = db_key[HASHX_LEN:]
+        prefix = b'H' + hashX
+        for db_key, db_val in self.db.iterator(prefix=prefix):
+            tx_numb = db_key[-TXNUM_LEN:]
             if limit == 0:
                 return
             tx_num, = unpack_le_uint64(tx_numb + txnum_padding)

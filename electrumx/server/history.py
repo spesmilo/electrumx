@@ -13,7 +13,8 @@ import bisect
 import time
 from array import array
 from collections import defaultdict
-from typing import TYPE_CHECKING, Type, Optional
+from typing import TYPE_CHECKING, Type, Optional, Dict, Sequence
+import itertools
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
@@ -35,15 +36,20 @@ class History:
 
     def __init__(self):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
-        self.unflushed = defaultdict(bytearray)
-        self.unflushed_count = 0
         self.hist_db_tx_count = 0
         self.hist_db_tx_count_next = 0  # after next flush, next value for self.hist_db_tx_count
         self.db_version = max(self.DB_VERSIONS)
         self.upgrade_cursor = -1
 
+        self._unflushed_hashxs = defaultdict(bytearray)
+        self._unflushed_hashxs_count = 0
+        self._unflushed_txhash_to_txnum_map = {}  # type: Dict[bytes, int]
+
         # Key: b'H' + address_hashX + tx_num
         # Value: <null>
+        # ---
+        # Key: b't' + tx_hash
+        # Value: tx_num
         self.db = None
 
     def open_db(
@@ -97,19 +103,26 @@ class History:
                          'excess history flushes...')
 
         txnum_padding = bytes(8-TXNUM_LEN)
-        keys = []
+        hkeys = []
         for db_key, db_val in self.db.iterator(prefix=b'H'):
             tx_numb = db_key[-TXNUM_LEN:]
             tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
             if tx_num >= utxo_db_tx_count:
-                keys.append(db_key)
+                hkeys.append(db_key)
 
-        self.logger.info(f'deleting {len(keys):,d} history entries')
+        tkeys = []
+        for db_key, db_val in self.db.iterator(prefix=b't'):
+            tx_numb = db_val
+            tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+            if tx_num >= utxo_db_tx_count:
+                tkeys.append(db_key)
+
+        self.logger.info(f'deleting {len(hkeys):,d} addr entries and {len(tkeys):,d} txs')
 
         self.hist_db_tx_count = utxo_db_tx_count
         self.hist_db_tx_count_next = self.hist_db_tx_count
         with self.db.write_batch() as batch:
-            for key in keys:
+            for key in itertools.chain(hkeys, tkeys):
                 batch.delete(key)
             self.write_state(batch)
 
@@ -125,8 +138,14 @@ class History:
         # History entries are not prefixed; the suffix \0\0 is just for legacy reasons
         batch.put(b'state\0\0', repr(state).encode())
 
-    def add_unflushed(self, hashXs_by_tx, first_tx_num):
-        unflushed = self.unflushed
+    def add_unflushed(
+            self,
+            *,
+            hashXs_by_tx,
+            first_tx_num,
+            txhash_to_txnum_map: Dict[bytes, int],
+    ):
+        unflushed = self._unflushed_hashxs
         count = 0
         tx_num = None
         for tx_num, hashXs in enumerate(hashXs_by_tx, start=first_tx_num):
@@ -135,42 +154,54 @@ class History:
             for hashX in hashXs:
                 unflushed[hashX] += tx_numb
             count += len(hashXs)
-        self.unflushed_count += count
+        self._unflushed_hashxs_count += count
         if tx_num is not None:
             assert self.hist_db_tx_count_next + len(hashXs_by_tx) == tx_num + 1
             self.hist_db_tx_count_next = tx_num + 1
 
+        self._unflushed_txhash_to_txnum_map.update(txhash_to_txnum_map)
+
     def unflushed_memsize(self):
-        return len(self.unflushed) * 180 + self.unflushed_count * TXNUM_LEN
+        hashXs = len(self._unflushed_hashxs) * 180 + self._unflushed_hashxs_count * TXNUM_LEN
+        txs = 232 + 93 * len(self._unflushed_txhash_to_txnum_map)
+        return hashXs + txs
 
     def assert_flushed(self):
-        assert not self.unflushed
+        assert not self._unflushed_hashxs
+        assert not self._unflushed_txhash_to_txnum_map
 
     def flush(self):
         start_time = time.monotonic()
-        unflushed = self.unflushed
+        unflushed_hashxs = self._unflushed_hashxs
         chunks = util.chunks
 
         with self.db.write_batch() as batch:
-            for hashX in sorted(unflushed):
-                for tx_num in chunks(unflushed[hashX], TXNUM_LEN):
+            for hashX in sorted(unflushed_hashxs):
+                for tx_num in chunks(unflushed_hashxs[hashX], TXNUM_LEN):
                     db_key = b'H' + hashX + tx_num
                     batch.put(db_key, b'')
+            for tx_hash, tx_num in self._unflushed_txhash_to_txnum_map.items():
+                db_key = b't' + tx_hash
+                tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
+                batch.put(db_key, tx_numb)
             self.hist_db_tx_count = self.hist_db_tx_count_next
             self.write_state(batch)
 
-        count = len(unflushed)
-        unflushed.clear()
-        self.unflushed_count = 0
+        addr_count = len(unflushed_hashxs)
+        tx_count = len(self._unflushed_txhash_to_txnum_map)
+        unflushed_hashxs.clear()
+        self._unflushed_hashxs_count = 0
+        self._unflushed_txhash_to_txnum_map.clear()
 
         if self.db.for_sync:
             elapsed = time.monotonic() - start_time
-            self.logger.info(f'flushed history in {elapsed:.1f}s '
-                             f'for {count:,d} addrs')
+            self.logger.info(f'flushed history in {elapsed:.1f}s, '
+                             f'for {addr_count:,d} addrs and for {tx_count:,d} txs')
 
-    def backup(self, hashXs, tx_count):
+    def backup(self, *, hashXs, tx_count, tx_hashes: Sequence[bytes]):
         self.assert_flushed()
-        nremoves = 0
+        nremoves_addr = 0
+        nremoves_txs = 0
         txnum_padding = bytes(8-TXNUM_LEN)
         with self.db.write_batch() as batch:
             for hashX in sorted(hashXs):
@@ -180,17 +211,22 @@ class History:
                     tx_numb = db_key[-TXNUM_LEN:]
                     tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
                     if tx_num >= tx_count:
-                        nremoves += 1
+                        nremoves_addr += 1
                         deletes.append(db_key)
                     else:
                         break
                 for key in deletes:
                     batch.delete(key)
+            for tx_hash in tx_hashes:
+                db_key = b't' + tx_hash
+                batch.delete(db_key)
+                nremoves_txs += 1
             self.hist_db_tx_count = tx_count
             self.hist_db_tx_count_next = self.hist_db_tx_count
             self.write_state(batch)
 
-        self.logger.info(f'backing up removed {nremoves:,d} history entries')
+        self.logger.info(f'backing up history, removed {nremoves_addr:,d} addr entries '
+                         f'and {nremoves_txs:,d} tx entries')
 
     def get_txnums(self, hashX, limit=1000):
         '''Generator that returns an unpruned, sorted list of tx_nums in the
@@ -207,6 +243,16 @@ class History:
             tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
             yield tx_num
             limit -= 1
+
+    def get_txnum_for_txhash(self, tx_hash: bytes) -> Optional[int]:
+        tx_num = self._unflushed_txhash_to_txnum_map.get(tx_hash)
+        if tx_num is None:
+            db_key = b't' + tx_hash
+            tx_numb = self.db.get(db_key)
+            if tx_numb:
+                txnum_padding = bytes(8-TXNUM_LEN)
+                tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+        return tx_num
 
     #
     # DB upgrade

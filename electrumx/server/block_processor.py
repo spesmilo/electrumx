@@ -187,6 +187,7 @@ class BlockProcessor:
         # Caches of unflushed items.
         self.headers = []
         self.tx_hashes = []  # type: List[bytes]
+        self.undo_tx_hashes = []  # type: List[bytes]
         self.undo_infos = []  # type: List[Tuple[Sequence[bytes], int]]
 
         # UTXO cache
@@ -352,6 +353,7 @@ class BlockProcessor:
             tx_count=self.tx_count,
             headers=self.headers,
             block_tx_hashes=self.tx_hashes,
+            undo_block_tx_hashes=self.undo_tx_hashes,
             undo_infos=self.undo_infos,
             adds=self.utxo_cache,
             deletes=self.db_deletes,
@@ -430,8 +432,6 @@ class BlockProcessor:
             txs: Sequence[Tuple[Tx, bytes]],
             is_unspendable: Callable[[bytes], bool],
     ) -> Sequence[bytes]:
-        self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
-
         # Use local vars for speed in the loops
         undo_info = []
         tx_num = self.tx_count
@@ -442,6 +442,8 @@ class BlockProcessor:
         update_touched = self.touched.update
         hashXs_by_tx = []
         append_hashXs = hashXs_by_tx.append
+        txhash_to_txnum_map = {}
+        put_txhash_to_txnum_map = txhash_to_txnum_map.__setitem__
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
 
@@ -472,9 +474,15 @@ class BlockProcessor:
 
             append_hashXs(hashXs)
             update_touched(hashXs)
+            put_txhash_to_txnum_map(tx_hash, tx_num)
             tx_num += 1
 
-        self.db.history.add_unflushed(hashXs_by_tx, self.tx_count)
+        self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
+        self.db.history.add_unflushed(
+            hashXs_by_tx=hashXs_by_tx,
+            first_tx_num=self.tx_count,
+            txhash_to_txnum_map=txhash_to_txnum_map,
+        )
 
         self.tx_count = tx_num
         self.db.tx_counts.append(tx_num)
@@ -550,6 +558,8 @@ class BlockProcessor:
                 put_utxo(txin.prev_hash + pack_le_uint32(txin.prev_idx), undo_item)
                 hashX = undo_item[:HASHX_LEN]
                 touched.add(hashX)
+
+        self.undo_tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
 
         assert n == 0
         self.tx_count -= len(txs)
@@ -761,7 +771,11 @@ class NameIndexBlockProcessor(BlockProcessor):
             update_touched(hashXs)
             tx_num += 1
 
-        self.db.history.add_unflushed(hashXs_by_tx, self.tx_count - len(txs))
+        self.db.history.add_unflushed(
+            hashXs_by_tx=hashXs_by_tx,
+            first_tx_num=self.tx_count - len(txs),
+            txhash_to_txnum_map={},
+        )
 
         return result
 
@@ -769,8 +783,6 @@ class NameIndexBlockProcessor(BlockProcessor):
 class LTORBlockProcessor(BlockProcessor):
 
     def advance_txs(self, txs, is_unspendable):
-        self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
-
         # Use local vars for speed in the loops
         undo_info = []
         tx_num = self.tx_count
@@ -779,6 +791,8 @@ class LTORBlockProcessor(BlockProcessor):
         spend_utxo = self.spend_utxo
         undo_info_append = undo_info.append
         update_touched = self.touched.update
+        txhash_to_txnum_map = {}
+        put_txhash_to_txnum_map = txhash_to_txnum_map.__setitem__
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
 
@@ -799,6 +813,7 @@ class LTORBlockProcessor(BlockProcessor):
                 add_hashXs(hashX)
                 put_utxo(tx_hash + to_le_uint32(idx),
                          hashX + tx_numb + to_le_uint64(txout.value))
+            put_txhash_to_txnum_map(tx_hash, tx_num)
             tx_num += 1
 
         # Spend the inputs
@@ -816,7 +831,12 @@ class LTORBlockProcessor(BlockProcessor):
         for hashXs in hashXs_by_tx:
             update_touched(hashXs)
 
-        self.db.history.add_unflushed(hashXs_by_tx, self.tx_count)
+        self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
+        self.db.history.add_unflushed(
+            hashXs_by_tx=hashXs_by_tx,
+            first_tx_num=self.tx_count,
+            txhash_to_txnum_map=txhash_to_txnum_map,
+        )
 
         self.tx_count = tx_num
         self.db.tx_counts.append(tx_num)
@@ -863,4 +883,5 @@ class LTORBlockProcessor(BlockProcessor):
                 hashX = cache_value[:HASHX_LEN]
                 add_touched(hashX)
 
+        self.undo_tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
         self.tx_count -= len(txs)

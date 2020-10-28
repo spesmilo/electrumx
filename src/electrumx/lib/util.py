@@ -35,7 +35,7 @@ import logging
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
-from typing import Set, Any
+from typing import Set, Any, Optional
 
 import aiorpcx
 
@@ -166,7 +166,7 @@ def chunks(items, size):
         yield items[i: i + size]
 
 
-def resolve_limit(limit):
+def resolve_limit(limit: Optional[int]) -> int:
     if limit is None or limit < 0:
         return -1
     assert isinstance(limit, int)

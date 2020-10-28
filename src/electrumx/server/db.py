@@ -50,6 +50,7 @@ class FlushData:
     tx_count = attr.ib()
     headers = attr.ib()
     block_tx_hashes = attr.ib()  # type: List[bytes]
+    undo_block_tx_hashes = attr.ib()  # type: List[bytes]
     # The following are flushed to the UTXO DB if undo_infos is not None
     undo_infos = attr.ib()  # type: List[Tuple[Sequence[bytes], int]]
     adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
@@ -218,6 +219,7 @@ class DB:
         assert flush_data.tip == self.db_tip
         assert not flush_data.headers
         assert not flush_data.block_tx_hashes
+        assert not flush_data.undo_block_tx_hashes
         assert not flush_data.adds
         assert not flush_data.deletes
         assert not flush_data.undo_infos
@@ -266,7 +268,7 @@ class DB:
             self.logger.info(f'sync time: {formatted_time(self.wall_time)}  '
                              f'ETA: {formatted_time(eta)}')
 
-    def flush_fs(self, flush_data):
+    def flush_fs(self, flush_data: FlushData):
         '''Write headers, tx counts and block tx hashes to the filesystem.
 
         The first height to write is self.fs_height + 1.  The FS
@@ -362,18 +364,26 @@ class DB:
         self.last_flush_tx_count = self.fs_tx_count
         self.write_utxo_state(batch)
 
-    def flush_backup(self, flush_data, touched):
+    def flush_backup(self, flush_data: FlushData, touched):
         '''Like flush_dbs() but when backing up.  All UTXOs are flushed.'''
         assert not flush_data.headers
         assert not flush_data.block_tx_hashes
         assert flush_data.height < self.db_height
         self.history.assert_flushed()
+        assert len(flush_data.undo_block_tx_hashes) == self.db_height - flush_data.height
 
         start_time = time.time()
         tx_delta = flush_data.tx_count - self.last_flush_tx_count
 
+        tx_hashes = []
+        for block in flush_data.undo_block_tx_hashes:
+            tx_hashes += [*util.chunks(block, 32)]
+        flush_data.undo_block_tx_hashes.clear()
+        assert len(tx_hashes) == -tx_delta
+
         self.backup_fs(flush_data.height, flush_data.tx_count)
-        self.history.backup(touched, flush_data.tx_count)
+        self.history.backup(
+            hashXs=touched, tx_count=flush_data.tx_count, tx_hashes=tx_hashes)
         with self.utxo_db.write_batch() as batch:
             self.flush_utxo_db(batch, flush_data)
             # Flush state last as it reads the wall time.

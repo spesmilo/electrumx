@@ -23,7 +23,7 @@ from electrumx.lib.util import (
     chunks, class_logger, pack_le_uint32, pack_le_uint64, unpack_le_uint64, OldTaskGroup
 )
 from electrumx.lib.tx import Tx
-from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
+from electrumx.server.db import FlushData, DB
 from electrumx.server.history import TXNUM_LEN
 
 if TYPE_CHECKING:
@@ -616,21 +616,14 @@ class BlockProcessor:
 
     To this end we maintain two "tables", one for each point above:
 
-      1.  Key: b'u' + address_hashX + tx_idx + tx_num
+      1.  Key: b'u' + address_hashX + tx_num + txout_idx
           Value: the UTXO value as a 64-bit unsigned integer
 
-      2.  Key: b'h' + compressed_tx_hash + tx_idx + tx_num
+      2.  Key: b'h' + tx_num + txout_idx
           Value: hashX
-
-    The compressed tx hash is just the first few bytes of the hash of
-    the tx in which the UTXO was created.  As this is not unique there
-    will be potential collisions so tx_num is also in the key.  When
-    looking up a UTXO the prefix space of the compressed hash needs to
-    be searched and resolved if necessary with the tx_num.  The
-    collision rate is low (<0.1%).
     '''
 
-    def spend_utxo(self, tx_hash: bytes, tx_idx: int) -> bytes:
+    def spend_utxo(self, tx_hash: bytes, txout_idx: int) -> bytes:
         '''Spend a UTXO and return (hashX + tx_num + value_sats).
 
         If the UTXO is not in the cache it must be on disk.  We store
@@ -638,42 +631,36 @@ class BlockProcessor:
         corruption.
         '''
         # Fast track is it being in the cache
-        idx_packed = pack_le_uint32(tx_idx)
+        idx_packed = pack_le_uint32(txout_idx)
         cache_value = self.utxo_cache.pop(tx_hash + idx_packed, None)
         if cache_value:
             return cache_value
 
         # Spend it from the DB.
-        txnum_padding = bytes(8-TXNUM_LEN)
+        tx_num = self.db.get_txnum_for_txhash(tx_hash)
+        if tx_num is None:
+            raise ChainError(f'UTXO {hash_to_hex_str(tx_hash)} / {txout_idx:,d} has '
+                             f'no corresponding tx_num in DB')
+        tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
 
-        # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
+        # Key: b'h' + tx_num + txout_idx
         # Value: hashX
-        prefix = b'h' + tx_hash[:COMP_TXID_LEN] + idx_packed
-        candidates = {db_key: hashX for db_key, hashX
-                      in self.db.utxo_db.iterator(prefix=prefix)}
-
-        for hdb_key, hashX in candidates.items():
-            tx_num_packed = hdb_key[-TXNUM_LEN:]
-
-            if len(candidates) > 1:
-                tx_num, = unpack_le_uint64(tx_num_packed + txnum_padding)
-                hash, _height = self.db.fs_tx_hash(tx_num)
-                if hash != tx_hash:
-                    assert hash is not None  # Should always be found
-                    continue
-
-            # Key: b'u' + address_hashX + tx_idx + tx_num
-            # Value: the UTXO value as a 64-bit unsigned integer
-            udb_key = b'u' + hashX + hdb_key[-4-TXNUM_LEN:]
-            utxo_value_packed = self.db.utxo_db.get(udb_key)
-            if utxo_value_packed:
-                # Remove both entries for this UTXO
-                self.db_deletes.append(hdb_key)
-                self.db_deletes.append(udb_key)
-                return hashX + tx_num_packed + utxo_value_packed
-
-        raise ChainError(f'UTXO {hash_to_hex_str(tx_hash)} / {tx_idx:,d} not '
-                         f'found in "h" table')
+        hdb_key = b'h' + tx_numb + idx_packed
+        hashX = self.db.utxo_db.get(hdb_key)
+        if hashX is None:
+            raise ChainError(f'UTXO {hash_to_hex_str(tx_hash)} / {txout_idx:,d} not '
+                             f'found in "h" table')
+        # Key: b'u' + address_hashX + tx_num + txout_idx
+        # Value: the UTXO value as a 64-bit unsigned integer
+        udb_key = b'u' + hashX + tx_numb + idx_packed
+        utxo_value_packed = self.db.utxo_db.get(udb_key)
+        if utxo_value_packed is None:
+            raise ChainError(f'UTXO {hash_to_hex_str(tx_hash)} / {txout_idx:,d} not '
+                             f'found in "u" table')
+        # Remove both entries for this UTXO
+        self.db_deletes.append(hdb_key)
+        self.db_deletes.append(udb_key)
+        return hashX + tx_numb + utxo_value_packed
 
     async def _process_prefetched_blocks(self):
         '''Loop forever processing blocks as they arrive.'''

@@ -596,7 +596,7 @@ class DB:
     # -- UTXO database
 
     def read_utxo_state(self):
-        state = self.utxo_db.get(b'state')
+        state = self.utxo_db.get(b'\0state')
         if not state:
             self.db_height = -1
             self.db_tx_count = 0
@@ -633,7 +633,7 @@ class DB:
 
         # Upgrade DB
         if self.db_version != max(self.DB_VERSIONS):
-            self.upgrade_db()
+            pass  # call future upgrade logic here
 
         # Log some stats
         self.logger.info(f'UTXO DB version: {self.db_version:d}')
@@ -649,90 +649,6 @@ class DB:
                 f'sync time so far: {util.formatted_time(self.wall_time)}'
             )
 
-    def upgrade_db(self):
-        self.logger.info(f'UTXO DB version: {self.db_version}')
-        self.logger.info('Upgrading your DB; this can take some time...')
-
-        def upgrade_u_prefix(prefix):
-            count = 0
-            with self.utxo_db.write_batch() as batch:
-                batch_delete = batch.delete
-                batch_put = batch.put
-                # Key: b'u' + address_hashX + tx_idx + tx_num
-                for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                    if len(db_key) == 21:
-                        return
-                    break
-                if self.db_version == 6:
-                    for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                        count += 1
-                        batch_delete(db_key)
-                        batch_put(db_key[:14] + b'\0\0' + db_key[14:] + b'\0', db_value)
-                else:
-                    for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                        count += 1
-                        batch_delete(db_key)
-                        batch_put(db_key + b'\0', db_value)
-            return count
-
-        last = time.monotonic()
-        count = 0
-        for cursor in range(65536):
-            prefix = b'u' + pack_be_uint16(cursor)
-            count += upgrade_u_prefix(prefix)
-            now = time.monotonic()
-            if now > last + 10:
-                last = now
-                self.logger.info(f'DB 1 of 3: {count:,d} entries updated, '
-                                 f'{cursor * 100 / 65536:.1f}% complete')
-        self.logger.info('DB 1 of 3 upgraded successfully')
-
-        def upgrade_h_prefix(prefix):
-            count = 0
-            with self.utxo_db.write_batch() as batch:
-                batch_delete = batch.delete
-                batch_put = batch.put
-                # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
-                for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                    if len(db_key) == 14:
-                        return
-                    break
-                if self.db_version == 6:
-                    for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                        count += 1
-                        batch_delete(db_key)
-                        batch_put(db_key[:7] + b'\0\0' + db_key[7:] + b'\0', db_value)
-                else:
-                    for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                        count += 1
-                        batch_delete(db_key)
-                        batch_put(db_key + b'\0', db_value)
-            return count
-
-        last = time.monotonic()
-        count = 0
-        for cursor in range(65536):
-            prefix = b'h' + pack_be_uint16(cursor)
-            count += upgrade_h_prefix(prefix)
-            now = time.monotonic()
-            if now > last + 10:
-                last = now
-                self.logger.info(f'DB 2 of 3: {count:,d} entries updated, '
-                                 f'{cursor * 100 / 65536:.1f}% complete')
-
-        # Upgrade tx_counts file
-        size = (self.db_height + 1) * 8
-        tx_counts = self.tx_counts_file.read(0, size)
-        if len(tx_counts) == (self.db_height + 1) * 4:
-            tx_counts = array('I', tx_counts)
-            tx_counts = array('Q', tx_counts)
-            self.tx_counts_file.write(0, tx_counts.tobytes())
-
-        self.db_version = max(self.DB_VERSIONS)
-        with self.utxo_db.write_batch() as batch:
-            self.write_utxo_state(batch)
-        self.logger.info('DB 2 of 3 upgraded successfully')
-
     def write_utxo_state(self, batch):
         '''Write (UTXO) state to the batch.'''
         state = {
@@ -744,7 +660,7 @@ class DB:
             'first_sync': self.first_sync,
             'db_version': self.db_version,
         }
-        batch.put(b'state', repr(state).encode())
+        batch.put(b'\0state', repr(state).encode())
 
     async def all_utxos(self, hashX):
         '''Return all UTXOs for an address sorted in no particular order.'''

@@ -69,7 +69,7 @@ class History:
             self.db = None
 
     def read_state(self):
-        state = self.db.get(b'state\0\0')
+        state = self.db.get(b'\0state')
         if state:
             state = ast.literal_eval(state.decode())
             if not isinstance(state, dict):
@@ -85,7 +85,7 @@ class History:
             self.logger.error(msg)
             raise RuntimeError(msg)
         if self.db_version != max(self.DB_VERSIONS):
-            self.upgrade_db()
+            pass  # call future upgrade logic here
         self.logger.info(f'history DB version: {self.db_version}')
 
     def clear_excess(self, utxo_db_tx_count: int) -> None:
@@ -135,8 +135,7 @@ class History:
             'db_version': self.db_version,
             'upgrade_cursor': self.upgrade_cursor,
         }
-        # History entries are not prefixed; the suffix \0\0 is just for legacy reasons
-        batch.put(b'state\0\0', repr(state).encode())
+        batch.put(b'\0state', repr(state).encode())
 
     def add_unflushed(
             self,
@@ -253,107 +252,3 @@ class History:
                 txnum_padding = bytes(8-TXNUM_LEN)
                 tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
         return tx_num
-
-    #
-    # DB upgrade
-    #
-
-    def upgrade_db(self):
-        self.logger.info(f'history DB current version: {self.db_version}. '
-                         f'latest is: {max(self.DB_VERSIONS)}')
-        self.logger.info('Upgrading your history DB; this can take some time...')
-
-        def convert_version_1():
-            def upgrade_cursor(cursor):
-                count = 0
-                prefix = pack_be_uint16(cursor)
-                key_len = HASHX_LEN + 2
-                chunks = util.chunks
-                with self.db.write_batch() as batch:
-                    batch_put = batch.put
-                    for key, hist in self.db.iterator(prefix=prefix):
-                        # Ignore non-history entries
-                        if len(key) != key_len:
-                            continue
-                        count += 1
-                        hist = b''.join(item + b'\0' for item in chunks(hist, 4))
-                        batch_put(key, hist)
-                    self.upgrade_cursor = cursor
-                    self.write_state(batch)
-                return count
-
-            last = time.monotonic()
-            count = 0
-
-            for cursor in range(self.upgrade_cursor + 1, 65536):
-                count += upgrade_cursor(cursor)
-                now = time.monotonic()
-                if now > last + 10:
-                    last = now
-                    self.logger.info(f'history DB v0->v1: {count:,d} entries updated, '
-                                     f'{cursor * 100 / 65536:.1f}% complete')
-
-            self.db_version = 1
-            self.upgrade_cursor = -1
-            with self.db.write_batch() as batch:
-                self.write_state(batch)
-            self.logger.info('history DB upgraded to v1 successfully')
-
-        def convert_version_2():
-            # old schema:
-            # Key: address_hashX + flush_id
-            # Value: sorted "list" of tx_nums in history of hashX
-            # -----
-            # new schema:
-            # Key: address_hashX + tx_num
-            # Value: <null>
-
-            def upgrade_cursor(cursor):
-                count = 0
-                prefix = pack_be_uint16(cursor)
-                key_len = HASHX_LEN + 2
-                chunks = util.chunks
-                txnum_padding = bytes(8-TXNUM_LEN)
-                with self.db.write_batch() as batch:
-                    batch_put = batch.put
-                    batch_delete = batch.delete
-                    max_tx_num = 0
-                    for db_key, db_val in self.db.iterator(prefix=prefix):
-                        # Ignore non-history entries
-                        if len(db_key) != key_len:
-                            continue
-                        count += 1
-                        batch_delete(db_key)
-                        hashX = db_key[:HASHX_LEN]
-                        for tx_numb in chunks(db_val, 5):
-                            batch_put(hashX + tx_numb, b'')
-                            tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
-                            max_tx_num = max(max_tx_num, tx_num)
-                    self.upgrade_cursor = cursor
-                    self.hist_db_tx_count = max(self.hist_db_tx_count, max_tx_num + 1)
-                    self.hist_db_tx_count_next = self.hist_db_tx_count
-                    self.write_state(batch)
-                return count
-
-            last = time.monotonic()
-            count = 0
-
-            for cursor in range(self.upgrade_cursor + 1, 65536):
-                count += upgrade_cursor(cursor)
-                now = time.monotonic()
-                if now > last + 10:
-                    last = now
-                    self.logger.info(f'history DB v1->v2: {count:,d} entries updated, '
-                                     f'{cursor * 100 / 65536:.1f}% complete')
-
-            self.db_version = 2
-            self.upgrade_cursor = -1
-            with self.db.write_batch() as batch:
-                self.write_state(batch)
-            self.logger.info('history DB upgraded to v2 successfully')
-
-        if self.db_version == 0:
-            convert_version_1()
-        if self.db_version == 1:
-            convert_version_2()
-        self.db_version = max(self.DB_VERSIONS)

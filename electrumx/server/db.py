@@ -59,9 +59,6 @@ class FlushData:
     tip = attr.ib()
 
 
-COMP_TXID_LEN = 4
-
-
 class DB:
     '''Simple wrapper of the backend database for querying.
 
@@ -69,7 +66,7 @@ class DB:
     it was shutdown uncleanly.
     '''
 
-    DB_VERSIONS = (6, 7, 8)
+    DB_VERSIONS = (9, )
 
     utxo_db: Optional['Storage']
 
@@ -95,11 +92,11 @@ class DB:
         self.db_class = db_class(self.env.db_engine)
         self.history = History()
 
-        # Key: b'u' + address_hashX + txout_idx + tx_num
+        # Key: b'u' + address_hashX + tx_num + txout_idx
         # Value: the UTXO value as a 64-bit unsigned integer (in satoshis)
         # "at address, at outpoint, there is a UTXO of value v"
         # ---
-        # Key: b'h' + compressed_tx_hash + txout_idx + tx_num
+        # Key: b'h' + tx_num + txout_idx
         # Value: hashX
         # "some outpoint created a UTXO at address"
         # ---
@@ -335,8 +332,8 @@ class DB:
             txout_idx = key[-4:]
             tx_num = value[HASHX_LEN: HASHX_LEN+TXNUM_LEN]
             value_sats = value[-8:]
-            suffix = txout_idx + tx_num
-            batch_put(b'h' + key[:COMP_TXID_LEN] + suffix, hashX)
+            suffix = tx_num + txout_idx
+            batch_put(b'h' + suffix, hashX)
             batch_put(b'u' + hashX + suffix, value_sats)
         flush_data.adds.clear()
 
@@ -518,6 +515,9 @@ class DB:
             self.logger.warning(f'limited_history: tx hash '
                                 f'not found (reorg?), retrying...')
             await sleep(0.25)
+
+    def get_txnum_for_txhash(self, tx_hash: bytes) -> Optional[int]:
+        return self.history.get_txnum_for_txhash(tx_hash)
 
     # -- Undo information
 
@@ -752,12 +752,12 @@ class DB:
             utxos = []
             utxos_append = utxos.append
             txnum_padding = bytes(8-TXNUM_LEN)
-            # Key: b'u' + address_hashX + txout_idx + tx_num
+            # Key: b'u' + address_hashX + tx_num + txout_idx
             # Value: the UTXO value as a 64-bit unsigned integer
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN-4:-TXNUM_LEN])
-                tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + txnum_padding)
+                txout_idx, = unpack_le_uint32(db_key[-4:])
+                tx_num, = unpack_le_uint64(db_key[-4-TXNUM_LEN:-4] + txnum_padding)
                 value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
                 utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
@@ -781,22 +781,20 @@ class DB:
             '''Return (hashX, suffix) pairs, or None if not found,
             for each prevout.
             '''
-            def lookup_hashX(tx_hash, tx_idx):
-                idx_packed = pack_le_uint32(tx_idx)
-                txnum_padding = bytes(8-TXNUM_LEN)
+            def lookup_hashX(tx_hash, txout_idx):
+                idx_packed = pack_le_uint32(txout_idx)
+                tx_num = self.get_txnum_for_txhash(tx_hash)
+                if tx_num is None:
+                    return None, None
+                tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
 
-                # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
+                # Key: b'h' + tx_num + txout_idx
                 # Value: hashX
-                prefix = b'h' + tx_hash[:COMP_TXID_LEN] + idx_packed
-
-                # Find which entry, if any, the TX_HASH matches.
-                for db_key, hashX in self.utxo_db.iterator(prefix=prefix):
-                    tx_num_packed = db_key[-TXNUM_LEN:]
-                    tx_num, = unpack_le_uint64(tx_num_packed + txnum_padding)
-                    hash, _height = self.fs_tx_hash(tx_num)
-                    if hash == tx_hash:
-                        return hashX, idx_packed + tx_num_packed
-                return None, None
+                db_key = b'h' + tx_numb + idx_packed
+                hashX = self.utxo_db.get(db_key)
+                if hashX is None:
+                    return None, None
+                return hashX, tx_numb + idx_packed
             return [lookup_hashX(*prevout) for prevout in prevouts]
 
         def lookup_utxos(hashX_pairs):
@@ -806,7 +804,7 @@ class DB:
                     # of us and has mempool txs spending outputs from
                     # that new block
                     return None
-                # Key: b'u' + address_hashX + tx_idx + tx_num
+                # Key: b'u' + address_hashX + tx_num + txout_idx
                 # Value: the UTXO value as a 64-bit unsigned integer
                 key = b'u' + hashX + suffix
                 db_value = self.utxo_db.get(key)

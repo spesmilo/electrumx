@@ -76,6 +76,7 @@ class Env(EnvBase):
         self.blacklist_url = self.default('BLACKLIST_URL', self.coin.BLACKLIST_URL)
         self.cache_MB = self.integer('CACHE_MB', 1200)
         self.reorg_limit = self.integer('REORG_LIMIT', self.coin.REORG_LIMIT)
+        self.daemon_has_txindex = self.boolean('DAEMON_HAS_TXINDEX', True)
 
         # Server limits to help prevent DoS
 

@@ -1665,12 +1665,22 @@ class ElectrumX(SessionBase):
         tx_hash: the transaction hash as a hexadecimal string
         verbose: passed on to the daemon
         '''
-        assert_tx_hash(tx_hash)
+        tx_hash_bytes = assert_tx_hash(tx_hash)
+        tx_hash_hex = tx_hash
+        del tx_hash
         if verbose not in (True, False):
             raise RPCError(BAD_REQUEST, '"verbose" must be a boolean')
 
         self.bump_cost(1.0)
-        return await self.daemon_request('getrawtransaction', tx_hash, verbose)
+
+        blockhash = None
+        if not self.env.daemon_has_txindex:
+            height, tx_pos = await self.db.get_blockheight_and_txpos_for_txhash(tx_hash_bytes)
+            if height is not None:
+                block_header = await self.db.raw_header(height)
+                blockhash = self.coin.header_hash(block_header).hex()
+
+        return await self.daemon_request('getrawtransaction', tx_hash_hex, verbose, blockhash)
 
     async def transaction_merkle(self, tx_hash, height=None):
         '''Return the merkle branch to a confirmed transaction given its hash

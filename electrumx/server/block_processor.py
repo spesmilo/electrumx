@@ -625,7 +625,7 @@ class BlockProcessor:
             return cache_value
 
         # Spend it from the DB.
-        tx_num = self.db.get_txnum_for_txhash(tx_hash)
+        tx_num = self.db.fs_txnum_for_txhash(tx_hash)
         if tx_num is None:
             raise ChainError(f'UTXO {hash_to_hex_str(tx_hash)} / {txout_idx:,d} has '
                              f'no corresponding tx_num in DB')

@@ -515,8 +515,25 @@ class DB:
                                 f'not found (reorg?), retrying...')
             await sleep(0.25)
 
-    def get_txnum_for_txhash(self, tx_hash: bytes) -> Optional[int]:
+    def fs_txnum_for_txhash(self, tx_hash: bytes) -> Optional[int]:
         return self.history.get_txnum_for_txhash(tx_hash)
+
+    async def txnum_for_txhash(self, tx_hash: bytes) -> Optional[int]:
+        return await run_in_thread(self.fs_txnum_for_txhash, tx_hash)
+
+    async def get_blockheight_and_txpos_for_txhash(
+            self, tx_hash: bytes,
+    ) -> Tuple[Optional[int], Optional[int]]:
+        '''Returns (block_height, tx_pos) for a confirmed tx_hash.'''
+        tx_num = await self.txnum_for_txhash(tx_hash)
+        if tx_num is None:
+            return None, None
+        height = bisect_right(self.tx_counts, tx_num)
+        if height > self.db_height:
+            return None, None
+        assert height > 0
+        tx_pos = tx_num - self.tx_counts[height - 1]
+        return height, tx_pos
 
     # -- Undo information
 
@@ -698,7 +715,7 @@ class DB:
             '''
             def lookup_hashX(tx_hash, txout_idx):
                 idx_packed = pack_le_uint32(txout_idx)
-                tx_num = self.get_txnum_for_txhash(tx_hash)
+                tx_num = self.fs_txnum_for_txhash(tx_hash)
                 if tx_num is None:
                     return None, None
                 tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]

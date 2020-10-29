@@ -177,10 +177,10 @@ class History:
 
         with self.db.write_batch() as batch:
             for hashX in sorted(unflushed_hashxs):
-                for tx_num in chunks(unflushed_hashxs[hashX], TXNUM_LEN):
+                for tx_num in sorted(chunks(unflushed_hashxs[hashX], TXNUM_LEN)):
                     db_key = b'H' + hashX + tx_num
                     batch.put(db_key, b'')
-            for tx_hash, tx_num in self._unflushed_txhash_to_txnum_map.items():
+            for tx_hash, tx_num in sorted(self._unflushed_txhash_to_txnum_map.items()):
                 db_key = b't' + tx_hash
                 tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
                 batch.put(db_key, tx_numb)
@@ -217,7 +217,7 @@ class History:
                         break
                 for key in deletes:
                     batch.delete(key)
-            for tx_hash in tx_hashes:
+            for tx_hash in sorted(tx_hashes):
                 db_key = b't' + tx_hash
                 batch.delete(db_key)
                 nremoves_txs += 1

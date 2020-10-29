@@ -18,7 +18,7 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Tuple, Sequence
 import asyncio
 
 import attr
@@ -677,16 +677,32 @@ class SessionManager:
         branch = [hash_to_hex_str(hash) for hash in branch]
         return branch, cost / 2500
 
-    async def merkle_branch_for_tx_hash(self, height, tx_hash):
-        '''Return a triple (branch, tx_pos, cost).'''
-        tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height)
-        try:
-            tx_pos = tx_hashes.index(tx_hash)
-        except ValueError:
+    async def merkle_branch_for_tx_hash(
+            self, *, tx_hash: bytes, height: int = None,
+    ) -> Tuple[int, Sequence[str], int, float]:
+        '''Returns (height, branch, tx_pos, cost).'''
+        cost = 0
+        tx_pos = None
+        if height is None:
+            cost += 0.1
+            height, tx_pos = await self.db.get_blockheight_and_txpos_for_txhash(tx_hash)
+        if height is None:
             raise RPCError(BAD_REQUEST,
-                           f'tx {hash_to_hex_str(tx_hash)} not in block at height {height:,d}')
+                           f'tx {hash_to_hex_str(tx_hash)} not in any block')
+        tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height)
+        if tx_pos is None:
+            try:
+                tx_pos = tx_hashes.index(tx_hash)
+            except ValueError:
+                raise RPCError(BAD_REQUEST,
+                               f'tx {hash_to_hex_str(tx_hash)} not in block at height {height:,d}')
+        elif not (len(tx_hashes) > tx_pos and tx_hashes[tx_pos] == tx_hash):
+            # there was a reorg while processing the request... TODO maybe retry?
+            raise RPCError(BAD_REQUEST,
+                           f'tx {hash_to_hex_str(tx_hash)} was reorged while processing request')
         branch, merkle_cost = await self._merkle_branch(height, tx_hashes, tx_pos)
-        return branch, tx_pos, tx_hashes_cost + merkle_cost
+        cost += tx_hashes_cost + merkle_cost
+        return height, branch, tx_pos, cost
 
     async def merkle_branch_for_tx_pos(self, height, tx_pos):
         '''Return a triple (branch, tx_hash_hex, cost).'''
@@ -1417,7 +1433,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         return await self.daemon_request('getrawtransaction', tx_hash, verbose)
 
-    async def transaction_merkle(self, tx_hash, height):
+    async def transaction_merkle(self, tx_hash, height=None):
         '''Return the merkle branch to a confirmed transaction given its hash
         and height.
 
@@ -1425,12 +1441,14 @@ class ElectrumX(SessionBase):
         height: the height of the block it is in
         '''
         tx_hash = assert_tx_hash(tx_hash)
-        height = non_negative_integer(height)
+        if height is not None:
+            height = non_negative_integer(height)
 
-        branch, tx_pos, cost = await self.session_mgr.merkle_branch_for_tx_hash(
-            height, tx_hash)
+        height, branch, tx_pos, cost = await self.session_mgr.merkle_branch_for_tx_hash(
+            tx_hash=tx_hash, height=height)
         self.bump_cost(cost)
 
+        assert height is not None
         return {"block_height": height, "merkle": branch, "pos": tx_pos}
 
     async def transaction_id_from_pos(self, height, tx_pos, merkle=False):

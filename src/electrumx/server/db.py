@@ -68,7 +68,7 @@ class DB:
     it was shutdown uncleanly.
     '''
 
-    DB_VERSIONS = (6, 7, 8)
+    DB_VERSIONS = (9, )  # bump1
     DB_STATE_KEY = b'state'
 
     utxo_db: Optional['Storage']

@@ -28,7 +28,9 @@ from electrumx.lib.util import (
     unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
 )
 from electrumx.server.storage import db_class, Storage
-from electrumx.server.history import History, TXNUM_LEN, TXNUM_PADDING
+from electrumx.server.history import (
+    History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING,
+)
 
 if TYPE_CHECKING:
     from electrumx.server.env import Env
@@ -329,7 +331,7 @@ class DB:
         for key, value in flush_data.adds.items():
             # key: txid+out_idx, value: hashX+tx_num+value_sats
             hashX = value[:HASHX_LEN]
-            txout_idx = key[-4:]
+            txout_idx = key[-TXOUTIDX_LEN:]
             tx_num = value[HASHX_LEN: HASHX_LEN+TXNUM_LEN]
             value_sats = value[-8:]
             suffix = txout_idx + tx_num
@@ -660,7 +662,7 @@ class DB:
             # Value: the UTXO value as a 64-bit unsigned integer
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN-4:-TXNUM_LEN])
+                txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN-TXOUTIDX_LEN:-TXNUM_LEN] + TXOUTIDX_PADDING)
                 tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + TXNUM_PADDING)
                 value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
@@ -686,7 +688,7 @@ class DB:
             for each prevout.
             '''
             def lookup_hashX(tx_hash, tx_idx):
-                idx_packed = pack_le_uint32(tx_idx)
+                idx_packed = pack_le_uint32(tx_idx)[:TXOUTIDX_LEN]
 
                 # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
                 # Value: hashX

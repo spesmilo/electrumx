@@ -24,7 +24,7 @@ from electrumx.lib.util import (
 )
 from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, DB
-from electrumx.server.history import TXNUM_LEN
+from electrumx.server.history import TXNUM_LEN, TXOUTIDX_LEN, TXOUTIDX_PADDING
 
 if TYPE_CHECKING:
     from electrumx.lib.coins import Coin, Block
@@ -485,7 +485,7 @@ class BlockProcessor:
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 append_hashX(hashX)
-                put_utxo(tx_hash + to_le_uint32(idx),
+                put_utxo(tx_hash + to_le_uint32(idx)[:TXOUTIDX_LEN],
                          hashX + tx_numb + to_le_uint64(txout.value))
 
             append_hashXs(hashXs)
@@ -574,7 +574,7 @@ class BlockProcessor:
                     continue
                 n -= undo_entry_len
                 undo_item = undo_info[n:n + undo_entry_len]
-                prevout = txin.prev_hash + pack_le_uint32(txin.prev_idx)
+                prevout = txin.prev_hash + pack_le_uint32(txin.prev_idx)[:TXOUTIDX_LEN]
                 put_utxo(prevout, undo_item)
                 hashX = undo_item[:HASHX_LEN]
                 touched.add(hashX)
@@ -640,7 +640,7 @@ class BlockProcessor:
         corruption.
         '''
         # Fast track is it being in the cache
-        idx_packed = pack_le_uint32(txout_idx)
+        idx_packed = pack_le_uint32(txout_idx)[:TXOUTIDX_LEN]
         cache_value = self.utxo_cache.pop(tx_hash + idx_packed, None)
         if cache_value:
             return cache_value
@@ -823,7 +823,7 @@ class LTORBlockProcessor(BlockProcessor):
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 add_hashXs(hashX)
-                put_utxo(tx_hash + to_le_uint32(idx),
+                put_utxo(tx_hash + to_le_uint32(idx)[:TXOUTIDX_LEN],
                          hashX + tx_numb + to_le_uint64(txout.value))
             put_txhash_to_txnum_map(tx_hash, tx_num)
             tx_num += 1
@@ -878,7 +878,8 @@ class LTORBlockProcessor(BlockProcessor):
                 if txin.is_generation():
                     continue
                 undo_item = undo_info[n:n + undo_entry_len]
-                put_utxo(txin.prev_hash + pack_le_uint32(txin.prev_idx), undo_item)
+                prevout = txin.prev_hash + pack_le_uint32(txin.prev_idx)[:TXOUTIDX_LEN]
+                put_utxo(prevout, undo_item)
                 add_touched(undo_item[:HASHX_LEN])
                 n += undo_entry_len
 

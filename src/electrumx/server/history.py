@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 
 TXNUM_LEN = 5
 TXNUM_PADDING = bytes(8 - TXNUM_LEN)
+TXOUTIDX_LEN = 4
+TXOUTIDX_PADDING = bytes(4 - TXOUTIDX_LEN)
 
 
 class History:
@@ -184,7 +186,7 @@ class History:
             assert prev_txnum is not None
             spender_txnum = get_txnum_for_txhash(spender_hash)
             assert spender_txnum is not None
-            prev_idx_packed = pack_le_uint32(prev_idx)
+            prev_idx_packed = pack_le_uint32(prev_idx)[:TXOUTIDX_LEN]
             prev_txnumb = pack_le_uint64(prev_txnum)[:TXNUM_LEN]
             unflushed_spenders[prev_txnumb+prev_idx_packed] = spender_txnum
 
@@ -254,7 +256,7 @@ class History:
             for spend in spends:
                 prev_hash = spend[:32]
                 prev_idx = spend[32:]
-                assert len(prev_idx) == 4
+                assert len(prev_idx) == TXOUTIDX_LEN
                 prev_txnum = get_txnum_for_txhash(prev_hash)
                 assert prev_txnum is not None
                 prev_txnumb = pack_le_uint64(prev_txnum)[:TXNUM_LEN]
@@ -298,7 +300,7 @@ class History:
         '''For an outpoint, returns the tx_num that spent it.
         If the outpoint is unspent, or even if it never existed (!), returns None.
         '''
-        prev_idx_packed = pack_le_uint32(txout_idx)
+        prev_idx_packed = pack_le_uint32(txout_idx)[:TXOUTIDX_LEN]
         prev_txnumb = pack_le_uint64(prev_txnum)[:TXNUM_LEN]
         prevout = prev_txnumb + prev_idx_packed
         spender_txnum = self._unflushed_txhash_to_txnum_map.get(prevout)

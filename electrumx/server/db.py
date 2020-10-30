@@ -29,7 +29,7 @@ from electrumx.lib.util import (
     unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
 )
 from electrumx.server.storage import db_class, Storage
-from electrumx.server.history import History, TXNUM_LEN
+from electrumx.server.history import History, TXNUM_LEN, TXNUM_PADDING
 
 if TYPE_CHECKING:
     from electrumx.server.env import Env
@@ -691,13 +691,12 @@ class DB:
         def read_utxos():
             utxos = []
             utxos_append = utxos.append
-            txnum_padding = bytes(8-TXNUM_LEN)
             # Key: b'u' + address_hashX + tx_num + txout_idx
             # Value: the UTXO value as a 64-bit unsigned integer
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
                 txout_idx, = unpack_le_uint32(db_key[-4:])
-                tx_num, = unpack_le_uint64(db_key[-4-TXNUM_LEN:-4] + txnum_padding)
+                tx_num, = unpack_le_uint64(db_key[-4-TXNUM_LEN:-4] + TXNUM_PADDING)
                 value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
                 utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))

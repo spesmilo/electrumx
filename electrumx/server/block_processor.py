@@ -188,6 +188,7 @@ class BlockProcessor:
         self.headers = []
         self.tx_hashes = []  # type: List[bytes]
         self.undo_tx_hashes = []  # type: List[bytes]
+        self.undo_historical_spends = []  # type: List[bytes]
         self.undo_infos = []  # type: List[Tuple[Sequence[bytes], int]]
 
         # UTXO cache
@@ -354,6 +355,7 @@ class BlockProcessor:
             headers=self.headers,
             block_tx_hashes=self.tx_hashes,
             undo_block_tx_hashes=self.undo_tx_hashes,
+            undo_historical_spends=self.undo_historical_spends,
             undo_infos=self.undo_infos,
             adds=self.utxo_cache,
             deletes=self.db_deletes,
@@ -444,6 +446,8 @@ class BlockProcessor:
         append_hashXs = hashXs_by_tx.append
         txhash_to_txnum_map = {}
         put_txhash_to_txnum_map = txhash_to_txnum_map.__setitem__
+        txo_to_spender_map = {}
+        put_txo_to_spender_map = txo_to_spender_map.__setitem__
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
 
@@ -459,6 +463,7 @@ class BlockProcessor:
                 cache_value = spend_utxo(txin.prev_hash, txin.prev_idx)
                 undo_info_append(cache_value)
                 append_hashX(cache_value[:HASHX_LEN])
+                put_txo_to_spender_map((txin.prev_hash, txin.prev_idx), tx_hash)
 
             # Add the new UTXOs
             for idx, txout in enumerate(tx.outputs):
@@ -482,6 +487,7 @@ class BlockProcessor:
             hashXs_by_tx=hashXs_by_tx,
             first_tx_num=self.tx_count,
             txhash_to_txnum_map=txhash_to_txnum_map,
+            txo_to_spender_map=txo_to_spender_map,
         )
 
         self.tx_count = tx_num
@@ -535,6 +541,7 @@ class BlockProcessor:
         put_utxo = self.utxo_cache.__setitem__
         spend_utxo = self.spend_utxo
         touched = self.touched
+        undo_hist_spend = self.undo_historical_spends.append
         undo_entry_len = HASHX_LEN + TXNUM_LEN + 8
 
         for tx, tx_hash in reversed(txs):
@@ -555,9 +562,11 @@ class BlockProcessor:
                     continue
                 n -= undo_entry_len
                 undo_item = undo_info[n:n + undo_entry_len]
-                put_utxo(txin.prev_hash + pack_le_uint32(txin.prev_idx), undo_item)
+                prevout = txin.prev_hash + pack_le_uint32(txin.prev_idx)
+                put_utxo(prevout, undo_item)
                 hashX = undo_item[:HASHX_LEN]
                 touched.add(hashX)
+                undo_hist_spend(prevout)
 
         self.undo_tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
 
@@ -762,6 +771,7 @@ class NameIndexBlockProcessor(BlockProcessor):
             hashXs_by_tx=hashXs_by_tx,
             first_tx_num=self.tx_count - len(txs),
             txhash_to_txnum_map={},
+            txo_to_spender_map={},
         )
 
         return result
@@ -780,6 +790,8 @@ class LTORBlockProcessor(BlockProcessor):
         update_touched = self.touched.update
         txhash_to_txnum_map = {}
         put_txhash_to_txnum_map = txhash_to_txnum_map.__setitem__
+        txo_to_spender_map = {}
+        put_txo_to_spender_map = txo_to_spender_map.__setitem__
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
 
@@ -813,6 +825,7 @@ class LTORBlockProcessor(BlockProcessor):
                 cache_value = spend_utxo(txin.prev_hash, txin.prev_idx)
                 undo_info_append(cache_value)
                 add_hashXs(cache_value[:HASHX_LEN])
+                put_txo_to_spender_map((txin.prev_hash, txin.prev_idx), tx_hash)
 
         # Update touched set for notifications
         for hashXs in hashXs_by_tx:
@@ -823,6 +836,7 @@ class LTORBlockProcessor(BlockProcessor):
             hashXs_by_tx=hashXs_by_tx,
             first_tx_num=self.tx_count,
             txhash_to_txnum_map=txhash_to_txnum_map,
+            txo_to_spender_map=txo_to_spender_map,
         )
 
         self.tx_count = tx_num

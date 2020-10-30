@@ -52,6 +52,7 @@ class FlushData:
     headers = attr.ib()
     block_tx_hashes = attr.ib()  # type: List[bytes]
     undo_block_tx_hashes = attr.ib()  # type: List[bytes]
+    undo_historical_spends = attr.ib()  # type: List[bytes]
     # The following are flushed to the UTXO DB if undo_infos is not None
     undo_infos = attr.ib()  # type: List[Tuple[Sequence[bytes], int]]
     adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
@@ -210,7 +211,7 @@ class DB:
         return await self.header_mc.branch_and_root(length, height)
 
     # Flushing
-    def assert_flushed(self, flush_data):
+    def assert_flushed(self, flush_data: FlushData):
         '''Asserts state is fully flushed.'''
         assert flush_data.tx_count == self.fs_tx_count == self.db_tx_count
         assert flush_data.height == self.fs_height == self.db_height
@@ -218,12 +219,13 @@ class DB:
         assert not flush_data.headers
         assert not flush_data.block_tx_hashes
         assert not flush_data.undo_block_tx_hashes
+        assert not flush_data.undo_historical_spends
         assert not flush_data.adds
         assert not flush_data.deletes
         assert not flush_data.undo_infos
         self.history.assert_flushed()
 
-    def flush_dbs(self, flush_data, flush_utxos, estimate_txs_remaining):
+    def flush_dbs(self, flush_data: FlushData, flush_utxos, estimate_txs_remaining):
         '''Flush out cached state.  History is always flushed; UTXOs are
         flushed if flush_utxos.'''
         if flush_data.height == self.db_height:
@@ -381,7 +383,12 @@ class DB:
 
         self.backup_fs(flush_data.height, flush_data.tx_count)
         self.history.backup(
-            hashXs=touched, tx_count=flush_data.tx_count, tx_hashes=tx_hashes)
+            hashXs=touched,
+            tx_count=flush_data.tx_count,
+            tx_hashes=tx_hashes,
+            spends=flush_data.undo_historical_spends,
+        )
+        flush_data.undo_historical_spends.clear()
         with self.utxo_db.write_batch() as batch:
             self.flush_utxo_db(batch, flush_data)
             # Flush state last as it reads the wall time.

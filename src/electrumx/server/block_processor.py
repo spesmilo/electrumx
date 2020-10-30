@@ -24,7 +24,7 @@ from electrumx.lib.util import (
 )
 from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
-from electrumx.server.history import TXNUM_LEN, TXNUM_PADDING
+from electrumx.server.history import TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING
 
 if TYPE_CHECKING:
     from electrumx.lib.coins import Coin, Block
@@ -478,7 +478,7 @@ class BlockProcessor:
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 append_hashX(hashX)
-                put_utxo(tx_hash + to_le_uint32(idx),
+                put_utxo(tx_hash + to_le_uint32(idx)[:TXOUTIDX_LEN],
                          hashX + tx_numb + to_le_uint64(txout.value))
 
             append_hashXs(hashXs)
@@ -559,7 +559,8 @@ class BlockProcessor:
                     continue
                 n -= undo_entry_len
                 undo_item = undo_info[n:n + undo_entry_len]
-                put_utxo(txin.prev_hash + pack_le_uint32(txin.prev_idx), undo_item)
+                prevout = txin.prev_hash + pack_le_uint32(txin.prev_idx)[:TXOUTIDX_LEN]
+                put_utxo(prevout, undo_item)
                 hashX = undo_item[:HASHX_LEN]
                 touched.add(hashX)
 
@@ -628,7 +629,7 @@ class BlockProcessor:
         corruption.
         '''
         # Fast track is it being in the cache
-        idx_packed = pack_le_uint32(tx_idx)
+        idx_packed = pack_le_uint32(tx_idx)[:TXOUTIDX_LEN]
         cache_value = self.utxo_cache.pop(tx_hash + idx_packed, None)
         if cache_value:
             return cache_value
@@ -653,7 +654,7 @@ class BlockProcessor:
 
             # Key: b'u' + address_hashX + tx_idx + tx_num
             # Value: the UTXO value as a 64-bit unsigned integer
-            udb_key = b'u' + hashX + hdb_key[-4-TXNUM_LEN:]
+            udb_key = b'u' + hashX + hdb_key[-TXOUTIDX_LEN-TXNUM_LEN:]
             utxo_value_packed = self.db.utxo_db.get(udb_key)
             if utxo_value_packed:
                 # Remove both entries for this UTXO
@@ -809,7 +810,7 @@ class LTORBlockProcessor(BlockProcessor):
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 add_hashXs(hashX)
-                put_utxo(tx_hash + to_le_uint32(idx),
+                put_utxo(tx_hash + to_le_uint32(idx)[:TXOUTIDX_LEN],
                          hashX + tx_numb + to_le_uint64(txout.value))
             tx_num += 1
 
@@ -856,7 +857,8 @@ class LTORBlockProcessor(BlockProcessor):
                 if txin.is_generation():
                     continue
                 undo_item = undo_info[n:n + undo_entry_len]
-                put_utxo(txin.prev_hash + pack_le_uint32(txin.prev_idx), undo_item)
+                prevout = txin.prev_hash + pack_le_uint32(txin.prev_idx)[:TXOUTIDX_LEN]
+                put_utxo(prevout, undo_item)
                 add_touched(undo_item[:HASHX_LEN])
                 n += undo_entry_len
 

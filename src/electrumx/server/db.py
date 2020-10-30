@@ -28,7 +28,7 @@ from electrumx.lib.util import (
     unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
 )
 from electrumx.server.storage import db_class, Storage
-from electrumx.server.history import History, TXNUM_LEN
+from electrumx.server.history import History, TXNUM_LEN, TXNUM_PADDING
 
 if TYPE_CHECKING:
     from electrumx.server.env import Env
@@ -656,13 +656,12 @@ class DB:
         def read_utxos():
             utxos = []
             utxos_append = utxos.append
-            txnum_padding = bytes(8-TXNUM_LEN)
             # Key: b'u' + address_hashX + txout_idx + tx_num
             # Value: the UTXO value as a 64-bit unsigned integer
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
                 txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN-4:-TXNUM_LEN])
-                tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + txnum_padding)
+                tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + TXNUM_PADDING)
                 value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
                 utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
@@ -688,7 +687,6 @@ class DB:
             '''
             def lookup_hashX(tx_hash, tx_idx):
                 idx_packed = pack_le_uint32(tx_idx)
-                txnum_padding = bytes(8-TXNUM_LEN)
 
                 # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
                 # Value: hashX
@@ -697,7 +695,7 @@ class DB:
                 # Find which entry, if any, the TX_HASH matches.
                 for db_key, hashX in self.utxo_db.iterator(prefix=prefix):
                     tx_num_packed = db_key[-TXNUM_LEN:]
-                    tx_num, = unpack_le_uint64(tx_num_packed + txnum_padding)
+                    tx_num, = unpack_le_uint64(tx_num_packed + TXNUM_PADDING)
                     hash, _height = self.fs_tx_hash(tx_num)
                     if hash == tx_hash:
                         return hashX, idx_packed + tx_num_packed

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 
 TXNUM_LEN = 5
+TXNUM_PADDING = bytes(8 - TXNUM_LEN)
 
 
 class History:
@@ -97,11 +98,10 @@ class History:
         self.logger.info('DB shut down uncleanly.  Scanning for '
                          'excess history flushes...')
 
-        txnum_padding = bytes(8-TXNUM_LEN)
         keys = []
         for db_key, db_val in self.db.iterator(prefix=b'H'):
             tx_numb = db_key[-TXNUM_LEN:]
-            tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
             if tx_num >= utxo_db_tx_count:
                 keys.append(db_key)
 
@@ -171,14 +171,13 @@ class History:
     def backup(self, hashXs, tx_count):
         self.assert_flushed()
         nremoves = 0
-        txnum_padding = bytes(8-TXNUM_LEN)
         with self.db.write_batch() as batch:
             for hashX in sorted(hashXs):
                 deletes = []
                 prefix = b'H' + hashX
                 for db_key, db_val in self.db.iterator(prefix=prefix, reverse=True):
                     tx_numb = db_key[-TXNUM_LEN:]
-                    tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+                    tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
                     if tx_num >= tx_count:
                         nremoves += 1
                         deletes.append(db_key)
@@ -198,12 +197,11 @@ class History:
         transactions.  By default yields at most 1000 entries.  Set
         limit to None to get them all.  '''
         limit = util.resolve_limit(limit)
-        txnum_padding = bytes(8-TXNUM_LEN)
         prefix = b'H' + hashX
         for db_key, db_val in self.db.iterator(prefix=prefix):
             tx_numb = db_key[-TXNUM_LEN:]
             if limit == 0:
                 return
-            tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
             yield tx_num
             limit -= 1

@@ -24,7 +24,7 @@ from electrumx.lib.util import (
 )
 from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
-from electrumx.server.history import TXNUM_LEN
+from electrumx.server.history import TXNUM_LEN, TXNUM_PADDING
 
 if TYPE_CHECKING:
     from electrumx.lib.coins import Coin, Block
@@ -634,7 +634,6 @@ class BlockProcessor:
             return cache_value
 
         # Spend it from the DB.
-        txnum_padding = bytes(8-TXNUM_LEN)
 
         # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
         # Value: hashX
@@ -646,7 +645,7 @@ class BlockProcessor:
             tx_num_packed = hdb_key[-TXNUM_LEN:]
 
             if len(candidates) > 1:
-                tx_num, = unpack_le_uint64(tx_num_packed + txnum_padding)
+                tx_num, = unpack_le_uint64(tx_num_packed + TXNUM_PADDING)
                 hash, _height = self.db.fs_tx_hash(tx_num)
                 if hash != tx_hash:
                     assert hash is not None  # Should always be found

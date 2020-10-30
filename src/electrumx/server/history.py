@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 
 TXNUM_LEN = 5
+TXNUM_PADDING = bytes(8 - TXNUM_LEN)
 
 
 class History:
@@ -108,18 +109,17 @@ class History:
         self.logger.info('DB shut down uncleanly.  Scanning for '
                          'excess history flushes...')
 
-        txnum_padding = bytes(8-TXNUM_LEN)
         hkeys = []
         for db_key, db_val in self.db.iterator(prefix=b'H'):
             tx_numb = db_key[-TXNUM_LEN:]
-            tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
             if tx_num >= utxo_db_tx_count:
                 hkeys.append(db_key)
 
         tkeys = []
         for db_key, db_val in self.db.iterator(prefix=b't'):
             tx_numb = db_val
-            tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
             if tx_num >= utxo_db_tx_count:
                 tkeys.append(db_key)
 
@@ -127,8 +127,8 @@ class History:
         for db_key, db_val in self.db.iterator(prefix=b's'):
             tx_numb1 = db_key[1:1+TXNUM_LEN]
             tx_numb2 = db_val
-            tx_num1, = unpack_le_uint64(tx_numb1 + txnum_padding)
-            tx_num2, = unpack_le_uint64(tx_numb2 + txnum_padding)
+            tx_num1, = unpack_le_uint64(tx_numb1 + TXNUM_PADDING)
+            tx_num2, = unpack_le_uint64(tx_numb2 + TXNUM_PADDING)
             if max(tx_num1, tx_num2) >= utxo_db_tx_count:
                 skeys.append(db_key)
 
@@ -237,14 +237,13 @@ class History:
         self.assert_flushed()
         get_txnum_for_txhash = self.get_txnum_for_txhash
         nremoves_addr = 0
-        txnum_padding = bytes(8-TXNUM_LEN)
         with self.db.write_batch() as batch:
             for hashX in sorted(hashXs):
                 deletes = []
                 prefix = b'H' + hashX
                 for db_key, db_val in self.db.iterator(prefix=prefix, reverse=True):
                     tx_numb = db_key[-TXNUM_LEN:]
-                    tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+                    tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
                     if tx_num >= tx_count:
                         nremoves_addr += 1
                         deletes.append(db_key)
@@ -277,13 +276,12 @@ class History:
         transactions.  By default yields at most 1000 entries.  Set
         limit to None to get them all.  '''
         limit = util.resolve_limit(limit)
-        txnum_padding = bytes(8-TXNUM_LEN)
         prefix = b'H' + hashX
         for db_key, db_val in self.db.iterator(prefix=prefix):
             tx_numb = db_key[-TXNUM_LEN:]
             if limit == 0:
                 return
-            tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
             yield tx_num
             limit -= 1
 
@@ -293,8 +291,7 @@ class History:
             db_key = b't' + tx_hash
             tx_numb = self.db.get(db_key)
             if tx_numb:
-                txnum_padding = bytes(8-TXNUM_LEN)
-                tx_num, = unpack_le_uint64(tx_numb + txnum_padding)
+                tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
         return tx_num
 
     def get_spender_txnum_for_txo(self, prev_txnum: int, txout_idx: int) -> Optional[int]:
@@ -309,6 +306,5 @@ class History:
             db_key = b's' + prevout
             spender_txnumb = self.db.get(db_key)
             if spender_txnumb:
-                txnum_padding = bytes(8-TXNUM_LEN)
-                spender_txnum, = unpack_le_uint64(spender_txnumb + txnum_padding)
+                spender_txnum, = unpack_le_uint64(spender_txnumb + TXNUM_PADDING)
         return spender_txnum

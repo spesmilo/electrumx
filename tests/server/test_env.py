@@ -42,12 +42,13 @@ def assert_default(env_var, attr, default):
     assert getattr(e, attr) == 'foo'
 
 
-def assert_integer(env_var, attr, default=''):
+def assert_integer(
+        env_var, attr, default='', *, min_value=5, max_value=2000):
     setup_base_env()
     if default != '':
         e = Env()
         assert getattr(e, attr) == default
-    value = random.randrange(5, 2000)
+    value = random.randrange(min_value, max_value)
     os.environ[env_var] = str(value) + '.1'
     with pytest.raises(Env.Error):
         Env()
@@ -276,7 +277,13 @@ def test_REORG_LIMIT():
 
 
 def test_COST_HARD_LIMIT():
-    assert_integer('COST_HARD_LIMIT', 'cost_hard_limit', 10000)
+    assert_integer(
+        'COST_HARD_LIMIT',
+        'cost_hard_limit',
+        10000,
+        min_value=5000,
+        max_value=20000,
+    )
 
 
 def test_COST_SOFT_LIMIT():

@@ -88,6 +88,8 @@ class Env(EnvBase):
         self.request_sleep = self.integer('REQUEST_SLEEP', 2500)
         self.request_timeout = self.integer('REQUEST_TIMEOUT', 30)
         self.session_timeout = self.integer('SESSION_TIMEOUT', 600)
+        self.session_group_by_subnet_ipv4 = self.integer('SESSION_GROUP_BY_SUBNET_IPV4', 24)
+        self.session_group_by_subnet_ipv6 = self.integer('SESSION_GROUP_BY_SUBNET_IPV6', 48)
         self._check_and_fix_cost_limits()
 
         # Services last - uses some env vars above

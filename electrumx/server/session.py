@@ -17,7 +17,7 @@ import ssl
 import time
 from collections import defaultdict
 from functools import partial
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from typing import Optional, TYPE_CHECKING
 import asyncio
 
@@ -788,14 +788,17 @@ class SessionManager:
 
     def _ip_addr_group_name(self, session) -> Optional[str]:
         host = session.remote_address().host
-        if isinstance(host, IPv4Address):
+        if isinstance(host, (IPv4Address, IPv6Address)):
             if host.is_private:  # exempt private addresses
                 return None
-            return '.'.join(str(host).split('.')[:3])  # /24
-        if isinstance(host, IPv6Address):
-            if host.is_private:
-                return None
-            return ':'.join(host.exploded.split(':')[:3])  # /48
+            if isinstance(host, IPv4Address):
+                subnet_size = self.env.session_group_by_subnet_ipv4
+                subnet = IPv4Network(host).supernet(prefixlen_diff=32 - subnet_size)
+                return str(subnet)
+            elif isinstance(host, IPv6Address):
+                subnet_size = self.env.session_group_by_subnet_ipv6
+                subnet = IPv6Network(host).supernet(prefixlen_diff=128 - subnet_size)
+                return str(subnet)
         return 'unknown_addr'
 
     def _session_group(self, name: Optional[str], weight: float) -> Optional[SessionGroup]:

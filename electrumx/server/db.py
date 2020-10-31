@@ -513,7 +513,7 @@ class DB:
         limit to None to get them all.
         '''
         def read_history():
-            tx_nums = list(self.history.get_txnums(hashX, limit))
+            tx_nums = self.history.get_txnums(hashX, limit)
             fs_tx_hash = self.fs_tx_hash
             return [fs_tx_hash(tx_num) for tx_num in tx_nums]
 

@@ -45,13 +45,14 @@ class History:
         self.db_version = max(self.DB_VERSIONS)
         self.upgrade_cursor = -1
 
-        self._unflushed_hashxs = defaultdict(bytearray)
+        self._unflushed_hashxs = defaultdict(bytearray)  # type: Dict[bytes, bytearray]
         self._unflushed_hashxs_count = 0
         self._unflushed_txhash_to_txnum_map = {}  # type: Dict[bytes, int]
         self._unflushed_txo_to_spender = {}  # type: Dict[bytes, int]  # (tx_num+txout_idx)->tx_num
 
-        # Key: b'H' + address_hashX + tx_num
+        # Key: b'H' + address_hashX + tx_num + txout_idx
         # Value: <null>
+        # "address -> funding outputs"  (no spends!)
         # ---
         # Key: b't' + tx_hash
         # Value: tx_num
@@ -113,7 +114,7 @@ class History:
 
         hkeys = []
         for db_key, db_val in self.db.iterator(prefix=b'H'):
-            tx_numb = db_key[-TXNUM_LEN:]
+            tx_numb = db_key[1+HASHX_LEN: 1+HASHX_LEN+TXNUM_LEN]
             tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
             if tx_num >= utxo_db_tx_count:
                 hkeys.append(db_key)
@@ -158,24 +159,19 @@ class History:
     def add_unflushed(
             self,
             *,
-            hashXs_by_tx,
-            first_tx_num,
+            hashx_fundings: Dict[bytes, bytearray],  # hashX-> concat of [(tx_num, txout_idx), ...]
+            new_tx_count: int,
             txhash_to_txnum_map: Dict[bytes, int],
             txo_to_spender_map: Dict[Tuple[bytes, int], bytes],  # (tx_hash, txout_idx) -> tx_hash
     ):
         unflushed_hashxs = self._unflushed_hashxs
         count = 0
-        tx_num = None
-        for tx_num, hashXs in enumerate(hashXs_by_tx, start=first_tx_num):
-            tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
-            hashXs = set(hashXs)
-            for hashX in hashXs:
-                unflushed_hashxs[hashX] += tx_numb
-            count += len(hashXs)
+        for hashx, packed_outpoints in hashx_fundings.items():
+            unflushed_hashxs[hashx] += packed_outpoints
+            count += len(packed_outpoints) // (TXNUM_LEN + TXOUTIDX_LEN)
         self._unflushed_hashxs_count += count
-        if tx_num is not None:
-            assert self.hist_db_tx_count_next + len(hashXs_by_tx) == tx_num + 1
-            self.hist_db_tx_count_next = tx_num + 1
+
+        self.hist_db_tx_count_next = new_tx_count
 
         self._unflushed_txhash_to_txnum_map.update(txhash_to_txnum_map)
 
@@ -191,7 +187,8 @@ class History:
             unflushed_spenders[prev_txnumb+prev_idx_packed] = spender_txnum
 
     def unflushed_memsize(self):
-        hashXs = len(self._unflushed_hashxs) * 180 + self._unflushed_hashxs_count * TXNUM_LEN
+        outpoint_len = TXNUM_LEN + TXOUTIDX_LEN
+        hashXs = len(self._unflushed_hashxs) * 180 + self._unflushed_hashxs_count * outpoint_len
         txs = 232 + 93 * len(self._unflushed_txhash_to_txnum_map)
         spenders = 102 + 113 * len(self._unflushed_txo_to_spender)
         return hashXs + txs + spenders
@@ -207,9 +204,9 @@ class History:
         chunks = util.chunks
 
         with self.db.write_batch() as batch:
-            for hashX in sorted(unflushed_hashxs):
-                for tx_num in sorted(chunks(unflushed_hashxs[hashX], TXNUM_LEN)):
-                    db_key = b'H' + hashX + tx_num
+            for hashX, packed_outpoints in sorted(unflushed_hashxs.items()):
+                for outpoint in sorted(chunks(packed_outpoints, TXNUM_LEN + TXOUTIDX_LEN)):
+                    db_key = b'H' + hashX + outpoint
                     batch.put(db_key, b'')
             for tx_hash, tx_num in sorted(self._unflushed_txhash_to_txnum_map.items()):
                 db_key = b't' + tx_hash
@@ -244,7 +241,7 @@ class History:
                 deletes = []
                 prefix = b'H' + hashX
                 for db_key, db_val in self.db.iterator(prefix=prefix, reverse=True):
-                    tx_numb = db_key[-TXNUM_LEN:]
+                    tx_numb = db_key[1+HASHX_LEN: 1+HASHX_LEN+TXNUM_LEN]
                     tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
                     if tx_num >= tx_count:
                         nremoves_addr += 1
@@ -272,20 +269,29 @@ class History:
         self.logger.info(f'backing up history, removed {nremoves_addr:,d} addrs, '
                          f'{len(tx_hashes):,d} txs, and {len(spends):,d} spends')
 
-    def get_txnums(self, hashX, limit=1000):
-        '''Generator that returns an unpruned, sorted list of tx_nums in the
+    def get_txnums(self, hashX: bytes, limit: Optional[int] = 1000) -> Sequence[int]:
+        '''Returns an unpruned, sorted list of tx_nums in the
         history of a hashX.  Includes both spending and receiving
         transactions.  By default yields at most 1000 entries.  Set
         limit to None to get them all.  '''
         limit = util.resolve_limit(limit)
+        txnum_set = set()
         prefix = b'H' + hashX
-        for db_key, db_val in self.db.iterator(prefix=prefix):
-            tx_numb = db_key[-TXNUM_LEN:]
-            if limit == 0:
-                return
-            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
-            yield tx_num
-            limit -= 1
+        for idx, (db_key, db_val) in enumerate(self.db.iterator(prefix=prefix)):
+            if idx >= limit:
+                break
+            prev_txnumb = db_key[1+HASHX_LEN: 1+HASHX_LEN+TXNUM_LEN]
+            prev_idx_packed = db_key[-TXOUTIDX_LEN:]
+            prev_txnum, = unpack_le_uint64(prev_txnumb + TXNUM_PADDING)
+            prev_idx, = unpack_le_uint32(prev_idx_packed + TXOUTIDX_PADDING)
+            txnum_set.add(prev_txnum)
+            spender_txnum = self.get_spender_txnum_for_txo(prev_txnum, prev_idx)
+            if spender_txnum is not None:
+                txnum_set.add(spender_txnum)
+        ret = sorted(txnum_set)
+        if limit >= 0:
+            ret = ret[:limit]
+        return ret
 
     def get_txnum_for_txhash(self, tx_hash: bytes) -> Optional[int]:
         tx_num = self._unflushed_txhash_to_txnum_map.get(tx_hash)

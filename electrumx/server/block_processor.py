@@ -10,6 +10,7 @@
 
 
 import asyncio
+from collections import defaultdict
 import time
 from typing import Sequence, Tuple, List, Callable, Optional, TYPE_CHECKING, Type
 
@@ -442,8 +443,7 @@ class BlockProcessor:
         spend_utxo = self.spend_utxo
         undo_info_append = undo_info.append
         update_touched = self.touched.update
-        hashXs_by_tx = []
-        append_hashXs = hashXs_by_tx.append
+        hashx_fundings = defaultdict(bytearray)
         txhash_to_txnum_map = {}
         put_txhash_to_txnum_map = txhash_to_txnum_map.__setitem__
         txo_to_spender_map = {}
@@ -474,18 +474,19 @@ class BlockProcessor:
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 append_hashX(hashX)
-                put_utxo(tx_hash + to_le_uint32(idx)[:TXOUTIDX_LEN],
+                idx_packed = to_le_uint32(idx)[:TXOUTIDX_LEN]
+                hashx_fundings[hashX] += tx_numb + idx_packed
+                put_utxo(tx_hash + idx_packed,
                          hashX + tx_numb + to_le_uint64(txout.value))
 
-            append_hashXs(hashXs)
             update_touched(hashXs)
             put_txhash_to_txnum_map(tx_hash, tx_num)
             tx_num += 1
 
         self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
         self.db.history.add_unflushed(
-            hashXs_by_tx=hashXs_by_tx,
-            first_tx_num=self.tx_count,
+            hashx_fundings=hashx_fundings,
+            new_tx_count=tx_num,
             txhash_to_txnum_map=txhash_to_txnum_map,
             txo_to_spender_map=txo_to_spender_map,
         )
@@ -749,27 +750,30 @@ class NameIndexBlockProcessor(BlockProcessor):
         tx_num = self.tx_count - len(txs)
         script_name_hashX = self.coin.name_hashX_from_script
         update_touched = self.touched.update
-        hashXs_by_tx = []
-        append_hashXs = hashXs_by_tx.append
+        hashx_fundings = defaultdict(bytearray)
+        to_le_uint32 = pack_le_uint32
+        to_le_uint64 = pack_le_uint64
 
         for tx, _tx_hash in txs:
+            tx_numb = to_le_uint64(tx_num)[:TXNUM_LEN]
             hashXs = []
             append_hashX = hashXs.append
 
             # Add the new UTXOs and associate them with the name script
-            for txout in tx.outputs:
+            for idx, txout in enumerate(tx.outputs):
                 # Get the hashX of the name script.  Ignore non-name scripts.
                 hashX = script_name_hashX(txout.pk_script)
                 if hashX:
                     append_hashX(hashX)
+                    idx_packed = to_le_uint32(idx)[:TXOUTIDX_LEN]
+                    hashx_fundings[hashX] += tx_numb + idx_packed
 
-            append_hashXs(hashXs)
             update_touched(hashXs)
             tx_num += 1
 
         self.db.history.add_unflushed(
-            hashXs_by_tx=hashXs_by_tx,
-            first_tx_num=self.tx_count - len(txs),
+            hashx_fundings=hashx_fundings,
+            new_tx_count=tx_num,
             txhash_to_txnum_map={},
             txo_to_spender_map={},
         )
@@ -788,6 +792,7 @@ class LTORBlockProcessor(BlockProcessor):
         spend_utxo = self.spend_utxo
         undo_info_append = undo_info.append
         update_touched = self.touched.update
+        hashx_fundings = defaultdict(bytearray)
         txhash_to_txnum_map = {}
         put_txhash_to_txnum_map = txhash_to_txnum_map.__setitem__
         txo_to_spender_map = {}
@@ -810,7 +815,9 @@ class LTORBlockProcessor(BlockProcessor):
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 add_hashXs(hashX)
-                put_utxo(tx_hash + to_le_uint32(idx)[:TXOUTIDX_LEN],
+                idx_packed = to_le_uint32(idx)[:TXOUTIDX_LEN]
+                hashx_fundings[hashX] += tx_numb + idx_packed
+                put_utxo(tx_hash + idx_packed,
                          hashX + tx_numb + to_le_uint64(txout.value))
             put_txhash_to_txnum_map(tx_hash, tx_num)
             tx_num += 1
@@ -833,8 +840,8 @@ class LTORBlockProcessor(BlockProcessor):
 
         self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
         self.db.history.add_unflushed(
-            hashXs_by_tx=hashXs_by_tx,
-            first_tx_num=self.tx_count,
+            hashx_fundings=hashx_fundings,
+            new_tx_count=tx_num,
             txhash_to_txnum_map=txhash_to_txnum_map,
             txo_to_spender_map=txo_to_spender_map,
         )

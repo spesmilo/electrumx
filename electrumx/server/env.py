@@ -88,6 +88,7 @@ class Env(EnvBase):
         self.request_sleep = self.integer('REQUEST_SLEEP', 2500)
         self.request_timeout = self.integer('REQUEST_TIMEOUT', 30)
         self.session_timeout = self.integer('SESSION_TIMEOUT', 600)
+        self._check_and_fix_cost_limits()
 
         # Services last - uses some env vars above
 
@@ -117,6 +118,17 @@ class Env(EnvBase):
         except ImportError:
             value = 512  # that is what returned by stdio's _getmaxstdio()
         return value
+
+    def _check_and_fix_cost_limits(self):
+        if self.cost_hard_limit < self.cost_soft_limit:
+            raise self.Error(f"COST_HARD_LIMIT must be >= COST_SOFT_LIMIT. "
+                             f"got (COST_HARD_LIMIT={self.cost_hard_limit} "
+                             f"and COST_SOFT_LIMIT={self.cost_soft_limit})")
+        # hard limit should be strictly higher than soft limit (unless both are 0)
+        if self.cost_hard_limit == self.cost_soft_limit and self.cost_soft_limit > 0:
+            self.logger.info("found COST_HARD_LIMIT == COST_SOFT_LIMIT. "
+                             "bumping COST_HARD_LIMIT by 1.")
+            self.cost_hard_limit = self.cost_soft_limit + 1
 
     def _parse_services(self, services_str, default_func):
         result = []

@@ -6,6 +6,7 @@
 # and warranty status of this software.
 
 from asyncio import Event
+from typing import Set, Dict
 
 from aiorpcx import _version as aiorpcx_version, TaskGroup
 
@@ -31,8 +32,8 @@ class Notifications:
     # notifications appropriately.
 
     def __init__(self):
-        self._touched_mp = {}
-        self._touched_bp = {}
+        self._touched_mp = {}  # type: Dict[int, Set[bytes]]
+        self._touched_bp = {}  # type: Dict[int, Set[bytes]]
         self._highest_block = -1
 
     async def _maybe_notify(self):
@@ -62,11 +63,11 @@ class Notifications:
         self.notify = notify_func
         await self.notify(height, set())
 
-    async def on_mempool(self, touched, height):
+    async def on_mempool(self, touched: Set[bytes], height: int):
         self._touched_mp[height] = touched
         await self._maybe_notify()
 
-    async def on_block(self, touched, height):
+    async def on_block(self, touched: Set[bytes], height: int):
         self._touched_bp[height] = touched
         self._highest_block = height
         await self._maybe_notify()

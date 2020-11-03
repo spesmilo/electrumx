@@ -16,7 +16,7 @@ import time
 from bisect import bisect_right
 from dataclasses import dataclass
 from glob import glob
-from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING
+from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING, Union
 
 import attr
 from aiorpcx import run_in_thread, sleep
@@ -60,6 +60,13 @@ class FlushData:
     adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
     deletes = attr.ib()  # type: List[bytes]  # b'h' db keys, and b'u' db keys
     tip = attr.ib()
+
+
+@dataclass
+class TXOSpendStatus:
+    prev_height: Optional[int]  # block height TXO is mined at. None if the outpoint never existed
+    spender_txhash: bytes = None
+    spender_height: int = None
 
 
 class DB:
@@ -461,7 +468,7 @@ class DB:
 
         return await run_in_thread(read_headers)
 
-    def fs_tx_hash(self, tx_num):
+    def fs_tx_hash(self, tx_num: int) -> Tuple[Optional[bytes], int]:
         '''Return a pair (tx_hash, tx_height) for the given tx number.
 
         If the tx_height is not on disk, returns (None, tx_height).'''
@@ -538,12 +545,50 @@ class DB:
         tx_num = await self.txnum_for_txhash(tx_hash)
         if tx_num is None:
             return None, None
+        return self.get_blockheight_and_txpos_for_txnum(tx_num)
+
+    def get_blockheight_and_txpos_for_txnum(
+            self, tx_num: int,
+    ) -> Tuple[Optional[int], Optional[int]]:
+        '''Returns (block_height, tx_pos) for a tx_num.'''
         height = bisect_right(self.tx_counts, tx_num)
         if height > self.db_height:
             return None, None
         assert height > 0
         tx_pos = tx_num - self.tx_counts[height - 1]
         return height, tx_pos
+
+    def fs_spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> 'TXOSpendStatus':
+        '''For an outpoint, returns the txid that spent it.
+        If the outpoint exists and is unspent, returns True.
+        If the outpoint never existed, returns False.
+        '''
+        prev_txnum = self.fs_txnum_for_txhash(prev_txhash)
+        if prev_txnum is None:  # outpoint never existed (in chain)
+            return TXOSpendStatus(prev_height=None)
+        prev_height = self.get_blockheight_and_txpos_for_txnum(prev_txnum)[0]
+        hashx, _ = self._get_hashX_for_utxo(prev_txhash, txout_idx)
+        if hashx:  # outpoint exists and is unspent
+            return TXOSpendStatus(prev_height=prev_height)
+        # by now we know prev_txhash was mined, and
+        # txout_idx was either spent or is out-of-bounds
+        spender_txnum = self.history.get_spender_txnum_for_txo(prev_txnum, txout_idx)
+        if spender_txnum is None:
+            # txout_idx was out-of-bounds
+            return TXOSpendStatus(prev_height=None)
+        # by now we know the outpoint exists and it was spent.
+        spender_txhash, spender_height = self.fs_tx_hash(spender_txnum)
+        if spender_txhash is None:
+            # not sure if this can happen. maybe through a race?
+            return TXOSpendStatus(prev_height=prev_height)
+        return TXOSpendStatus(
+            prev_height=prev_height,
+            spender_txhash=spender_txhash,
+            spender_height=spender_height,
+        )
+
+    async def spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> 'TXOSpendStatus':
+        return await run_in_thread(self.fs_spender_for_txo, prev_txhash, txout_idx)
 
     # -- Undo information
 
@@ -713,6 +758,23 @@ class DB:
                                 f'found (reorg?), retrying...')
             await sleep(0.25)
 
+    def _get_hashX_for_utxo(
+            self, tx_hash: bytes, txout_idx: int,
+    ) -> Tuple[Optional[bytes], Optional[bytes]]:
+        idx_packed = pack_le_uint32(txout_idx)[:TXOUTIDX_LEN]
+        tx_num = self.fs_txnum_for_txhash(tx_hash)
+        if tx_num is None:
+            return None, None
+        tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
+
+        # Key: b'h' + tx_num + txout_idx
+        # Value: hashX
+        db_key = b'h' + tx_numb + idx_packed
+        hashX = self.utxo_db.get(db_key)
+        if hashX is None:
+            return None, None
+        return hashX, tx_numb + idx_packed
+
     async def lookup_utxos(self, prevouts):
         '''For each prevout, lookup it up in the DB and return a (hashX,
         value) pair or None if not found.
@@ -723,20 +785,7 @@ class DB:
             '''Return (hashX, suffix) pairs, or None if not found,
             for each prevout.
             '''
-            def lookup_hashX(tx_hash, txout_idx):
-                idx_packed = pack_le_uint32(txout_idx)[:TXOUTIDX_LEN]
-                tx_num = self.fs_txnum_for_txhash(tx_hash)
-                if tx_num is None:
-                    return None, None
-                tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
-
-                # Key: b'h' + tx_num + txout_idx
-                # Value: hashX
-                db_key = b'h' + tx_numb + idx_packed
-                hashX = self.utxo_db.get(db_key)
-                if hashX is None:
-                    return None, None
-                return hashX, tx_numb + idx_packed
+            lookup_hashX = self._get_hashX_for_utxo
             return [lookup_hashX(*prevout) for prevout in prevouts]
 
         def lookup_utxos(hashX_pairs):

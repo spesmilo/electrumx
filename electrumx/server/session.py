@@ -18,7 +18,7 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Optional, TYPE_CHECKING, Tuple, Sequence
+from typing import Optional, TYPE_CHECKING, Tuple, Sequence, Set, Dict, Iterable, Any
 import asyncio
 
 import attr
@@ -97,7 +97,7 @@ def assert_tx_hash(value):
 class SessionGroup:
     name = attr.ib()
     weight = attr.ib()
-    sessions = attr.ib()
+    sessions = attr.ib()  # type: Set[ElectrumX]
     retained_cost = attr.ib()
 
     def session_cost(self):
@@ -138,8 +138,8 @@ class SessionManager:
         self.shutdown_event = shutdown_event
         self.logger = util.class_logger(__name__, self.__class__.__name__)
         self.servers = {}           # service->server
-        self.sessions = {}          # session->iterable of its SessionGroups
-        self.session_groups = {}    # group name->SessionGroup instance
+        self.sessions = {}          # type: Dict[ElectrumX, Iterable[SessionGroup]]
+        self.session_groups = {}    # type: Dict[str, SessionGroup]
         self.txs_sent = 0
         # Would use monotonic time, but aiorpcx sessions use Unix time:
         self.start_time = time.time()
@@ -304,7 +304,7 @@ class SessionManager:
             # cost_decay_per_sec.
             for session in self.sessions:
                 # Subs have an on-going cost so decay more slowly with more subs
-                session.cost_decay_per_sec = hard_limit / (10000 + 5 * session.sub_count())
+                session.cost_decay_per_sec = hard_limit / (10000 + 5 * session.sub_count_total())
                 session.recalc_concurrency()
 
     def _get_info(self):
@@ -327,11 +327,14 @@ class SessionManager:
             'request total': sum(self._method_counts.values()),
             'sessions': {
                 'count': len(sessions),
-                'count with subs': sum(len(getattr(s, 'hashX_subs', ())) > 0 for s in sessions),
+                'count with subs_sh': sum(s.sub_count_scripthashes() > 0 for s in sessions),
+                'count with subs_txo': sum(s.sub_count_txoutpoints() > 0 for s in sessions),
+                'count with subs_any': sum(s.sub_count_total() > 0 for s in sessions),
                 'errors': sum(s.errors for s in sessions),
                 'logged': len([s for s in sessions if s.log_me]),
                 'pending requests': sum(s.unanswered_request_count() for s in sessions),
-                'subs': sum(s.sub_count() for s in sessions),
+                'subs_sh': sum(s.sub_count_scripthashes() for s in sessions),
+                'subs_txo': sum(s.sub_count_txoutpoints() for s in sessions),
             },
             'tx hashes cache': cache_fmt.format(
                 self._tx_hashes_lookups, self._tx_hashes_hits, len(self._tx_hashes_cache)),
@@ -353,7 +356,7 @@ class SessionManager:
                  session.extra_cost(),
                  session.unanswered_request_count(),
                  session.txs_sent,
-                 session.sub_count(),
+                 session.sub_count_total(),
                  session.recv_count, session.recv_size,
                  session.send_count, session.send_size,
                  now - session.start_time)
@@ -370,7 +373,7 @@ class SessionManager:
                            group.retained_cost,
                            sum(s.unanswered_request_count() for s in sessions),
                            sum(s.txs_sent for s in sessions),
-                           sum(s.sub_count() for s in sessions),
+                           sum(s.sub_count_total() for s in sessions),
                            sum(s.recv_count for s in sessions),
                            sum(s.recv_size for s in sessions),
                            sum(s.send_count for s in sessions),
@@ -789,7 +792,7 @@ class SessionManager:
             raise result
         return result, cost
 
-    async def _notify_sessions(self, height, touched):
+    async def _notify_sessions(self, height: int, touched: Set[bytes]):
         '''Notify sessions about height changes and touched addresses.'''
         height_changed = height != self.notified_height
         if height_changed:
@@ -926,8 +929,14 @@ class SessionBase(RPCSession):
             msg = 'disconnected' + msg
             self.logger.info(msg)
 
-    def sub_count(self):
+    def sub_count_scripthashes(self):
         return 0
+
+    def sub_count_txoutpoints(self):
+        return 0
+
+    def sub_count_total(self):
+        return self.sub_count_scripthashes() + self.sub_count_txoutpoints()
 
     async def handle_request(self, request):
         '''Handle an incoming request.  ElectrumX doesn't receive
@@ -955,13 +964,14 @@ class ElectrumX(SessionBase):
     '''A TCP server that handles incoming Electrum connections.'''
 
     PROTOCOL_MIN = (1, 4)
-    PROTOCOL_MAX = (1, 4, 2)
+    PROTOCOL_MAX = (1, 5)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.subscribe_headers = False
         self.connection.max_response_size = self.env.max_send
-        self.hashX_subs = {}
+        self.hashX_subs = {}  # type: Dict[bytes, bytes]  # hashX -> scripthash
+        self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]
         self.sv_seen = False
         self.mempool_statuses = {}
         self.set_request_handlers(self.PROTOCOL_MIN)
@@ -1015,14 +1025,17 @@ class ElectrumX(SessionBase):
         group_names = [group.name for group in groups]
         self.logger.info(f"closing session over res usage. ip: {ip_addr}. groups: {group_names}")
 
-    def sub_count(self):
+    def sub_count_scripthashes(self):
         return len(self.hashX_subs)
+
+    def sub_count_txoutpoints(self):
+        return len(self.txoutpoint_subs)
 
     def unsubscribe_hashX(self, hashX):
         self.mempool_statuses.pop(hashX, None)
         return self.hashX_subs.pop(hashX, None)
 
-    async def notify(self, touched, height_changed):
+    async def notify(self, touched: Set[bytes], height_changed: bool):
         '''Notify the client about changes to touched addresses (from mempool
         updates or new blocks) and height.
         '''
@@ -1079,7 +1092,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         return self.peer_mgr.on_peers_subscribe(self.is_tor())
 
-    async def address_status(self, hashX):
+    async def address_status(self, hashX: bytes) -> Optional[str]:
         '''Returns an address status.
 
         Status is a hex string, but must be None if there is no history.
@@ -1119,6 +1132,27 @@ class ElectrumX(SessionBase):
         except RPCError:
             self.unsubscribe_hashX(hashX)
             return None
+
+    async def txoutpoint_status(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
+        self.bump_cost(0.2)
+        spend_status = await self.db.spender_for_txo(prev_txhash, txout_idx)
+        if (spend_status.prev_height is None
+                and self.mempool.txo_exists_in_mempool(prev_txhash, txout_idx)):
+            spend_status.prev_height = 0
+        if spend_status.spender_height is None:
+            mempool_spender = self.mempool.spender_for_txo(prev_txhash, txout_idx)
+            if mempool_spender is not None:
+                spend_status.spender_height = 0
+                spend_status.spender_txhash = mempool_spender
+        # convert NamedTuple to json dict the client expects
+        res = {}
+        if spend_status.prev_height is not None:
+            res['height'] = spend_status.prev_height
+            if spend_status.spender_txhash is not None:
+                assert spend_status.spender_height is not None
+                res['spender_txhash'] = hash_to_hex_str(spend_status.spender_txhash)
+                res['spender_height'] = spend_status.spender_height
+        return res
 
     async def hashX_listunspent(self, hashX):
         '''Return the list of UTXOs of a script hash, including mempool
@@ -1198,6 +1232,24 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.1)
         hashX = scripthash_to_hashX(scripthash)
         return self.unsubscribe_hashX(hashX) is not None
+
+    async def txoutpoint_subscribe(self, tx_hash, txout_idx):
+        '''Subscribe to an outpoint.'''
+        tx_hash = assert_tx_hash(tx_hash)
+        txout_idx = non_negative_integer(txout_idx)
+        spend_status = await self.txoutpoint_status(tx_hash, txout_idx)
+        self.txoutpoint_subs.add((tx_hash, txout_idx))
+        return spend_status
+
+    async def txoutpoint_unsubscribe(self, tx_hash, txout_idx):
+        '''Unsubscribe from an outpoint.'''
+        tx_hash = assert_tx_hash(tx_hash)
+        txout_idx = non_negative_integer(txout_idx)
+        self.bump_cost(0.1)
+        prevout = (tx_hash, txout_idx)
+        was_subscribed = prevout in self.txoutpoint_subs
+        self.txoutpoint_subs.discard(prevout)
+        return was_subscribed
 
     async def _merkle_proof(self, cp_height, height):
         max_height = self.db.db_height
@@ -1529,6 +1581,10 @@ class ElectrumX(SessionBase):
 
         if ptuple >= (1, 4, 2):
             handlers['blockchain.scripthash.unsubscribe'] = self.scripthash_unsubscribe
+
+        if ptuple >= (1, 5):
+            handlers['blockchain.outpoint.subscribe'] = self.txoutpoint_subscribe
+            handlers['blockchain.outpoint.unsubscribe'] = self.txoutpoint_unsubscribe
 
         self.request_handlers = handlers
 

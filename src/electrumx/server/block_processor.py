@@ -11,7 +11,7 @@
 
 import asyncio
 import time
-from typing import Sequence, Tuple, List, Callable, Optional, TYPE_CHECKING, Type
+from typing import Sequence, Tuple, List, Callable, Optional, TYPE_CHECKING, Type, Set
 
 from aiorpcx import run_in_thread, CancelledError
 
@@ -186,7 +186,7 @@ class BlockProcessor:
 
         # Meta
         self.next_cache_check = 0
-        self.touched = set()
+        self.touched = set()  # type: Set[bytes]
         self.reorg_count = 0
         self.height = -1
         self.tip = None  # type: Optional[bytes]

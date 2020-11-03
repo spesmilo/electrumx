@@ -53,17 +53,17 @@ class MemPoolAPI(ABC):
     and used by it to query DB and blockchain state.'''
 
     @abstractmethod
-    async def height(self):
+    async def height(self) -> int:
         '''Query bitcoind for its height.'''
 
     @abstractmethod
-    def cached_height(self):
+    def cached_height(self) -> Optional[int]:
         '''Return the height of bitcoind the last time it was queried,
         for any reason, without actually querying it.
         '''
 
     @abstractmethod
-    def db_height(self):
+    def db_height(self) -> int:
         '''Return the height flushed to the on-disk DB.'''
 
     @abstractmethod
@@ -80,10 +80,10 @@ class MemPoolAPI(ABC):
 
     @abstractmethod
     async def lookup_utxos(self, prevouts):
-        '''Return a list of (hashX, value) pairs each prevout if unspent,
-        otherwise return None if spent or not found.
+        '''Return a list of (hashX, value) pairs, one for each prevout if unspent,
+        otherwise return None if spent or not found (for the given prevout).
 
-        prevouts - an iterable of (hash, index) pairs
+        prevouts - an iterable of (tx_hash, txout_idx) pairs
         '''
 
     @abstractmethod
@@ -119,8 +119,9 @@ class MemPool:
         self.coin = coin
         self.api = api
         self.logger = class_logger(__name__, self.__class__.__name__)
-        self.txs = {}  # type: Dict[bytes, MemPoolTx]
-        self.hashXs = defaultdict(set)  # None can be a key
+        self.txs = {}  # type: Dict[bytes, MemPoolTx]  # txid->tx
+        self.hashXs = defaultdict(set)  # type: Dict[Optional[bytes], Set[bytes]]  # hashX->txids
+        self.txo_to_spender = {}  # type: Dict[Tuple[bytes, int], bytes]  # prevout->txid
         self.cached_compact_histogram = []
         self.refresh_secs = refresh_secs
         self.log_status_secs = log_status_secs
@@ -137,8 +138,9 @@ class MemPool:
         self.logger.info(f'synced in {elapsed:.2f}s')
         while True:
             mempool_size = sum(tx.size for tx in self.txs.values()) / 1_000_000
-            self.logger.info(f'{len(self.txs):,d} txs {mempool_size:.2f} MB '
-                             f'touching {len(self.hashXs):,d} addresses')
+            self.logger.info(f'{len(self.txs):,d} txs {mempool_size:.2f} MB, '
+                             f'touching {len(self.hashXs):,d} addresses. '
+                             f'{len(self.txo_to_spender):,d} spends.')
             await sleep(self.log_status_secs)
             await synchronized_event.wait()
 
@@ -205,7 +207,13 @@ class MemPool:
             prev_fee_rate = fee_rate
         return compact
 
-    def _accept_transactions(self, tx_map: Dict[bytes, MemPoolTx], utxo_map, touched):
+    def _accept_transactions(
+            self,
+            tx_map: Dict[bytes, MemPoolTx],  # txid->tx
+            utxo_map: Dict[Tuple[bytes, int], Tuple[bytes, int]],  # prevout->(hashX,value_in_sats)
+            touched: Set[bytes],  # set of hashXs
+    ) -> Tuple[Dict[bytes, MemPoolTx],
+               Dict[Tuple[bytes, int], Tuple[bytes, int]]]:
         '''Accept transactions in tx_map to the mempool if all their inputs
         can be found in the existing mempool or a utxo_map from the
         DB.
@@ -214,11 +222,12 @@ class MemPool:
         '''
         hashXs = self.hashXs
         txs = self.txs
+        txo_to_spender = self.txo_to_spender
 
         deferred = {}
         unspent = set(utxo_map)
         # Try to find all prevouts so we can accept the TX
-        for hash, tx in tx_map.items():
+        for tx_hash, tx in tx_map.items():
             in_pairs = []
             try:
                 for prevout in tx.prevouts:
@@ -229,7 +238,7 @@ class MemPool:
                         utxo = txs[prev_hash].out_pairs[prev_index]
                     in_pairs.append(utxo)
             except KeyError:
-                deferred[hash] = tx
+                deferred[tx_hash] = tx
                 continue
 
             # Spend the prevouts
@@ -241,11 +250,13 @@ class MemPool:
             # because some in_parts would be missing
             tx.fee = max(0, (sum(v for _, v in tx.in_pairs) -
                              sum(v for _, v in tx.out_pairs)))
-            txs[hash] = tx
+            txs[tx_hash] = tx
 
             for hashX, _value in itertools.chain(tx.in_pairs, tx.out_pairs):
                 touched.add(hashX)
-                hashXs[hashX].add(hash)
+                hashXs[hashX].add(tx_hash)
+            for prevout in tx.prevouts:
+                txo_to_spender[prevout] = tx_hash
 
         return deferred, {prevout: utxo_map[prevout] for prevout in unspent}
 
@@ -274,10 +285,16 @@ class MemPool:
                 touched = set()
             await sleep(self.refresh_secs)
 
-    async def _process_mempool(self, all_hashes: Set[bytes], touched, mempool_height):
+    async def _process_mempool(
+            self,
+            all_hashes: Set[bytes],  # set of txids
+            touched: Set[bytes],  # set of hashXs
+            mempool_height: int,
+    ):
         # Re-sync with the new set of hashes
         txs = self.txs
         hashXs = self.hashXs
+        txo_to_spender = self.txo_to_spender
 
         if mempool_height != self.api.db_height():
             raise DBSyncError
@@ -292,6 +309,8 @@ class MemPool:
                 if not hashXs[hashX]:
                     del hashXs[hashX]
             touched |= tx_hashXs
+            for prevout in tx.prevouts:
+                del txo_to_spender[prevout]
 
         # Process new transactions
         new_hashes = list(all_hashes.difference(txs))
@@ -441,3 +460,21 @@ class MemPool:
                 if hX == hashX:
                     utxos.append(UTXO(-1, pos, tx_hash, 0, value))
         return utxos
+
+    def spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> Optional[bytes]:
+        '''For a prevout, returns the txid that spent it.
+
+        This only considers spenders in the mempool, i.e. if there is a tx in
+        the mempool that spends prevout, return its txid, or None otherwise.
+        '''
+        prevout = (prev_txhash, txout_idx)
+        return self.txo_to_spender.get(prevout, None)
+
+    def txo_exists_in_mempool(self, tx_hash: bytes, txout_idx: int) -> bool:
+        '''For an outpoint, returns whether a mempool tx created it,
+        regardless of whether it has been spent.
+        '''
+        tx = self.txs.get(tx_hash, None)
+        if tx is None:
+            return False
+        return len(tx.out_pairs) > txout_idx

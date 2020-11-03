@@ -13,7 +13,7 @@ import itertools
 import time
 from calendar import timegm
 from struct import pack
-from typing import TYPE_CHECKING, Type, Sequence
+from typing import TYPE_CHECKING, Type, Sequence, Any
 
 import aiohttp
 from aiorpcx import JSONRPC
@@ -366,6 +366,13 @@ class Daemon:
                                       replace_errs=replace_errs)
         # Convert hex strings to bytes
         return [hex_to_bytes(tx) if tx else None for tx in txs]
+
+    async def gettxspendingprevout(self, prev_txhash: str, txout_idx: int) -> dict[str, Any]:
+        """Query the daemon to find (if any) the spender of given outpoint."""
+        outpoints = [{"txid": prev_txhash, "vout": txout_idx}, ]
+        options = {"mempool_only": False}
+        tx_items = await self._send_single('gettxspendingprevout', (outpoints, options))
+        return tx_items[0]
 
     async def broadcast_transaction(self, raw_tx):
         '''Broadcast a transaction to the network.'''

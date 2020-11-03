@@ -19,7 +19,7 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any
+from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any, Tuple, Set, Dict, Mapping
 
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession, Service,
@@ -34,6 +34,7 @@ from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
                                 hex_str_to_hash, sha256, double_sha256)
 from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
+from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.daemon import DaemonError
 from electrumx.server.transport import PaddedRSTransport
 
@@ -151,8 +152,8 @@ class SessionManager:
         self.shutdown_event = shutdown_event
         self.logger = util.class_logger(__name__, self.__class__.__name__)
         self.servers = {}           # service->server
-        self.sessions = {}          # session->iterable of its SessionGroups
-        self.session_groups = {}    # group name->SessionGroup instance
+        self.sessions = {}          # type: Dict[ElectrumX, Iterable[SessionGroup]]
+        self.session_groups = {}    # type: Dict[str, SessionGroup]
         self.txs_sent = 0
         # Would use monotonic time, but aiorpcx sessions use Unix time:
         self.start_time = time.time()
@@ -324,7 +325,7 @@ class SessionManager:
             # cost_decay_per_sec.
             for session in self.sessions:
                 # Subs have an on-going cost so decay more slowly with more subs
-                session.cost_decay_per_sec = hard_limit / (10000 + 5 * session.sub_count())
+                session.cost_decay_per_sec = hard_limit / (10000 + 5 * session.sub_count_total())
                 session.recalc_concurrency()
 
     def _get_info(self):
@@ -346,11 +347,14 @@ class SessionManager:
             'request total': sum(self._method_counts.values()),
             'sessions': {
                 'count': len(sessions),
-                'count with subs': sum(len(getattr(s, 'hashX_subs', ())) > 0 for s in sessions),
+                'count with subs_sh': sum(s.sub_count_scripthashes() > 0 for s in sessions),
+                'count with subs_txo': sum(s.sub_count_txoutpoints() > 0 for s in sessions),
+                'count with subs_any': sum(s.sub_count_total() > 0 for s in sessions),
                 'errors': sum(s.errors for s in sessions),
                 'logged': len([s for s in sessions if s.log_me]),
                 'pending requests': sum(s.unanswered_request_count() for s in sessions),
-                'subs': sum(s.sub_count() for s in sessions),
+                'subs_sh': sum(s.sub_count_scripthashes() for s in sessions),
+                'subs_txo': sum(s.sub_count_txoutpoints() for s in sessions),
             },
             'txids cache': cache_fmt(self._txids_cache),
             'txs sent': self.txs_sent,
@@ -371,7 +375,7 @@ class SessionManager:
                  session.extra_cost(),
                  session.unanswered_request_count(),
                  session.txs_sent,
-                 session.sub_count(),
+                 session.sub_count_total(),
                  session.recv_count, session.recv_size,
                  session.send_count, session.send_size,
                  now - session.start_time)
@@ -388,7 +392,7 @@ class SessionManager:
                            group.retained_cost,
                            sum(s.unanswered_request_count() for s in sessions),
                            sum(s.txs_sent for s in sessions),
-                           sum(s.sub_count() for s in sessions),
+                           sum(s.sub_count_total() for s in sessions),
                            sum(s.recv_count for s in sessions),
                            sum(s.recv_size for s in sessions),
                            sum(s.send_count for s in sessions),
@@ -846,21 +850,32 @@ class SessionManager:
             raise result
         return result, cost
 
-    async def _notify_sessions(self, height, touched):
+    async def _notify_sessions(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height: int,
+    ):
         '''Notify sessions about height changes and touched addresses.'''
         height_changed = height != self.notified_height
         if height_changed:
             await self._refresh_hsub_results(height)
             # Invalidate our history cache for touched hashXs
             cache = self._history_cache
-            for hashX in set(cache).intersection(touched):
+            for hashX in set(cache).intersection(touched_hashxs):
                 del cache[hashX]
 
         for session in self.sessions:
             if self._task_group.joined:  # this can happen during shutdown
                 self.logger.warning(f"task group already terminated. not notifying sessions.")
                 return
-            await self._task_group.spawn(session.notify, touched, height_changed)
+            coro = session.notify(
+                touched_hashxs=touched_hashxs,
+                touched_outpoints=touched_outpoints,
+                height_changed=height_changed,
+            )
+            await self._task_group.spawn(coro)
 
     def _ip_addr_group_name(self, session) -> Optional[str]:
         host = session.remote_address().host
@@ -1003,7 +1018,13 @@ class SessionBase(RPCSessionWithTaskGroup):
         self.session_mgr.add_session(self)
         self.recalc_concurrency()  # must be called after session_mgr.add_session
 
-    async def notify(self, touched, height_changed):
+    async def notify(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         pass
 
     def default_framer(self):
@@ -1039,8 +1060,14 @@ class SessionBase(RPCSessionWithTaskGroup):
             msg = 'disconnected' + msg
             self.logger.info(msg)
 
-    def sub_count(self):
+    def sub_count_scripthashes(self):
         return 0
+
+    def sub_count_txoutpoints(self):
+        return 0
+
+    def sub_count_total(self):
+        return self.sub_count_scripthashes() + self.sub_count_txoutpoints()
 
     async def handle_request(self, request):
         '''Handle an incoming request.  ElectrumX doesn't receive
@@ -1096,9 +1123,10 @@ class ElectrumX(SessionBase):
         super().__init__(*args, **kwargs)
         self.subscribe_headers = False
         self.connection.max_response_size = self.env.max_send
-        self.hashX_subs = {}
-        self.sv_seen = False
-        self.mempool_statuses = {}
+        self.hashX_subs = {}  # type: Dict[bytes, bytes]  # hashX -> scripthash
+        self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]
+        self.mempool_hashX_statuses = {}  # type: Dict[bytes, str]
+        self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], Mapping[str, Any]]
         self.set_request_handlers(self.PROTOCOL_MIN)
         self.is_peer = False
         self.cost = 5.0   # Connection cost
@@ -1151,46 +1179,68 @@ class ElectrumX(SessionBase):
         group_names = [group.name for group in groups]
         self.logger.info(f"closing session over res usage. ip: {ip_addr}. groups: {group_names}")
 
-    def sub_count(self):
+    def sub_count_scripthashes(self):
         return len(self.hashX_subs)
 
+    def sub_count_txoutpoints(self):
+        return len(self.txoutpoint_subs)
+
     def unsubscribe_hashX(self, hashX):
-        self.mempool_statuses.pop(hashX, None)
+        self.mempool_hashX_statuses.pop(hashX, None)
         return self.hashX_subs.pop(hashX, None)
 
-    async def notify(self, touched, height_changed):
+    async def notify(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         '''Wrap _notify_inner; websockets raises exceptions for unclear reasons.'''
         try:
             async with timeout_after(30):
-                await self._notify_inner(touched, height_changed)
+                await self._notify_inner(
+                    touched_hashxs=touched_hashxs,
+                    touched_outpoints=touched_outpoints,
+                    height_changed=height_changed,
+                )
         except TaskTimeout:
             self.logger.warning('timeout notifying client, closing...')
             await self.close(force_after=1.0)
         except Exception:
             self.logger.exception('unexpected exception notifying client')
 
-    async def _notify_inner(self, touched, height_changed):
+    async def _notify_inner(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         '''Notify the client about changes to touched addresses (from mempool
         updates or new blocks) and height.
         '''
+        # block headers
         if height_changed and self.subscribe_headers:
             args = (await self.subscribe_headers_result(), )
             await self.send_notification('blockchain.headers.subscribe', args)
 
-        touched = touched.intersection(self.hashX_subs)
-        if touched or (height_changed and self.mempool_statuses):
+        # hashXs
+        num_hashx_notifs_sent = 0
+        touched_hashxs = touched_hashxs.intersection(self.hashX_subs)
+        if touched_hashxs or (height_changed and self.mempool_hashX_statuses):
             changed = {}
 
-            for hashX in touched:
+            for hashX in touched_hashxs:
                 alias = self.hashX_subs.get(hashX)
                 if alias:
                     status = await self.subscription_address_status(hashX)
                     changed[alias] = status
 
             # Check mempool hashXs - the status is a function of the confirmed state of
-            # other transactions.
-            mempool_statuses = self.mempool_statuses.copy()
-            for hashX, old_status in mempool_statuses.items():
+            # other transactions. (this is to detect if height changed from -1 to 0)
+            mempool_hashX_statuses = self.mempool_hashX_statuses.copy()
+            for hashX, old_status in mempool_hashX_statuses.items():
                 alias = self.hashX_subs.get(hashX)
                 if alias:
                     status = await self.subscription_address_status(hashX)
@@ -1200,10 +1250,36 @@ class ElectrumX(SessionBase):
             method = 'blockchain.scripthash.subscribe'
             for alias, status in changed.items():
                 await self.send_notification(method, (alias, status))
+            num_hashx_notifs_sent = len(changed)
 
-            if changed:
-                es = '' if len(changed) == 1 else 'es'
-                self.logger.info(f'notified of {len(changed):,d} address{es}')
+        # tx outpoints
+        num_txo_notifs_sent = 0
+        touched_outpoints = touched_outpoints.intersection(self.txoutpoint_subs)
+        if touched_outpoints or (height_changed and self.mempool_txoutpoint_statuses):
+            method = 'blockchain.outpoint.subscribe'
+            txo_to_status = {}
+            for prevout in touched_outpoints:
+                txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)
+
+            # Check mempool TXOs - the status is a function of the confirmed state of
+            # other transactions. (this is to detect if height changed from -1 to 0)
+            mempool_txoutpoint_statuses = self.mempool_txoutpoint_statuses.copy()
+            for prevout, old_status in mempool_txoutpoint_statuses.items():
+                status = await self.txoutpoint_status_for_notif(*prevout)
+                if status != old_status:
+                    txo_to_status[prevout] = status
+
+            for tx_hash, txout_idx in touched_outpoints:
+                spend_status = txo_to_status[(tx_hash, txout_idx)]
+                tx_hash_hex = hash_to_hex_str(tx_hash)
+                await self.send_notification(method, (tx_hash_hex, txout_idx, spend_status))
+            num_txo_notifs_sent = len(touched_outpoints)
+
+        if num_hashx_notifs_sent + num_txo_notifs_sent > 0:
+            es1 = '' if num_hashx_notifs_sent == 1 else 'es'
+            s2 = '' if num_txo_notifs_sent == 1 else 's'
+            self.logger.info(f'notified of {num_hashx_notifs_sent:,d} address{es1} and '
+                             f'{num_txo_notifs_sent:,d} outpoint{s2}')
 
     async def subscribe_headers_result(self):
         '''The result of a header subscription or notification.'''
@@ -1226,10 +1302,11 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         return self.peer_mgr.on_peers_subscribe(self.is_tor())
 
-    async def address_status(self, hashX):
+    async def address_status(self, hashX: bytes) -> Optional[str]:
         '''Returns an address status.
 
         Status is a hex string, but must be None if there is no history.
+        Side-effect: updates client-last-seen status, used by notifications.
         '''
         # Note both confirmed history and mempool history are ordered
         # For mempool, height is -1 if it has unconfirmed inputs, otherwise 0
@@ -1251,10 +1328,11 @@ class ElectrumX(SessionBase):
         else:
             status = None
 
+        # update status last sent to client
         if mempool:
-            self.mempool_statuses[hashX] = status
+            self.mempool_hashX_statuses[hashX] = status
         else:
-            self.mempool_statuses.pop(hashX, None)
+            self.mempool_hashX_statuses.pop(hashX, None)
 
         return status
 
@@ -1266,6 +1344,103 @@ class ElectrumX(SessionBase):
         except RPCError:
             self.unsubscribe_hashX(hashX)
             return None
+
+    async def _spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> 'TXOSpendStatus':
+        """For an outpoint, returns its spend-status (ignoring mempool events).
+
+        Uses daemon (bitcoind) to find the spender_txhash, requiring "txospenderindex=1".
+        However, mempool events are ignored, as it would be difficult to distinguish block height 0 vs -1
+        using only the daemon. Instead, our own mempool data (as opposed to bitcoind's) can be used
+        separately to enrich the return value.
+        """
+        prev_txid = hash_to_hex_str(prev_txhash)
+        # 1. call bitcoind "getrawtransaction" to see if prevtx exists/is_mined
+        self.bump_cost(1)
+        try:
+            prevtx_item = await self.session_mgr.daemon.getrawtransaction(prev_txid, verbose=True)  # verbose=int(1)
+        except DaemonError as e:
+            error, = e.args
+            ecode = error['code']
+            if ecode == -5:  # "No such mempool or blockchain transaction."
+                return TXOSpendStatus(prev_height=None)  # utxo never existed
+            self.logger.debug(f"getrawtransaction errored. {prev_txid=}. {error=}")
+            raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None  # TODO some callers do not expect this
+        assert prevtx_item.get("txid") == prev_txid, f"{prevtx_item.get('txid')=} != {prev_txid=}"
+        funder_bhash = prevtx_item.get("blockhash")
+        funder_bheight = None  # type: Optional[int]
+        if funder_bhash is not None:
+            funder_bheight = self.db.get_blockheight_from_blockhash(funder_bhash)
+        if funder_bheight is None:  # if in mempool, will defer to mempool.spender_for_txo
+            return TXOSpendStatus(prev_height=None)  # utxo never existed (in chain)
+        assert isinstance(funder_bheight, int)
+        # ok, funding tx exists, does the requested output index also exist in this tx?
+        vouts = prevtx_item.get("vout") or []
+        if len(vouts) <= txout_idx:
+            return TXOSpendStatus(prev_height=None)  # txout_idx was out-of-bounds
+        # by now we know the funding TXO existed in the chain. Let's see if it was spent.
+        # 2. call bitcoind "gettxspendingprevout"
+        self.bump_cost(1)
+        try:
+            spender_item = await self.session_mgr.daemon.gettxspendingprevout(prev_txid, txout_idx)
+        except DaemonError as e:
+            error, = e.args
+            self.logger.debug(f"gettxspendingprevout errored. txo={prev_txid}:{txout_idx}. {error=}")
+            raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None  # TODO some callers do not expect this
+        assert spender_item.get("txid") == prev_txid, f"{spender_item.get('txid')=} != {prev_txid=}"
+        spender_bhash = spender_item.get("blockhash")
+        spender_bheight = None
+        if spender_bhash is not None:
+            spender_bheight = self.db.get_blockheight_from_blockhash(spender_bhash)
+        if spender_bheight is None:  # if in mempool, will defer to mempool.spender_for_txo
+            return TXOSpendStatus(prev_height=funder_bheight)  # utxo funded but unspent (in-chain)
+        spender_txid = spender_item.get("spendingtxid")
+        assert spender_txid is not None  # we already have a height!
+        # utxo funded, and spent (in-chain)
+        return TXOSpendStatus(
+            prev_height=funder_bheight,
+            spender_txhash=hex_str_to_hash(spender_txid),
+            spender_height=spender_bheight,
+        )
+
+    async def _calc_txoutpoint_status(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
+        self.bump_cost(0.2)
+        spend_status = await self._spender_for_txo(prev_txhash, txout_idx)
+        if spend_status.spender_height is not None:
+            # TXO was created, was mined, was spent, and spend was mined.
+            assert spend_status.prev_height > 0
+            assert spend_status.spender_height > 0
+            assert spend_status.spender_txhash is not None
+        else:
+            mp_spend_status = await self.mempool.spender_for_txo(prev_txhash, txout_idx)
+            if mp_spend_status.prev_height is not None:
+                spend_status.prev_height = mp_spend_status.prev_height
+            if mp_spend_status.spender_height is not None:
+                spend_status.spender_height = mp_spend_status.spender_height
+            if mp_spend_status.spender_txhash is not None:
+                spend_status.spender_txhash = mp_spend_status.spender_txhash
+        # convert to json dict the client expects
+        status = {}
+        if spend_status.prev_height is not None:
+            status['height'] = spend_status.prev_height
+            if spend_status.spender_txhash is not None:
+                assert spend_status.spender_height is not None
+                status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txhash)
+                status['spender_height'] = spend_status.spender_height
+        return status
+
+    async def txoutpoint_status_for_notif(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
+        """Side-effect: updates client-last-seen status, used by notifications."""
+        status = await self._calc_txoutpoint_status(prev_txhash=prev_txhash, txout_idx=txout_idx)
+        # update status last sent to client
+        prevout = (prev_txhash, txout_idx)
+        prev_height = status.get('height')  # type: Optional[int]
+        spender_height = status.get('spender_height')  # type: Optional[int]
+        if ((prev_height is not None and prev_height <= 0)
+                or (spender_height is not None and spender_height <= 0)):
+            self.mempool_txoutpoint_statuses[prevout] = status
+        else:
+            self.mempool_txoutpoint_statuses.pop(prevout, None)
+        return status
 
     async def hashX_listunspent(self, hashX):
         '''Return the list of UTXOs of a script hash, including mempool
@@ -1345,6 +1520,47 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.1)
         hashX = scripthash_to_hashX(scripthash)
         return self.unsubscribe_hashX(hashX) is not None
+
+
+    async def txoutpoint_get_status(self, tx_hash, txout_idx, spk_hint=None):
+        '''Return the status of an outpoint, without subscribing.
+
+        spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
+                  other servers, but we don't need and hence ignore it.
+        '''
+        tx_hash = assert_tx_hash(tx_hash)
+        txout_idx = non_negative_integer(txout_idx)
+        if spk_hint is not None:
+            assert_hex_str(spk_hint)
+        # calc status (but do not side-effect client-last-seen status)
+        spend_status = await self._calc_txoutpoint_status(tx_hash, txout_idx)
+        return spend_status
+
+    async def txoutpoint_subscribe(self, tx_hash, txout_idx, spk_hint=None):
+        '''Subscribe to an outpoint.
+
+        spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
+                  other servers, but we don't need and hence ignore it.
+        '''
+        tx_hash = assert_tx_hash(tx_hash)
+        txout_idx = non_negative_integer(txout_idx)
+        if spk_hint is not None:
+            assert_hex_str(spk_hint)
+        # calc status, update client-last-seen status, and sub to outpoint
+        spend_status = await self.txoutpoint_status_for_notif(tx_hash, txout_idx)
+        self.txoutpoint_subs.add((tx_hash, txout_idx))
+        return spend_status
+
+    async def txoutpoint_unsubscribe(self, tx_hash, txout_idx):
+        '''Unsubscribe from an outpoint.'''
+        tx_hash = assert_tx_hash(tx_hash)
+        txout_idx = non_negative_integer(txout_idx)
+        self.bump_cost(0.1)
+        prevout = (tx_hash, txout_idx)
+        was_subscribed = prevout in self.txoutpoint_subs
+        self.txoutpoint_subs.discard(prevout)
+        self.mempool_txoutpoint_statuses.pop(prevout, None)
+        return was_subscribed
 
     async def _merkle_proof(self, cp_height, height):
         max_height = self.db.db_height
@@ -1760,6 +1976,12 @@ class ElectrumX(SessionBase):
         else:
             handlers['blockchain.relayfee'] = self.relayfee  # removed in 1.6
 
+        # experimental:
+        if ptuple >= (1, 7):
+            handlers['blockchain.outpoint.subscribe'] = self.txoutpoint_subscribe
+            handlers['blockchain.outpoint.get_status'] = self.txoutpoint_get_status
+            handlers['blockchain.outpoint.unsubscribe'] = self.txoutpoint_unsubscribe
+
         self.request_handlers = handlers
 
 
@@ -1804,9 +2026,19 @@ class DashElectrumX(ElectrumX):
             'protx.info': self.protx_info,
         })
 
-    async def _notify_inner(self, touched, height_changed):
+    async def _notify_inner(
+            self,
+            *,
+            touched_hashxs,
+            touched_outpoints,
+            height_changed,
+    ):
         '''Notify the client about changes in masternode list.'''
-        await super()._notify_inner(touched, height_changed)
+        await super()._notify_inner(
+            touched_hashxs=touched_hashxs,
+            touched_outpoints=touched_outpoints,
+            height_changed=height_changed,
+        )
         for mn in self.mns.copy():
             status = await self.daemon_request('masternode_list',
                                                ('status', mn))

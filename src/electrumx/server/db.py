@@ -16,7 +16,7 @@ import time
 from bisect import bisect_right
 from dataclasses import dataclass
 from glob import glob
-from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING
+from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING, Union
 
 from aiorpcx import run_in_thread, sleep
 
@@ -27,6 +27,7 @@ from electrumx.lib.util import (
     formatted_time, pack_be_uint16, pack_be_uint32, pack_le_uint64, pack_le_uint32,
     unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
 )
+from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
     History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
@@ -389,7 +390,7 @@ class DB:
         self.last_flush_tx_count = self.fs_tx_count
         self.write_utxo_state(batch)
 
-    def flush_backup(self, flush_data, touched):
+    def flush_backup(self, flush_data: FlushData, touched_hashxs):
         '''Like flush_dbs() but when backing up.  All UTXOs are flushed.'''
         assert not flush_data.headers
         assert not flush_data.block_tx_hashes
@@ -400,7 +401,10 @@ class DB:
         tx_delta = flush_data.tx_count - self.last_flush_tx_count
 
         self.backup_fs(flush_data.height, flush_data.tx_count)
-        self.history.backup(touched, flush_data.tx_count)
+        self.history.backup(
+            hashXs=touched_hashxs,
+            tx_count=flush_data.tx_count,
+        )
         with self.utxo_db.write_batch() as batch:
             self.flush_utxo_db(batch, flush_data)
             # Flush state last as it reads the wall time.
@@ -471,7 +475,7 @@ class DB:
 
         return await run_in_thread(read_headers)
 
-    def fs_tx_hash(self, tx_num):
+    def fs_tx_hash(self, tx_num: int) -> Tuple[Optional[bytes], int]:
         '''Return a pair (tx_hash, tx_height) for the given tx number.
 
         If the tx_height is not on disk, returns (None, tx_height).'''

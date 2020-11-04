@@ -87,10 +87,18 @@ class MemPoolAPI(ABC):
         '''
 
     @abstractmethod
-    async def on_mempool(self, touched, height):
-        '''Called each time the mempool is synchronized.  touched is a set of
-        hashXs touched since the previous call.  height is the
-        daemon's height at the time the mempool was obtained.'''
+    async def on_mempool(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height: int,
+    ):
+        '''Called each time the mempool is synchronized.  touched_hashxs and
+        touched_outpoints are sets of hashXs and tx outpoints touched since
+        the previous call.  height is the  daemon's height at the time the
+        mempool was obtained.
+        '''
 
 
 class MemPool:
@@ -209,9 +217,11 @@ class MemPool:
 
     def _accept_transactions(
             self,
+            *,
             tx_map: Dict[bytes, MemPoolTx],  # txid->tx
             utxo_map: Dict[Tuple[bytes, int], Tuple[bytes, int]],  # prevout->(hashX,value_in_sats)
-            touched: Set[bytes],  # set of hashXs
+            touched_hashxs: Set[bytes],  # set of hashXs
+            touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
     ) -> Tuple[Dict[bytes, MemPoolTx],
                Dict[Tuple[bytes, int], Tuple[bytes, int]]]:
         '''Accept transactions in tx_map to the mempool if all their inputs
@@ -253,18 +263,22 @@ class MemPool:
             txs[tx_hash] = tx
 
             for hashX, _value in itertools.chain(tx.in_pairs, tx.out_pairs):
-                touched.add(hashX)
+                touched_hashxs.add(hashX)
                 hashXs[hashX].add(tx_hash)
             for prevout in tx.prevouts:
                 txo_to_spender[prevout] = tx_hash
+                touched_outpoints.add(prevout)
+            for out_idx, out_pair in enumerate(tx.out_pairs):
+                touched_outpoints.add((tx_hash, out_idx))
 
         return deferred, {prevout: utxo_map[prevout] for prevout in unspent}
 
     async def _refresh_hashes(self, synchronized_event):
         '''Refresh our view of the daemon's mempool.'''
-        # Touched accumulates between calls to on_mempool and each
+        # touched_* accumulates between calls to on_mempool and each
         # call transfers ownership
-        touched = set()
+        touched_hashxs = set()
+        touched_outpoints = set()
         while True:
             height = self.api.cached_height()
             hex_hashes = await self.api.mempool_hashes()
@@ -273,7 +287,12 @@ class MemPool:
             hashes = {hex_str_to_hash(hh) for hh in hex_hashes}
             try:
                 async with self.lock:
-                    await self._process_mempool(hashes, touched, height)
+                    await self._process_mempool(
+                        all_hashes=hashes,
+                        touched_hashxs=touched_hashxs,
+                        touched_outpoints=touched_outpoints,
+                        mempool_height=height,
+                    )
             except DBSyncError:
                 # The UTXO DB is not at the same height as the
                 # mempool; wait and try again
@@ -281,16 +300,23 @@ class MemPool:
             else:
                 synchronized_event.set()
                 synchronized_event.clear()
-                await self.api.on_mempool(touched, height)
-                touched = set()
+                await self.api.on_mempool(
+                    touched_hashxs=touched_hashxs,
+                    touched_outpoints=touched_outpoints,
+                    height=height,
+                )
+                touched_hashxs = set()
+                touched_outpoints = set()
             await sleep(self.refresh_secs)
 
     async def _process_mempool(
             self,
+            *,
             all_hashes: Set[bytes],  # set of txids
-            touched: Set[bytes],  # set of hashXs
+            touched_hashxs: Set[bytes],  # set of hashXs
+            touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
             mempool_height: int,
-    ):
+    ) -> None:
         # Re-sync with the new set of hashes
         txs = self.txs
         hashXs = self.hashXs
@@ -302,22 +328,32 @@ class MemPool:
         # First handle txs that have disappeared
         for tx_hash in (set(txs) - all_hashes):
             tx = txs.pop(tx_hash)
+            # hashXs
             tx_hashXs = {hashX for hashX, value in tx.in_pairs}
             tx_hashXs.update(hashX for hashX, value in tx.out_pairs)
             for hashX in tx_hashXs:
                 hashXs[hashX].remove(tx_hash)
                 if not hashXs[hashX]:
                     del hashXs[hashX]
-            touched |= tx_hashXs
+            touched_hashxs |= tx_hashXs
+            # outpoints
             for prevout in tx.prevouts:
                 del txo_to_spender[prevout]
+                touched_outpoints.add(prevout)
+            for out_idx, out_pair in enumerate(tx.out_pairs):
+                touched_outpoints.add((tx_hash, out_idx))
 
         # Process new transactions
         new_hashes = list(all_hashes.difference(txs))
         if new_hashes:
             group = OldTaskGroup()
             for hashes in chunks(new_hashes, 200):
-                coro = self._fetch_and_accept(hashes, all_hashes, touched)
+                coro = self._fetch_and_accept(
+                    hashes=hashes,
+                    all_hashes=all_hashes,
+                    touched_hashxs=touched_hashxs,
+                    touched_outpoints=touched_outpoints,
+                )
                 await group.spawn(coro)
             if mempool_height != self.api.db_height():
                 raise DBSyncError
@@ -333,14 +369,23 @@ class MemPool:
             # FIXME: this is not particularly efficient
             while tx_map and len(tx_map) != prior_count:
                 prior_count = len(tx_map)
-                tx_map, utxo_map = self._accept_transactions(tx_map, utxo_map,
-                                                             touched)
+                tx_map, utxo_map = self._accept_transactions(
+                    tx_map=tx_map,
+                    utxo_map=utxo_map,
+                    touched_hashxs=touched_hashxs,
+                    touched_outpoints=touched_outpoints,
+                )
             if tx_map:
                 self.logger.error(f'{len(tx_map)} txs dropped')
 
-        return touched
-
-    async def _fetch_and_accept(self, hashes: Sequence[bytes], all_hashes: Set[bytes], touched):
+    async def _fetch_and_accept(
+            self,
+            *,
+            hashes: Set[bytes],  # set of txids
+            all_hashes: Set[bytes],  # set of txids
+            touched_hashxs: Set[bytes],  # set of hashXs
+            touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
+    ):
         '''Fetch a list of mempool transactions.'''
         hex_hashes_iter = (hash_to_hex_str(hash) for hash in hashes)
         raw_txs = await self.api.raw_transactions(hex_hashes_iter)
@@ -391,7 +436,12 @@ class MemPool:
         utxos = await self.api.lookup_utxos(prevouts)
         utxo_map = {prevout: utxo for prevout, utxo in zip(prevouts, utxos)}
 
-        return self._accept_transactions(tx_map, utxo_map, touched)
+        return self._accept_transactions(
+            tx_map=tx_map,
+            utxo_map=utxo_map,
+            touched_hashxs=touched_hashxs,
+            touched_outpoints=touched_outpoints,
+        )
 
     #
     # External interface

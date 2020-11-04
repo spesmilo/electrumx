@@ -210,34 +210,20 @@ class API(MemPoolAPI):
         return self._cached_height
 
     async def mempool_hashes(self):
-        '''Query bitcoind for the hashes of all transactions in its
-        mempool, returned as a list.'''
         await sleep(0)
         return [hash_to_hex_str(hash) for hash in self.txs]
 
     async def raw_transactions(self, hex_hashes):
-        '''Query bitcoind for the serialized raw transactions with the given
-        hashes.  Missing transactions are returned as None.
-
-        hex_hashes is an iterable of hexadecimal hash strings.'''
         await sleep(0)
         hashes = [hex_str_to_hash(hex_hash) for hex_hash in hex_hashes]
         return [self.raw_txs.get(hash) for hash in hashes]
 
     async def lookup_utxos(self, prevouts):
-        '''Return a list of (hashX, value) pairs each prevout if unspent,
-        otherwise return None if spent or not found.
-
-        prevouts - an iterable of (hash, index) pairs
-        '''
         await sleep(0)
         return [self.db_utxos.get(prevout) for prevout in prevouts]
 
-    async def on_mempool(self, touched, height):
-        '''Called each time the mempool is synchronized.  touched is a set of
-        hashXs touched since the previous call.  height is the
-        daemon's height at the time the mempool was obtained.'''
-        self.on_mempool_calls.append((touched, height))
+    async def on_mempool(self, *, touched_hashxs, touched_outpoints, height):
+        self.on_mempool_calls.append((touched_hashxs, height))
         await sleep(0)
 
 

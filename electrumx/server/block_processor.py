@@ -176,7 +176,8 @@ class BlockProcessor:
 
         # Meta
         self.next_cache_check = 0
-        self.touched = set()  # type: Set[bytes]
+        self.touched_hashxs = set()     # type: Set[bytes]
+        self.touched_outpoints = set()  # type: Set[Tuple[bytes, int]]
         self.reorg_count = 0
         self.height = -1
         self.tip = None  # type: Optional[bytes]
@@ -236,8 +237,13 @@ class BlockProcessor:
                 self.logger.info(f'processed {len(blocks):,d} block{s} size {blocks_size:.2f} MB '
                                  f'in {time.monotonic() - start:.1f}s')
             if self._caught_up_event.is_set():
-                await self.notifications.on_block(self.touched, self.height)
-            self.touched = set()
+                await self.notifications.on_block(
+                    touched_hashxs=self.touched_hashxs,
+                    touched_outpoints=self.touched_outpoints,
+                    height=self.height,
+                )
+            self.touched_hashxs = set()
+            self.touched_outpoints = set()
         elif hprevs[0] != chain[0]:
             await self.reorg_chain()
         else:
@@ -271,10 +277,10 @@ class BlockProcessor:
                 return await self.daemon.raw_blocks(hex_hashes)
 
         def flush_backup():
-            # self.touched can include other addresses which is
+            # self.touched_hashxs can include other addresses which is
             # harmless, but remove None.
-            self.touched.discard(None)
-            self.db.flush_backup(self.flush_data(), self.touched)
+            self.touched_hashxs.discard(None)
+            self.db.flush_backup(self.flush_data(), self.touched_hashxs)
 
         _start, last, hashes = await self.reorg_hashes(count)
         # Reverse and convert to hex strings.
@@ -441,7 +447,8 @@ class BlockProcessor:
         put_utxo = self.utxo_cache.__setitem__
         spend_utxo = self.spend_utxo
         undo_info_append = undo_info.append
-        update_touched = self.touched.update
+        update_touched_hashxs = self.touched_hashxs.update
+        add_touched_outpoint = self.touched_outpoints.add
         hashXs_by_tx = []
         append_hashXs = hashXs_by_tx.append
         txhash_to_txnum_map = {}
@@ -463,7 +470,9 @@ class BlockProcessor:
                 cache_value = spend_utxo(txin.prev_hash, txin.prev_idx)
                 undo_info_append(cache_value)
                 append_hashX(cache_value[:HASHX_LEN])
-                put_txo_to_spender_map((txin.prev_hash, txin.prev_idx), tx_hash)
+                prevout_tuple = (txin.prev_hash, txin.prev_idx)
+                put_txo_to_spender_map(prevout_tuple, tx_hash)
+                add_touched_outpoint(prevout_tuple)
 
             # Add the new UTXOs
             for idx, txout in enumerate(tx.outputs):
@@ -476,9 +485,10 @@ class BlockProcessor:
                 append_hashX(hashX)
                 put_utxo(tx_hash + to_le_uint32(idx)[:TXOUTIDX_LEN],
                          hashX + tx_numb + to_le_uint64(txout.value))
+                add_touched_outpoint((tx_hash, idx))
 
             append_hashXs(hashXs)
-            update_touched(hashXs)
+            update_touched_hashxs(hashXs)
             put_txhash_to_txnum_map(tx_hash, tx_num)
             tx_num += 1
 
@@ -540,7 +550,8 @@ class BlockProcessor:
         # Use local vars for speed in the loops
         put_utxo = self.utxo_cache.__setitem__
         spend_utxo = self.spend_utxo
-        touched = self.touched
+        add_touched_hashx = self.touched_hashxs.add
+        add_touched_outpoint = self.touched_outpoints.add
         undo_hist_spend = self.undo_historical_spends.append
         undo_entry_len = HASHX_LEN + TXNUM_LEN + 8
 
@@ -554,7 +565,8 @@ class BlockProcessor:
                 # Get the hashX
                 cache_value = spend_utxo(tx_hash, idx)
                 hashX = cache_value[:HASHX_LEN]
-                touched.add(hashX)
+                add_touched_hashx(hashX)
+                add_touched_outpoint((tx_hash, idx))
 
             # Restore the inputs
             for txin in reversed(tx.inputs):
@@ -565,7 +577,8 @@ class BlockProcessor:
                 prevout = txin.prev_hash + pack_le_uint32(txin.prev_idx)[:TXOUTIDX_LEN]
                 put_utxo(prevout, undo_item)
                 hashX = undo_item[:HASHX_LEN]
-                touched.add(hashX)
+                add_touched_hashx(hashX)
+                add_touched_outpoint((txin.prev_hash, txin.prev_idx))
                 undo_hist_spend(prevout)
 
         self.undo_tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
@@ -748,7 +761,7 @@ class NameIndexBlockProcessor(BlockProcessor):
 
         tx_num = self.tx_count - len(txs)
         script_name_hashX = self.coin.name_hashX_from_script
-        update_touched = self.touched.update
+        update_touched_hashxs = self.touched_hashxs.update
         hashXs_by_tx = []
         append_hashXs = hashXs_by_tx.append
 
@@ -764,7 +777,7 @@ class NameIndexBlockProcessor(BlockProcessor):
                     append_hashX(hashX)
 
             append_hashXs(hashXs)
-            update_touched(hashXs)
+            update_touched_hashxs(hashXs)
             tx_num += 1
 
         self.db.history.add_unflushed(
@@ -787,7 +800,8 @@ class LTORBlockProcessor(BlockProcessor):
         put_utxo = self.utxo_cache.__setitem__
         spend_utxo = self.spend_utxo
         undo_info_append = undo_info.append
-        update_touched = self.touched.update
+        update_touched_hashxs = self.touched_hashxs.update
+        add_touched_outpoint = self.touched_outpoints.add
         txhash_to_txnum_map = {}
         put_txhash_to_txnum_map = txhash_to_txnum_map.__setitem__
         txo_to_spender_map = {}
@@ -812,6 +826,7 @@ class LTORBlockProcessor(BlockProcessor):
                 add_hashXs(hashX)
                 put_utxo(tx_hash + to_le_uint32(idx)[:TXOUTIDX_LEN],
                          hashX + tx_numb + to_le_uint64(txout.value))
+                add_touched_outpoint((tx_hash, idx))
             put_txhash_to_txnum_map(tx_hash, tx_num)
             tx_num += 1
 
@@ -825,11 +840,13 @@ class LTORBlockProcessor(BlockProcessor):
                 cache_value = spend_utxo(txin.prev_hash, txin.prev_idx)
                 undo_info_append(cache_value)
                 add_hashXs(cache_value[:HASHX_LEN])
-                put_txo_to_spender_map((txin.prev_hash, txin.prev_idx), tx_hash)
+                prevout_tuple = (txin.prev_hash, txin.prev_idx)
+                put_txo_to_spender_map(prevout_tuple, tx_hash)
+                add_touched_outpoint(prevout_tuple)
 
         # Update touched set for notifications
         for hashXs in hashXs_by_tx:
-            update_touched(hashXs)
+            update_touched_hashxs(hashXs)
 
         self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
         self.db.history.add_unflushed(
@@ -854,7 +871,8 @@ class LTORBlockProcessor(BlockProcessor):
         # Use local vars for speed in the loops
         put_utxo = self.utxo_cache.__setitem__
         spend_utxo = self.spend_utxo
-        add_touched = self.touched.add
+        add_touched_hashx = self.touched_hashxs.add
+        add_touched_outpoint = self.touched_outpoints.add
         undo_entry_len = HASHX_LEN + TXNUM_LEN + 8
 
         # Restore coins that had been spent
@@ -867,7 +885,8 @@ class LTORBlockProcessor(BlockProcessor):
                 undo_item = undo_info[n:n + undo_entry_len]
                 prevout = txin.prev_hash + pack_le_uint32(txin.prev_idx)[:TXOUTIDX_LEN]
                 put_utxo(prevout, undo_item)
-                add_touched(undo_item[:HASHX_LEN])
+                add_touched_hashx(undo_item[:HASHX_LEN])
+                add_touched_outpoint((txin.prev_hash, txin.prev_idx))
                 n += undo_entry_len
 
         assert n == len(undo_info)
@@ -883,7 +902,8 @@ class LTORBlockProcessor(BlockProcessor):
                 # Get the hashX
                 cache_value = spend_utxo(tx_hash, idx)
                 hashX = cache_value[:HASHX_LEN]
-                add_touched(hashX)
+                add_touched_hashx(hashX)
+                add_touched_outpoint((tx_hash, idx))
 
         self.undo_tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
         self.tx_count -= len(txs)

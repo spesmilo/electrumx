@@ -856,21 +856,32 @@ class SessionManager:
             raise result
         return result, cost
 
-    async def _notify_sessions(self, height: int, touched: Set[bytes]):
+    async def _notify_sessions(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height: int,
+    ):
         '''Notify sessions about height changes and touched addresses.'''
         height_changed = height != self.notified_height
         if height_changed:
             await self._refresh_hsub_results(height)
             # Invalidate our history cache for touched hashXs
             cache = self._history_cache
-            for hashX in set(cache).intersection(touched):
+            for hashX in set(cache).intersection(touched_hashxs):
                 del cache[hashX]
 
         for session in self.sessions:
             if self._task_group.joined:  # this can happen during shutdown
                 self.logger.warning(f"task group already terminated. not notifying sessions.")
                 return
-            await self._task_group.spawn(session.notify, touched, height_changed)
+            coro = session.notify(
+                touched_hashxs=touched_hashxs,
+                touched_outpoints=touched_outpoints,
+                height_changed=height_changed,
+            )
+            await self._task_group.spawn(coro)
 
     def _ip_addr_group_name(self, session) -> Optional[str]:
         host = session.remote_address().host
@@ -998,7 +1009,13 @@ class SessionBase(RPCSessionWithTaskGroup):
         self.session_mgr.add_session(self)
         self.recalc_concurrency()  # must be called after session_mgr.add_session
 
-    async def notify(self, touched, height_changed):
+    async def notify(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         pass
 
     def default_framer(self):
@@ -1163,30 +1180,49 @@ class ElectrumX(SessionBase):
         self.mempool_statuses.pop(hashX, None)
         return self.hashX_subs.pop(hashX, None)
 
-    async def notify(self, touched, height_changed):
+    async def notify(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         '''Wrap _notify_inner; websockets raises exceptions for unclear reasons.'''
         try:
             async with timeout_after(30):
-                await self._notify_inner(touched, height_changed)
+                await self._notify_inner(
+                    touched_hashxs=touched_hashxs,
+                    touched_outpoints=touched_outpoints,
+                    height_changed=height_changed,
+                )
         except TaskTimeout:
             self.logger.warning('timeout notifying client, closing...')
             await self.close(force_after=1.0)
         except Exception:
             self.logger.exception('unexpected exception notifying client')
 
-    async def _notify_inner(self, touched: Set[bytes], height_changed: bool):
+    async def _notify_inner(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         '''Notify the client about changes to touched addresses (from mempool
         updates or new blocks) and height.
         '''
+        # block headers
         if height_changed and self.subscribe_headers:
             args = (await self.subscribe_headers_result(), )
             await self.send_notification('blockchain.headers.subscribe', args)
 
-        touched = touched.intersection(self.hashX_subs)
-        if touched or (height_changed and self.mempool_statuses):
+        # hashXs
+        num_hashx_notifs_sent = 0
+        touched_hashxs = touched_hashxs.intersection(self.hashX_subs)
+        if touched_hashxs or (height_changed and self.mempool_statuses):
             changed = {}
 
-            for hashX in touched:
+            for hashX in touched_hashxs:
                 alias = self.hashX_subs.get(hashX)
                 if alias:
                     status = await self.subscription_address_status(hashX)
@@ -1205,10 +1241,27 @@ class ElectrumX(SessionBase):
             method = 'blockchain.scripthash.subscribe'
             for alias, status in changed.items():
                 await self.send_notification(method, (alias, status))
+            num_hashx_notifs_sent = len(changed)
 
-            if changed:
-                es = '' if len(changed) == 1 else 'es'
-                self.logger.info(f'notified of {len(changed):,d} address{es}')
+        # tx outpoints
+        num_txo_notifs_sent = 0
+        touched_outpoints = touched_outpoints.intersection(self.txoutpoint_subs)
+        if touched_outpoints:
+            method = 'blockchain.outpoint.subscribe'
+            txo_to_status = {}
+            for prevout in touched_outpoints:
+                txo_to_status[prevout] = await self.txoutpoint_status(*prevout)
+            for tx_hash, txout_idx in touched_outpoints:
+                spend_status = txo_to_status[(tx_hash, txout_idx)]
+                tx_hash_hex = hash_to_hex_str(tx_hash)
+                await self.send_notification(method, ((tx_hash_hex, txout_idx), spend_status))
+            num_txo_notifs_sent = len(touched_outpoints)
+
+        if num_hashx_notifs_sent + num_txo_notifs_sent > 0:
+            es1 = '' if num_hashx_notifs_sent == 1 else 'es'
+            s2 = '' if num_txo_notifs_sent == 1 else 's'
+            self.logger.info(f'notified of {num_hashx_notifs_sent:,d} address{es1} and '
+                             f'{num_txo_notifs_sent:,d} outpoint{s2}')
 
     async def subscribe_headers_result(self):
         '''The result of a header subscription or notification.'''
@@ -1871,9 +1924,19 @@ class DashElectrumX(ElectrumX):
             'protx.info': self.protx_info,
         })
 
-    async def _notify_inner(self, touched, height_changed):
+    async def _notify_inner(
+            self,
+            *,
+            touched_hashxs,
+            touched_outpoints,
+            height_changed,
+    ):
         '''Notify the client about changes in masternode list.'''
-        await super()._notify_inner(touched, height_changed)
+        await super()._notify_inner(
+            touched_hashxs=touched_hashxs,
+            touched_outpoints=touched_outpoints,
+            height_changed=height_changed,
+        )
         for mn in self.mns.copy():
             status = await self.daemon_request('masternode_list',
                                                ('status', mn))

@@ -373,7 +373,7 @@ class DB:
         self.last_flush_tx_count = self.fs_tx_count
         self.write_utxo_state(batch)
 
-    def flush_backup(self, flush_data: FlushData, touched):
+    def flush_backup(self, flush_data: FlushData, touched_hashxs):
         '''Like flush_dbs() but when backing up.  All UTXOs are flushed.'''
         assert not flush_data.headers
         assert not flush_data.block_tx_hashes
@@ -392,7 +392,7 @@ class DB:
 
         self.backup_fs(flush_data.height, flush_data.tx_count)
         self.history.backup(
-            hashXs=touched,
+            hashXs=touched_hashxs,
             tx_count=flush_data.tx_count,
             tx_hashes=tx_hashes,
             spends=flush_data.undo_historical_spends,

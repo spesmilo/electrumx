@@ -160,11 +160,18 @@ be confirmed within a certain number of blocks.
 
 **Signature**
 
-  .. function:: blockchain.estimatefee(number)
+  .. function:: blockchain.estimatefee(number, mode=None)
+  .. versionchanged:: 1.5
+     *mode* argument added
 
   *number*
 
     The number of blocks to target for confirmation.
+
+  *mode*
+
+    A string to pass to the bitcoind *estimatesmartfee* RPC as the
+    *estimate_mode* parameter. Optional.
 
 **Result**
 
@@ -498,6 +505,109 @@ Unsubscribe from a script hash, preventing future notifications if its :ref:`sta
   Note that :const:`False` might be returned even for something subscribed to earlier,
   because the server can drop subscriptions in rare circumstances.
 
+blockchain.outpoint.subscribe
+===============================
+
+Subscribe to a transaction outpoint (TXO), to get notifications about its status.
+A status involves up to two transactions: the funding transaction that creates
+the TXO (as one of its outputs), and the spending transaction that uses it
+as an input (spends it).
+
+**Signature**
+
+  .. function:: blockchain.outpoint.subscribe(tx_hash, txout_idx)
+  .. versionadded:: 1.5
+
+  *tx_hash*
+
+    The TXID of the funding transaction as a hexadecimal string.
+    (sometimes called prevout_hash, in inputs)
+
+  *txout_idx*
+
+    The output index, a non-negative integer. (sometimes called prevout_n, in inputs)
+
+**Result**
+
+  The status of the TXO, taking the mempool into consideration.
+  The output is a dictionary, containing 0, 1, or 3 of the following items:
+
+  * *height*
+
+    The integer height of the block the funding transaction was confirmed in.
+    ``0`` if the funding transaction is in the mempool.
+    This key must be present if and only if there exists a funding transaction
+    (either in the best chain or in the mempool), regardless of spentness.
+
+  * *spender_txhash*
+
+    The TXID of the spending transaction as a hexadecimal string.
+    This key is present if and only if there exists a spending transaction
+    (either in the best chain or in the mempool).
+
+  * *spender_height*
+
+    The integer height of the block the spending transaction was confirmed in.
+    ``0`` if the spending transaction is in the mempool.
+    This key is present if and only if the `spender_txhash` key is present.
+
+
+**Result Examples**
+
+::
+
+  {}
+
+::
+
+  {
+    "height": 1866594
+  }
+
+::
+
+  {
+    "height": 1866594,
+    "spender_txhash": "4a19a360f71814c566977114c49ccfeb8a7e4719eda26cee27fa504f3f02ca09",
+    "spender_height": 0
+  }
+
+**Notifications**
+
+  The client will receive a notification when the `status` of the outpoint changes.
+  The protocol does not guarantee but the client might also receive a notification
+  if the status does not change but there was a reorg.
+  Its signature is
+
+    .. function:: blockchain.outpoint.subscribe([tx_hash, txout_idx], status)
+       :noindex:
+
+blockchain.outpoint.unsubscribe
+=================================
+
+Unsubscribe from a transaction outpoint (TXO), preventing future notifications
+if its `status` changes.
+
+**Signature**
+
+  .. function:: blockchain.outpoint.unsubscribe(tx_hash, txout_idx)
+  .. versionadded:: 1.5
+
+  *tx_hash*
+
+    The TXID of the funding transaction as a hexadecimal string.
+
+  *txout_idx*
+
+    The output index, a non-negative integer.
+
+**Result**
+
+  Returns :const:`True` if the outpoint was subscribed to, otherwise :const:`False`.
+  Note that :const:`False` might be returned even for something subscribed to earlier,
+  because the server can drop subscriptions in rare circumstances.
+
+
 blockchain.transaction.broadcast
 ================================
 
@@ -625,7 +735,9 @@ and height.
 
 **Signature**
 
-  .. function:: blockchain.transaction.get_merkle(tx_hash, height)
+  .. function:: blockchain.transaction.get_merkle(tx_hash, height=None)
+  .. versionchanged:: 1.5
+     *height* argument made optional (previously mandatory)
 
   *tx_hash*
 
@@ -633,7 +745,7 @@ and height.
 
   *height*
 
-    The height at which it was confirmed, an integer.
+    Optionally, the height at which it was confirmed, an integer.
 
 **Result**
 
@@ -968,6 +1080,7 @@ server.version
 ==============
 
 Identify the client to the server and negotiate the protocol version.
+This must be the first message sent on the wire.
 Only the first :func:`server.version` message is accepted.
 
 **Signature**

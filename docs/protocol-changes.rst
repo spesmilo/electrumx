@@ -2,7 +2,7 @@
 Protocol Changes
 ================
 
-This documents lists changes made by protocol version.
+This document lists changes made by protocol version.
 
 Version 1.0
 ===========
@@ -159,10 +159,32 @@ Changes
     Non-AuxPoW chains are unaffected.
 
 
-Version 1.4.1
+Version 1.4.2
 =============
 
 New methods
 -----------
 
-  * :func:`blockchain.scipthash.unsubscribe` to unsubscribe from a script hash.
+  * :func:`blockchain.scripthash.unsubscribe` to unsubscribe from a script hash.
+
+.. _version 1.5:
+
+Version 1.5
+===========
+
+Changes
+-------
+
+  * Breaking change for the version negotiation: we now mandate that
+    the :func:`server.version` message must be the first message sent.
+    That is, version negotiation must happen before any other messages.
+  * The previously required *height* argument for
+    :func:`blockchain.transaction.get_merkle` is now optional.
+  * Optional *mode* argument added to :func:`blockchain.estimatefee`.
+
+New methods
+-----------
+
+  * :func:`blockchain.outpoint.subscribe` to subscribe to a transaction
+    outpoint, and get a notification when it gets spent.
+  * :func:`blockchain.outpoint.unsubscribe` to unsubscribe from a TXO.

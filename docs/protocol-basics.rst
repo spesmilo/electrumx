@@ -68,14 +68,12 @@ revision number.
 
 A party to a connection will speak all protocol versions in a range,
 say from `protocol_min` to `protocol_max`, which may be the same.
-When a connection is made, both client and server must initially
-assume the protocol to use is their own `protocol_min`.
 
-The client should send a :func:`server.version` RPC call as early as
-possible in order to negotiate the precise protocol version; see its
-description for more detail.  All responses received in the stream
-from and including the server's response to this call will use its
-negotiated protocol version.
+The client must send a :func:`server.version` RPC call as the first
+message on the wire, in order to negotiate the precise protocol
+version; see its description for more detail.
+All responses received in the stream from and including the server's
+response to this call will use its negotiated protocol version.
 
 
 .. _script hashes:

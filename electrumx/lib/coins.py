@@ -3583,6 +3583,26 @@ class Defcoin(Coin):
     REORG_LIMIT = 5000
 
 
+class Auroracoin(Coin):
+    NAME = "Auroracoin"
+    SHORTNAME = "AUR"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488B21E")
+    XPRV_VERBYTES = bytes.fromhex("0488ADE4")
+
+    P2PKH_VERBYTE = bytes.fromhex("17")
+    P2SH_VERBYTES = bytes.fromhex("05")
+    WIF_BYTE = bytes.fromhex("b0")
+
+    GENESIS_HASH = ('2a8e100939494904af825b488596ddd5'
+                    '36b3a96226ad02e0f7ab7ae472b27a8e')
+
+    TX_COUNT = 2800000
+    TX_COUNT_HEIGHT = 2778987
+    TX_PER_BLOCK = 1
+    RPC_PORT = 12341
+    REORG_LIMIT = 5000
+
 class Smileycoin(Coin):
     NAME = "Smileycoin"
     SHORTNAME = "SMLY"

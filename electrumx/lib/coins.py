@@ -2109,6 +2109,23 @@ class Bitcore(BitcoinMixin, Coin):
         'ele3.bitcore.cc s t',
         'ele4.bitcore.cc s t'
     ]
+    
+class GleecBTC(Coin):
+    NAME = "GleecBTC"
+    SHORTNAME = "GLEEC"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488B21E")
+    XPRV_VERBYTES = bytes.fromhex("0488ADE4")
+    P2PKH_VERBYTE = bytes.fromhex("23")
+    P2SH_VERBYTES = (bytes.fromhex("26"),)
+    WIF_BYTE = bytes.fromhex("41")
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    GENESIS_HASH = ('000000000019d6689c085ae165831e93'
+                    '4ff763ae46a2a6c172b3f1b60a8ce26f')
+    TX_COUNT = 1759864
+    TX_COUNT_HEIGHT = 1614311
+    TX_PER_BLOCK = 1.08
+    RPC_PORT = 8332
 
 
 class GameCredits(Coin):

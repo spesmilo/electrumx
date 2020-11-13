@@ -332,6 +332,8 @@ raise them.
 .. envvar:: COST_HARD_LIMIT
 .. envvar:: REQUEST_SLEEP
 .. envvar:: INITIAL_CONCURRENT
+.. envvar:: SESSION_GROUP_BY_SUBNET_IPV4
+.. envvar:: SESSION_GROUP_BY_SUBNET_IPV6
 
   All values are integers. :envvar:`COST_SOFT_LIMIT` defaults to :const:`1,000`,
   :envvar:`COST_HARD_LIMIT` to :const:`10,000`, :envvar:`REQUEST_SLEEP` to :const:`2,500`
@@ -362,6 +364,10 @@ raise them.
 
   If a session disconnects, ElectrumX continues to associate its cost with its IP address,
   so if it immediately reconnects it will re-acquire its previous cost allocation.
+  Moreover, sessions are also grouped together based on their IP address subnets, and cost
+  is accrued for the whole group. What subnet sizes to use can be configured via
+  :envvar:`SESSION_GROUP_BY_SUBNET_IPV4` (by default /24) and
+  :envvar:`SESSION_GROUP_BY_SUBNET_IPV6` (by default /48).
 
   A server operator should experiment with different values according to server loads.  It
   is not necessarily true that e.g. having a low soft limit, decreasing concurrency and

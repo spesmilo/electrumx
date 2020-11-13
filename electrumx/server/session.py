@@ -7,6 +7,7 @@
 
 '''Classes for local RPC server and remote client TCP/SSL servers.'''
 
+import asyncio
 import codecs
 import datetime
 import itertools
@@ -16,7 +17,9 @@ import ssl
 import time
 from collections import defaultdict
 from functools import partial
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
+from typing import Optional, TYPE_CHECKING
+import asyncio
 
 import attr
 import pylru
@@ -32,6 +35,14 @@ from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
 from electrumx.server.daemon import DaemonError
 from electrumx.server.peers import PeerManager
+
+if TYPE_CHECKING:
+    from electrumx.server.db import DB
+    from electrumx.server.env import Env
+    from electrumx.server.block_processor import BlockProcessor
+    from electrumx.server.daemon import Daemon
+    from electrumx.server.mempool import MemPool
+
 
 BAD_REQUEST = 1
 DAEMON_ERROR = 2
@@ -107,7 +118,15 @@ class SessionReferences:
 class SessionManager:
     '''Holds global state about all sessions.'''
 
-    def __init__(self, env, db, bp, daemon, mempool, shutdown_event):
+    def __init__(
+            self,
+            env: 'Env',
+            db: 'DB',
+            bp: 'BlockProcessor',
+            daemon: 'Daemon',
+            mempool: 'MemPool',
+            shutdown_event: asyncio.Event,
+    ):
         env.max_send = max(350000, env.max_send)
         self.env = env
         self.db = db
@@ -121,6 +140,7 @@ class SessionManager:
         self.sessions = {}          # session->iterable of its SessionGroups
         self.session_groups = {}    # group name->SessionGroup instance
         self.txs_sent = 0
+        # Would use monotonic time, but aiorpcx sessions use Unix time:
         self.start_time = time.time()
         self._method_counts = defaultdict(int)
         self._reorg_count = 0
@@ -134,6 +154,7 @@ class SessionManager:
         self._merkle_cache = pylru.lrucache(1000)
         self._merkle_lookups = 0
         self._merkle_hits = 0
+        self.estimatefee_cache = pylru.lrucache(1000)
         self.notified_height = None
         self.hsub_results = None
         self._task_group = TaskGroup()
@@ -251,7 +272,7 @@ class SessionManager:
             del stale_sessions
 
     async def _handle_chain_reorgs(self):
-        '''Clear caches on chain reorgs.'''
+        '''Clear certain caches on chain reorgs.'''
         while True:
             await self.bp.backed_up_event.wait()
             self.logger.info(f'reorg signalled; clearing tx_hashes and merkle caches')
@@ -765,18 +786,24 @@ class SessionManager:
         for session in self.sessions:
             await self._task_group.spawn(session.notify, touched, height_changed)
 
-    def _ip_addr_group_name(self, session):
+    def _ip_addr_group_name(self, session) -> Optional[str]:
         host = session.remote_address().host
-        if isinstance(host, IPv4Address):
-            return '.'.join(str(host).split('.')[:3])
-        if isinstance(host, IPv6Address):
-            return ':'.join(host.exploded.split(':')[:3])
+        if isinstance(host, (IPv4Address, IPv6Address)):
+            if host.is_private:  # exempt private addresses
+                return None
+            if isinstance(host, IPv4Address):
+                subnet_size = self.env.session_group_by_subnet_ipv4
+                subnet = IPv4Network(host).supernet(prefixlen_diff=32 - subnet_size)
+                return str(subnet)
+            elif isinstance(host, IPv6Address):
+                subnet_size = self.env.session_group_by_subnet_ipv6
+                subnet = IPv6Network(host).supernet(prefixlen_diff=128 - subnet_size)
+                return str(subnet)
         return 'unknown_addr'
 
-    def _timeslice_name(self, session):
-        return f't{int(session.start_time - self.start_time) // 300}'
-
-    def _session_group(self, name, weight):
+    def _session_group(self, name: Optional[str], weight: float) -> Optional[SessionGroup]:
+        if name is None:
+            return None
         group = self.session_groups.get(name)
         if not group:
             group = SessionGroup(name, weight, set(), 0)
@@ -787,9 +814,9 @@ class SessionManager:
         self.session_event.set()
         # Return the session groups
         groups = (
-            self._session_group(self._timeslice_name(session), 0.03),
             self._session_group(self._ip_addr_group_name(session), 1.0),
         )
+        groups = tuple(group for group in groups if group is not None)
         self.sessions[session] = groups
         for group in groups:
             group.sessions.add(session)
@@ -814,7 +841,15 @@ class SessionBase(RPCSession):
     session_counter = itertools.count()
     log_new = False
 
-    def __init__(self, session_mgr, db, mempool, peer_mgr, kind, transport):
+    def __init__(
+            self,
+            session_mgr: 'SessionManager',
+            db: 'DB',
+            mempool: 'MemPool',
+            peer_mgr: 'PeerManager',
+            kind: str,
+            transport,
+    ):
         connection = JSONRPCConnection(JSONRPCAutoDetect)
         super().__init__(transport, connection=connection)
         self.session_mgr = session_mgr
@@ -836,8 +871,8 @@ class SessionBase(RPCSession):
         self.logger = util.ConnectionLogger(logger, context)
         self.logger.info(f'{self.kind} {self.remote_address_string()}, '
                          f'{self.session_mgr.session_count():,d} total')
-        self.recalc_concurrency()
         self.session_mgr.add_session(self)
+        self.recalc_concurrency()  # must be called after session_mgr.add_session
 
     async def notify(self, touched, height_changed):
         pass
@@ -1253,11 +1288,39 @@ class ElectrumX(SessionBase):
         mode: CONSERVATIVE or ECONOMICAL estimation mode
         '''
         number = non_negative_integer(number)
-        self.bump_cost(2.0)
-        if mode:
-            return await self.daemon_request('estimatefee', number, mode)
+        # use whitelist for mode, otherwise it would be easy to force a cache miss:
+        if mode not in self.coin.ESTIMATEFEE_MODES:
+            raise RPCError(BAD_REQUEST, f'unknown estimatefee mode: {mode}')
+        self.bump_cost(0.1)
+
+        number = self.coin.bucket_estimatefee_block_target(number)
+        cache = self.session_mgr.estimatefee_cache
+
+        cache_item = cache.get((number, mode))
+        if cache_item is not None:
+            blockhash, feerate, lock = cache_item
+            if blockhash and blockhash == self.session_mgr.bp.tip:
+                return feerate
         else:
-            return await self.daemon_request('estimatefee', number)
+            # create lock now, store it, and only then await on it
+            lock = asyncio.Lock()
+            cache[(number, mode)] = (None, None, lock)
+        async with lock:
+            cache_item = cache.get((number, mode))
+            if cache_item is not None:
+                blockhash, feerate, lock = cache_item
+                if blockhash == self.session_mgr.bp.tip:
+                    return feerate
+            self.bump_cost(2.0)  # cache miss incurs extra cost
+            blockhash = self.session_mgr.bp.tip
+            if mode:
+                feerate = await self.daemon_request('estimatefee', number, mode)
+            else:
+                feerate = await self.daemon_request('estimatefee', number)
+            assert feerate is not None
+            assert blockhash is not None
+            cache[(number, mode)] = (blockhash, feerate, lock)
+            return feerate
 
     async def ping(self):
         '''Serves as a connection keep-alive mechanism and for the client to

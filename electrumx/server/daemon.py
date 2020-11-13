@@ -13,6 +13,7 @@ import itertools
 import time
 from calendar import timegm
 from struct import pack
+from typing import TYPE_CHECKING, Type
 
 import aiohttp
 from aiorpcx import JSONRPC
@@ -22,6 +23,9 @@ from electrumx.lib.tx import DeserializerDecred
 from electrumx.lib.util import (class_logger, hex_to_bytes, json_deserialize,
                                 json_serialize, pack_varint,
                                 unpack_le_uint16_from)
+
+if TYPE_CHECKING:
+    from electrumx.lib.coins import Coin
 
 
 class DaemonError(Exception):
@@ -43,7 +47,15 @@ class Daemon:
     WARMING_UP = -28
     id_counter = itertools.count()
 
-    def __init__(self, coin, url, *, max_workqueue=10, init_retry=0.25, max_retry=4.0):
+    def __init__(
+            self,
+            coin: Type['Coin'],
+            url,
+            *,
+            max_workqueue=10,
+            init_retry=0.25,
+            max_retry=4.0,
+    ):
         self.coin = coin
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.url_index = None
@@ -57,6 +69,9 @@ class Daemon:
         self._height = None
         self.available_rpcs = {}
         self.session = None
+
+        self._networkinfo_cache = (None, 0)
+        self._networkinfo_lock = asyncio.Lock()
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(connector=self.connector())
@@ -118,7 +133,7 @@ class Daemon:
         '''
         def log_error(error):
             nonlocal last_error_log, retry
-            now = time.time()
+            now = time.monotonic()
             if now - last_error_log > 60:
                 last_error_log = now
                 self.logger.error(f'{error}.  Retrying occasionally...')
@@ -248,7 +263,13 @@ class Daemon:
 
     async def getnetworkinfo(self):
         '''Return the result of the 'getnetworkinfo' RPC call.'''
-        return await self._send_single('getnetworkinfo')
+        async with self._networkinfo_lock:
+            cache_val, cache_time = self._networkinfo_cache
+            if time.time() - cache_time < 60:  # seconds
+                return cache_val
+            val = await self._send_single('getnetworkinfo')
+            self._networkinfo_cache = (val, time.time())
+            return val
 
     async def relayfee(self):
         '''The minimum fee a low-priority tx must pay in order to be accepted

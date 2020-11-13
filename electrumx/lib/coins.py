@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from functools import partial
 from hashlib import sha256
-from typing import Sequence
+from typing import Sequence, Tuple
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import Base58, double_sha256, hash_to_hex_str
@@ -43,6 +43,7 @@ from electrumx.lib.hash import HASHX_LEN, hex_str_to_hash
 from electrumx.lib.script import (_match_ops, Script, ScriptError,
                                   ScriptPubKey, OpCodes)
 import electrumx.lib.tx as lib_tx
+from electrumx.lib.tx import Tx
 import electrumx.lib.tx_dash as lib_tx_dash
 import electrumx.lib.tx_axe as lib_tx_axe
 import electrumx.server.block_processor as block_proc
@@ -56,7 +57,7 @@ class Block:
     __slots__ = "raw", "header", "transactions"
     raw: bytes
     header: bytes
-    transactions: Sequence
+    transactions: Sequence[Tuple[Tx, bytes]]
 
 
 class CoinError(Exception):
@@ -97,6 +98,14 @@ class Coin:
     PEERS = []
     CRASH_CLIENT_VER = None
     BLACKLIST_URL = None
+    ESTIMATEFEE_MODES = (None, 'CONSERVATIVE', 'ECONOMICAL')
+
+    TX_COUNT: int
+    TX_COUNT_HEIGHT: int
+    TX_PER_BLOCK: int
+    RPC_PORT: int
+    NAME: str
+    NET: str
 
     @classmethod
     def lookup_coin_class(cls, name, net):
@@ -259,6 +268,13 @@ class Coin:
     @classmethod
     def warn_old_client_on_tx_broadcast(cls, _client_ver):
         return False
+
+    @classmethod
+    def bucket_estimatefee_block_target(cls, n: int) -> int:
+        '''For caching purposes, it might be desirable to restrict the
+        set of values that can be queried as an estimatefee block target.
+        '''
+        return n
 
 
 class AuxPowMixin:
@@ -578,13 +594,12 @@ class Bitcoin(BitcoinMixin, Coin):
     NAME = "Bitcoin"
     DESERIALIZER = lib_tx.DeserializerSegWit
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
-    TX_COUNT = 318337769
-    TX_COUNT_HEIGHT = 524213
-    TX_PER_BLOCK = 1400
+    TX_COUNT = 565436782
+    TX_COUNT_HEIGHT = 646855
+    TX_PER_BLOCK = 2200
     CRASH_CLIENT_VER = (3, 2, 3)
     BLACKLIST_URL = 'https://electrum.org/blacklist.json'
     PEERS = [
-        'E-X.not.fyi s t',
         'electrum.vom-stausee.de s t',
         'electrum.hsmiths.com s t',
         'helicarrier.bauerj.eu s t',
@@ -599,6 +614,7 @@ class Bitcoin(BitcoinMixin, Coin):
         'currentlane.lovebitco.in s t',
         'electrum.jochen-hoenicke.de s50005 t50003',
         'vps5.hsmiths.com s',
+        'electrum.emzy.de s',
     ]
 
     @classmethod
@@ -611,6 +627,21 @@ class Bitcoin(BitcoinMixin, Coin):
                     'https://electrum.org/'
                     '<br/><br/>')
         return False
+
+    @classmethod
+    def bucket_estimatefee_block_target(cls, n: int) -> int:
+        # values based on https://github.com/bitcoin/bitcoin/blob/af05bd9e1e362c3148e3b434b7fac96a9a5155a1/src/policy/fees.h#L131  # noqa
+        if n <= 1:
+            return 1
+        if n <= 12:
+            return n
+        if n == 25:  # so common that we make an exception for it
+            return n
+        if n <= 48:
+            return n // 2 * 2
+        if n <= 1008:
+            return n // 24 * 24
+        return 1008
 
 
 class BitcoinSegwit(Bitcoin):
@@ -1530,8 +1561,10 @@ class Verus(KomodoMixin, EquihashMixin, Coin):
             if header[0] == 4 and header[2] >= 1:
                 if len(header) < 144 or header[143] < 3:
                     return verushash.verushash_v2b(header)
-                else:
+                elif header[143] < 4:
                     return verushash.verushash_v2b1(header)
+                else:
+                    return verushash.verushash_v2b2(header)
             else:
                 return verushash.verushash(header)
 
@@ -3564,6 +3597,22 @@ class Defcoin(Coin):
     TX_COUNT_HEIGHT = 1
     TX_PER_BLOCK = 1
     RPC_PORT = 9386
+    REORG_LIMIT = 5000
+
+
+class Auroracoin(Coin):
+    NAME = "Auroracoin"
+    SHORTNAME = "AUR"
+    NET = "mainnet"
+    P2PKH_VERBYTE = bytes.fromhex("17")
+    P2SH_VERBYTES = bytes.fromhex("05")
+    WIF_BYTE = bytes.fromhex("b0")
+    GENESIS_HASH = ('2a8e100939494904af825b488596ddd5'
+                    '36b3a96226ad02e0f7ab7ae472b27a8e')
+    TX_COUNT = 2800000
+    TX_COUNT_HEIGHT = 2778987
+    TX_PER_BLOCK = 1
+    RPC_PORT = 12341
     REORG_LIMIT = 5000
 
 

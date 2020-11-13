@@ -16,29 +16,33 @@ import time
 from bisect import bisect_right
 from dataclasses import dataclass
 from glob import glob
+from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING
 
 import attr
 from aiorpcx import run_in_thread, sleep
 
 import electrumx.lib.util as util
-from electrumx.lib.hash import hash_to_hex_str
+from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN
 from electrumx.lib.merkle import Merkle, MerkleCache
 from electrumx.lib.util import (
     formatted_time, pack_be_uint16, pack_be_uint32, pack_le_uint64, pack_le_uint32,
     unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
 )
-from electrumx.server.storage import db_class
-from electrumx.server.history import History
+from electrumx.server.storage import db_class, Storage
+from electrumx.server.history import History, TXNUM_LEN
+
+if TYPE_CHECKING:
+    from electrumx.server.env import Env
 
 
 @dataclass(order=True)
 class UTXO:
-    __slots__ = 'tx_num', 'tx_pos', 'tx_hash', 'height', 'height', 'value'
-    tx_num: int
-    tx_pos: int
-    tx_hash: bytes
-    height: int
-    value: int
+    __slots__ = 'tx_num', 'tx_pos', 'tx_hash', 'height', 'value'
+    tx_num: int      # index of tx in chain order
+    tx_pos: int      # tx output idx
+    tx_hash: bytes   # txid
+    height: int      # block height
+    value: int       # in satoshis
 
 
 @attr.s(slots=True)
@@ -48,10 +52,13 @@ class FlushData:
     headers = attr.ib()
     block_tx_hashes = attr.ib()
     # The following are flushed to the UTXO DB if undo_infos is not None
-    undo_infos = attr.ib()
-    adds = attr.ib()
-    deletes = attr.ib()
+    undo_infos = attr.ib()  # type: List[Tuple[Sequence[bytes], int]]
+    adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
+    deletes = attr.ib()  # type: List[bytes]  # b'h' db keys, and b'u' db keys
     tip = attr.ib()
+
+
+COMP_TXID_LEN = 4
 
 
 class DB:
@@ -63,10 +70,12 @@ class DB:
 
     DB_VERSIONS = (6, 7, 8)
 
+    utxo_db: Optional['Storage']
+
     class DBError(Exception):
         '''Raised on general DB errors generally indicating corruption.'''
 
-    def __init__(self, env):
+    def __init__(self, env: 'Env'):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
         self.env = env
         self.coin = env.coin
@@ -84,13 +93,26 @@ class DB:
 
         self.db_class = db_class(self.env.db_engine)
         self.history = History()
+
+        # Key: b'u' + address_hashX + txout_idx + tx_num
+        # Value: the UTXO value as a 64-bit unsigned integer (in satoshis)
+        # "at address, at outpoint, there is a UTXO of value v"
+        # ---
+        # Key: b'h' + compressed_tx_hash + txout_idx + tx_num
+        # Value: hashX
+        # "some outpoint created a UTXO at address"
+        # ---
+        # Key: b'U' + block_height
+        # Value: byte-concat list of (hashX + tx_num + value_sats)
+        # "undo data: list of UTXOs spent at block height"
         self.utxo_db = None
+
         self.utxo_flush_count = 0
         self.fs_height = -1
         self.fs_tx_count = 0
         self.db_height = -1
         self.db_tx_count = 0
-        self.db_tip = None
+        self.db_tip = None  # type: Optional[bytes]
         self.tx_counts = None
         self.last_flush = time.time()
         self.last_flush_tx_count = 0
@@ -104,8 +126,11 @@ class DB:
         self.merkle = Merkle()
         self.header_mc = MerkleCache(self.merkle, self.fs_block_hashes)
 
+        # on-disk: raw block headers in chain order
         self.headers_file = util.LogicalFile('meta/headers', 2, 16000000)
+        # on-disk: cumulative number of txs at the end of height N
         self.tx_counts_file = util.LogicalFile('meta/txcounts', 2, 2000000)
+        # on-disk: 32 byte txids in chain order, allows (tx_num -> txid) map
         self.hashes_file = util.LogicalFile('meta/hashes', 4, 16000000)
         if not self.coin.STATIC_BLOCK_HEADERS:
             self.headers_offsets_file = util.LogicalFile(
@@ -125,7 +150,7 @@ class DB:
         else:
             assert self.db_tx_count == 0
 
-    async def _open_dbs(self, for_sync, compacting):
+    async def _open_dbs(self, for_sync: bool, compacting: bool):
         assert self.utxo_db is None
 
         # First UTXO DB
@@ -180,9 +205,9 @@ class DB:
     async def populate_header_merkle_cache(self):
         self.logger.info('populating header merkle cache...')
         length = max(1, self.db_height - self.env.reorg_limit)
-        start = time.time()
+        start = time.monotonic()
         await self.header_mc.initialize(length)
-        elapsed = time.time() - start
+        elapsed = time.monotonic() - start
         self.logger.info(f'header merkle cache populated in {elapsed:.1f}s')
 
     async def header_branch_and_root(self, length, height):
@@ -264,7 +289,7 @@ class DB:
         assert len(hashes) // 32 == flush_data.tx_count - prior_tx_count
 
         # Write the headers, tx counts, and tx hashes
-        start_time = time.time()
+        start_time = time.monotonic()
         height_start = self.fs_height + 1
         offset = self.header_offset(height_start)
         self.headers_file.write(offset, b''.join(flush_data.headers))
@@ -281,18 +306,18 @@ class DB:
         self.fs_tx_count = flush_data.tx_count
 
         if self.utxo_db.for_sync:
-            elapsed = time.time() - start_time
+            elapsed = time.monotonic() - start_time
             self.logger.info(f'flushed filesystem data in {elapsed:.2f}s')
 
     def flush_history(self):
         self.history.flush()
 
-    def flush_utxo_db(self, batch, flush_data):
+    def flush_utxo_db(self, batch, flush_data: FlushData):
         '''Flush the cached DB writes and UTXO set to the batch.'''
         # Care is needed because the writes generated by flushing the
         # UTXO state may have keys in common with our write cache or
         # may be in the DB already.
-        start_time = time.time()
+        start_time = time.monotonic()
         add_count = len(flush_data.adds)
         spend_count = len(flush_data.deletes) // 2
 
@@ -305,11 +330,14 @@ class DB:
         # New UTXOs
         batch_put = batch.put
         for key, value in flush_data.adds.items():
-            # suffix = tx_idx + tx_num
-            hashX = value[:-13]
-            suffix = key[-4:] + value[-13:-8]
-            batch_put(b'h' + key[:4] + suffix, hashX)
-            batch_put(b'u' + hashX + suffix, value[-8:])
+            # key: txid+out_idx, value: hashX+tx_num+value_sats
+            hashX = value[:HASHX_LEN]
+            txout_idx = key[-4:]
+            tx_num = value[HASHX_LEN: HASHX_LEN+TXNUM_LEN]
+            value_sats = value[-8:]
+            suffix = txout_idx + tx_num
+            batch_put(b'h' + key[:COMP_TXID_LEN] + suffix, hashX)
+            batch_put(b'u' + hashX + suffix, value_sats)
         flush_data.adds.clear()
 
         # New undo information
@@ -319,7 +347,7 @@ class DB:
         if self.utxo_db.for_sync:
             block_count = flush_data.height - self.db_height
             tx_count = flush_data.tx_count - self.db_tx_count
-            elapsed = time.time() - start_time
+            elapsed = time.monotonic() - start_time
             self.logger.info(f'flushed {block_count:,d} blocks with '
                              f'{tx_count:,d} txs, {add_count:,d} UTXO adds, '
                              f'{spend_count:,d} spends in '
@@ -490,7 +518,7 @@ class DB:
         '''Returns a height from which we should store undo info.'''
         return max_height - self.env.reorg_limit + 1
 
-    def undo_key(self, height):
+    def undo_key(self, height: int) -> bytes:
         '''DB key for undo information at the given height.'''
         return b'U' + pack_be_uint32(height)
 
@@ -498,7 +526,9 @@ class DB:
         '''Read undo information from a file for the current height.'''
         return self.utxo_db.get(self.undo_key(height))
 
-    def flush_undo_infos(self, batch_put, undo_infos):
+    def flush_undo_infos(
+            self, batch_put, undo_infos: Sequence[Tuple[Sequence[bytes], int]]
+    ):
         '''undo_infos is a list of (undo_info, height) pairs.'''
         for undo_info, height in undo_infos:
             batch_put(self.undo_key(height), b''.join(undo_info))
@@ -640,12 +670,12 @@ class DB:
                         batch_put(db_key + b'\0', db_value)
             return count
 
-        last = time.time()
+        last = time.monotonic()
         count = 0
         for cursor in range(65536):
             prefix = b'u' + pack_be_uint16(cursor)
             count += upgrade_u_prefix(prefix)
-            now = time.time()
+            now = time.monotonic()
             if now > last + 10:
                 last = now
                 self.logger.info(f'DB 1 of 3: {count:,d} entries updated, '
@@ -674,12 +704,12 @@ class DB:
                         batch_put(db_key + b'\0', db_value)
             return count
 
-        last = time.time()
+        last = time.monotonic()
         count = 0
         for cursor in range(65536):
             prefix = b'h' + pack_be_uint16(cursor)
             count += upgrade_h_prefix(prefix)
-            now = time.time()
+            now = time.monotonic()
             if now > last + 10:
                 last = now
                 self.logger.info(f'DB 2 of 3: {count:,d} entries updated, '
@@ -722,15 +752,16 @@ class DB:
         def read_utxos():
             utxos = []
             utxos_append = utxos.append
-            # Key: b'u' + address_hashX + tx_idx + tx_num
+            txnum_padding = bytes(8-TXNUM_LEN)
+            # Key: b'u' + address_hashX + txout_idx + tx_num
             # Value: the UTXO value as a 64-bit unsigned integer
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                tx_pos, = unpack_le_uint32(db_key[-9:-5])
-                tx_num, = unpack_le_uint64(db_key[-5:] + b'\0\0\0')
+                txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN-4:-TXNUM_LEN])
+                tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + txnum_padding)
                 value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
-                utxos_append(UTXO(tx_num, tx_pos, tx_hash, height, value))
+                utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
             return utxos
 
         while True:
@@ -753,15 +784,16 @@ class DB:
             '''
             def lookup_hashX(tx_hash, tx_idx):
                 idx_packed = pack_le_uint32(tx_idx)
+                txnum_padding = bytes(8-TXNUM_LEN)
 
                 # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
                 # Value: hashX
-                prefix = b'h' + tx_hash[:4] + idx_packed
+                prefix = b'h' + tx_hash[:COMP_TXID_LEN] + idx_packed
 
                 # Find which entry, if any, the TX_HASH matches.
                 for db_key, hashX in self.utxo_db.iterator(prefix=prefix):
-                    tx_num_packed = db_key[-5:]
-                    tx_num, = unpack_le_uint64(tx_num_packed + b'\0\0\0')
+                    tx_num_packed = db_key[-TXNUM_LEN:]
+                    tx_num, = unpack_le_uint64(tx_num_packed + txnum_padding)
                     hash, _height = self.fs_tx_hash(tx_num)
                     if hash == tx_hash:
                         return hashX, idx_packed + tx_num_packed

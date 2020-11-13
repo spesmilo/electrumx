@@ -324,6 +324,37 @@ async def test_compact_fee_histogram():
     assert all(rates[n] < rates[n - 1] for n in range(1, len(rates)))
 
 
+def test_compress_histogram():
+    histogram = {
+        10: 100_000,
+        11: 1_000,
+        12: 10_000_000,
+        13: 1_000,
+        14: 1_000,
+        15: 1_000,
+        16: 1_000,
+        17: 1_000,
+        18: 900_000,
+        19: 1_000,
+        20: 1_000,
+        21: 75_000,
+        22: 1_000,
+    }
+    compact = MemPool._compress_histogram(histogram, bin_size=100_000)
+    assert compact == [(19, 78000), (18, 900000), (13, 5000), (12, 10000000)]
+
+    histogram = {
+        1.0: 10_000_000,
+        1.1: 30_000,
+        1.2: 40_000,
+        10: 500_000,
+        10.1: 1_000,
+        11: 50_000,
+    }
+    compact = MemPool._compress_histogram(histogram, bin_size=100_000)
+    assert compact == [(10.1, 51000), (10, 500000), (1.1, 70000), (1.0, 10000000)]
+
+
 @pytest.mark.asyncio
 async def test_potential_spends():
     api = API()
@@ -498,7 +529,7 @@ async def test_notifications(caplog):
         api.txs = {hash: txs[hash] for hash in second_hashes}
         # Delay the DB update
         assert not in_caplog(caplog, 'waiting for DB to sync')
-        async with ignore_after(mempool.refresh_secs * 2):
+        async with ignore_after(max(mempool.refresh_secs * 2, 0.5)):
             await event.wait()
         assert in_caplog(caplog, 'waiting for DB to sync')
         assert len(api.on_mempool_calls) == 2

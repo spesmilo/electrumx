@@ -3823,3 +3823,40 @@ class Quebecoin(AuxPowMixin, Coin):
     TX_PER_BLOCK = 20
     REORG_LIMIT = 2000
     RPC_PORT = 10890
+    
+class Powerblockcoin(NameIndexMixin, AuxPowMixin, Coin):
+    NAME = "Powerblockcoin"
+    SHORTNAME = "PBC"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    P2PKH_VERBYTE = bytes.fromhex("3c")
+    P2SH_VERBYTES = (bytes.fromhex("55"),)
+    WIF_BYTE = bytes.fromhex("bc")
+    GENESIS_HASH = ('00000000a9eab671c3f2753a9d21e449'
+                    'b3c12a1fd62b3a9c388e580617e5a363')
+    DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
+    TX_COUNT = 11000
+    TX_COUNT_HEIGHT = 11000
+    TX_PER_BLOCK = 1
+    RPC_PORT = 47776
+
+    BLOCK_PROCESSOR = block_proc.NameIndexBlockProcessor
+
+    # Name opcodes
+    OP_NAME_NEW = OpCodes.OP_1
+    OP_NAME_FIRSTUPDATE = OpCodes.OP_2
+    OP_NAME_UPDATE = OpCodes.OP_3
+
+    # Valid name prefixes.
+    NAME_NEW_OPS = [OP_NAME_NEW, -1, OpCodes.OP_2DROP]
+    NAME_FIRSTUPDATE_OPS = [OP_NAME_FIRSTUPDATE, "name", -1, -1,
+                            OpCodes.OP_2DROP, OpCodes.OP_2DROP]
+    NAME_UPDATE_OPS = [OP_NAME_UPDATE, "name", -1, OpCodes.OP_2DROP,
+                       OpCodes.OP_DROP]
+    NAME_OPERATIONS = (
+        NAME_NEW_OPS,
+        NAME_FIRSTUPDATE_OPS,
+        NAME_UPDATE_OPS,
+    )
+

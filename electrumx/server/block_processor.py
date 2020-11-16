@@ -25,7 +25,7 @@ from electrumx.lib.util import (
 )
 from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, DB
-from electrumx.server.history import TXNUM_LEN, TXOUTIDX_LEN, TXOUTIDX_PADDING
+from electrumx.server.history import TXNUM_LEN, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum
 
 if TYPE_CHECKING:
     from electrumx.lib.coins import Coin
@@ -457,11 +457,12 @@ class BlockProcessor:
         put_txo_to_spender_map = txo_to_spender_map.__setitem__
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
+        _pack_txnum = pack_txnum
 
         for tx, tx_hash in txs:
             hashXs = []
             append_hashX = hashXs.append
-            tx_numb = to_le_uint64(tx_num)[:TXNUM_LEN]
+            tx_numb = _pack_txnum(tx_num)
 
             # Spend the inputs
             for txin in tx.inputs:
@@ -652,7 +653,7 @@ class BlockProcessor:
         if tx_num is None:
             raise ChainError(f'UTXO {hash_to_hex_str(tx_hash)} / {txout_idx:,d} has '
                              f'no corresponding tx_num in DB')
-        tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
+        tx_numb = pack_txnum(tx_num)
 
         # Key: b'h' + tx_num + txout_idx
         # Value: hashX
@@ -765,10 +766,10 @@ class NameIndexBlockProcessor(BlockProcessor):
         update_touched_hashxs = self.touched_hashxs.update
         hashx_fundings = defaultdict(bytearray)
         to_le_uint32 = pack_le_uint32
-        to_le_uint64 = pack_le_uint64
+        _pack_txnum = pack_txnum
 
         for tx, _tx_hash in txs:
-            tx_numb = to_le_uint64(tx_num)[:TXNUM_LEN]
+            tx_numb = _pack_txnum(tx_num)
             hashXs = []
             append_hashX = hashXs.append
 
@@ -813,13 +814,14 @@ class LTORBlockProcessor(BlockProcessor):
         put_txo_to_spender_map = txo_to_spender_map.__setitem__
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
+        _pack_txnum = pack_txnum
 
         hashXs_by_tx = [set() for _ in txs]
 
         # Add the new UTXOs
         for (tx, tx_hash), hashXs in zip(txs, hashXs_by_tx):
             add_hashXs = hashXs.add
-            tx_numb = to_le_uint64(tx_num)[:TXNUM_LEN]
+            tx_numb = _pack_txnum(tx_num)
 
             for idx, txout in enumerate(tx.outputs):
                 # Ignore unspendable outputs

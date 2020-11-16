@@ -9,18 +9,16 @@
 '''History by script hash (address).'''
 
 import ast
-import bisect
 import time
-from array import array
 from collections import defaultdict
 from typing import TYPE_CHECKING, Type, Optional, Dict, Sequence, Tuple
 import itertools
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
-from electrumx.lib.util import (pack_be_uint16, pack_le_uint64,
-                                unpack_be_uint16_from, unpack_le_uint64,
-                                pack_le_uint32, unpack_le_uint32)
+from electrumx.lib.util import (pack_le_uint64, unpack_le_uint64,
+                                pack_le_uint32, unpack_le_uint32,
+                                pack_be_uint64, unpack_be_uint64)
 
 if TYPE_CHECKING:
     from electrumx.server.storage import Storage
@@ -30,6 +28,14 @@ TXNUM_LEN = 5
 TXNUM_PADDING = bytes(8 - TXNUM_LEN)
 TXOUTIDX_LEN = 3
 TXOUTIDX_PADDING = bytes(4 - TXOUTIDX_LEN)
+
+
+def unpack_txnum(tx_numb: bytes) -> int:
+    return unpack_be_uint64(TXNUM_PADDING + tx_numb)[0]
+
+
+def pack_txnum(tx_num: int) -> bytes:
+    return pack_be_uint64(tx_num)[-TXNUM_LEN:]
 
 
 class History:
@@ -115,14 +121,14 @@ class History:
         hkeys = []
         for db_key, db_val in self.db.iterator(prefix=b'H'):
             tx_numb = db_key[1+HASHX_LEN: 1+HASHX_LEN+TXNUM_LEN]
-            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
+            tx_num = unpack_txnum(tx_numb)
             if tx_num >= utxo_db_tx_count:
                 hkeys.append(db_key)
 
         tkeys = []
         for db_key, db_val in self.db.iterator(prefix=b't'):
             tx_numb = db_val
-            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
+            tx_num = unpack_txnum(tx_numb)
             if tx_num >= utxo_db_tx_count:
                 tkeys.append(db_key)
 
@@ -130,8 +136,8 @@ class History:
         for db_key, db_val in self.db.iterator(prefix=b's'):
             tx_numb1 = db_key[1:1+TXNUM_LEN]
             tx_numb2 = db_val
-            tx_num1, = unpack_le_uint64(tx_numb1 + TXNUM_PADDING)
-            tx_num2, = unpack_le_uint64(tx_numb2 + TXNUM_PADDING)
+            tx_num1 = unpack_txnum(tx_numb1)
+            tx_num2 = unpack_txnum(tx_numb2)
             if max(tx_num1, tx_num2) >= utxo_db_tx_count:
                 skeys.append(db_key)
 
@@ -183,7 +189,7 @@ class History:
             spender_txnum = get_txnum_for_txhash(spender_hash)
             assert spender_txnum is not None
             prev_idx_packed = pack_le_uint32(prev_idx)[:TXOUTIDX_LEN]
-            prev_txnumb = pack_le_uint64(prev_txnum)[:TXNUM_LEN]
+            prev_txnumb = pack_txnum(prev_txnum)
             unflushed_spenders[prev_txnumb+prev_idx_packed] = spender_txnum
 
     def unflushed_memsize(self):
@@ -210,11 +216,11 @@ class History:
                     batch.put(db_key, b'')
             for tx_hash, tx_num in sorted(self._unflushed_txhash_to_txnum_map.items()):
                 db_key = b't' + tx_hash
-                tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
+                tx_numb = pack_txnum(tx_num)
                 batch.put(db_key, tx_numb)
             for prevout, spender_txnum in sorted(self._unflushed_txo_to_spender.items()):
                 db_key = b's' + prevout
-                db_val = pack_le_uint64(spender_txnum)[:TXNUM_LEN]
+                db_val = pack_txnum(spender_txnum)
                 batch.put(db_key, db_val)
             self.hist_db_tx_count = self.hist_db_tx_count_next
             self.write_state(batch)
@@ -242,11 +248,12 @@ class History:
                 prefix = b'H' + hashX
                 for db_key, db_val in self.db.iterator(prefix=prefix, reverse=True):
                     tx_numb = db_key[1+HASHX_LEN: 1+HASHX_LEN+TXNUM_LEN]
-                    tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
+                    tx_num = unpack_txnum(tx_numb)
                     if tx_num >= tx_count:
                         nremoves_addr += 1
                         deletes.append(db_key)
                     else:
+                        # note: we can break now, due to 'reverse=True' and txnums being big endian
                         break
                 for key in deletes:
                     batch.delete(key)
@@ -256,7 +263,7 @@ class History:
                 assert len(prev_idx) == TXOUTIDX_LEN
                 prev_txnum = get_txnum_for_txhash(prev_hash)
                 assert prev_txnum is not None
-                prev_txnumb = pack_le_uint64(prev_txnum)[:TXNUM_LEN]
+                prev_txnumb = pack_txnum(prev_txnum)
                 db_key = b's' + prev_txnumb + prev_idx
                 batch.delete(db_key)
             for tx_hash in sorted(tx_hashes):
@@ -282,7 +289,7 @@ class History:
                 break
             prev_txnumb = db_key[1+HASHX_LEN: 1+HASHX_LEN+TXNUM_LEN]
             prev_idx_packed = db_key[-TXOUTIDX_LEN:]
-            prev_txnum, = unpack_le_uint64(prev_txnumb + TXNUM_PADDING)
+            prev_txnum = unpack_txnum(prev_txnumb)
             prev_idx, = unpack_le_uint32(prev_idx_packed + TXOUTIDX_PADDING)
             txnum_set.add(prev_txnum)
             spender_txnum = self.get_spender_txnum_for_txo(prev_txnum, prev_idx)
@@ -299,7 +306,7 @@ class History:
             db_key = b't' + tx_hash
             tx_numb = self.db.get(db_key)
             if tx_numb:
-                tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
+                tx_num = unpack_txnum(tx_numb)
         return tx_num
 
     def get_spender_txnum_for_txo(self, prev_txnum: int, txout_idx: int) -> Optional[int]:
@@ -307,12 +314,12 @@ class History:
         If the outpoint is unspent, or even if it never existed (!), returns None.
         '''
         prev_idx_packed = pack_le_uint32(txout_idx)[:TXOUTIDX_LEN]
-        prev_txnumb = pack_le_uint64(prev_txnum)[:TXNUM_LEN]
+        prev_txnumb = pack_txnum(prev_txnum)
         prevout = prev_txnumb + prev_idx_packed
         spender_txnum = self._unflushed_txhash_to_txnum_map.get(prevout)
         if spender_txnum is None:
             db_key = b's' + prevout
             spender_txnumb = self.db.get(db_key)
             if spender_txnumb:
-                spender_txnum, = unpack_le_uint64(spender_txnumb + TXNUM_PADDING)
+                spender_txnum = unpack_txnum(spender_txnumb)
         return spender_txnum

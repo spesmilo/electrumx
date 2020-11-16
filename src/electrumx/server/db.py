@@ -31,7 +31,7 @@ from electrumx.lib.util import (
 from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
-    History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING,
+    History, TXNUM_LEN, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
 )
 
 if TYPE_CHECKING:
@@ -736,7 +736,7 @@ class DB:
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
                 txout_idx, = unpack_le_uint32(db_key[-TXOUTIDX_LEN:] + TXOUTIDX_PADDING)
                 tx_numb = db_key[-TXOUTIDX_LEN-TXNUM_LEN:-TXOUTIDX_LEN]
-                tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
+                tx_num = unpack_txnum(tx_numb)
                 value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
                 utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
@@ -757,7 +757,7 @@ class DB:
         tx_num = self.fs_txnum_for_txhash(tx_hash)
         if tx_num is None:
             return None, None
-        tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
+        tx_numb = pack_txnum(tx_num)
 
         # Key: b'h' + tx_num + txout_idx
         # Value: hashX

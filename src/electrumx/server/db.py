@@ -29,7 +29,7 @@ from electrumx.lib.util import (
 )
 from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
-    History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING,
+    History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
 )
 
 if TYPE_CHECKING:
@@ -68,7 +68,7 @@ class DB:
     it was shutdown uncleanly.
     '''
 
-    DB_VERSIONS = (9, )  # bump1
+    DB_VERSIONS = (10, )
     DB_STATE_KEY = b'state'
 
     utxo_db: Optional['Storage']
@@ -663,7 +663,7 @@ class DB:
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
                 txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN-TXOUTIDX_LEN:-TXNUM_LEN] + TXOUTIDX_PADDING)
-                tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + TXNUM_PADDING)
+                tx_num = unpack_txnum(db_key[-TXNUM_LEN:])
                 value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
                 utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
@@ -697,7 +697,7 @@ class DB:
                 # Find which entry, if any, the TX_HASH matches.
                 for db_key, hashX in self.utxo_db.iterator(prefix=prefix):
                     tx_num_packed = db_key[-TXNUM_LEN:]
-                    tx_num, = unpack_le_uint64(tx_num_packed + TXNUM_PADDING)
+                    tx_num = unpack_txnum(tx_num_packed)
                     hash, _height = self.fs_tx_hash(tx_num)
                     if hash == tx_hash:
                         return hashX, idx_packed + tx_num_packed

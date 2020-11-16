@@ -24,7 +24,7 @@ from electrumx.lib.util import (
 )
 from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
-from electrumx.server.history import TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING
+from electrumx.server.history import TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum
 
 if TYPE_CHECKING:
     from electrumx.lib.coins import Coin, Block
@@ -454,12 +454,13 @@ class BlockProcessor:
         append_hashXs = hashXs_by_tx.append
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
+        _pack_txnum = pack_txnum
 
         for tx in txs:
             tx_hash = tx.txid
             hashXs = []
             append_hashX = hashXs.append
-            tx_numb = to_le_uint64(tx_num)[:TXNUM_LEN]
+            tx_numb = _pack_txnum(tx_num)
 
             # Spend the inputs
             for txin in tx.inputs:
@@ -646,7 +647,7 @@ class BlockProcessor:
             tx_num_packed = hdb_key[-TXNUM_LEN:]
 
             if len(candidates) > 1:
-                tx_num, = unpack_le_uint64(tx_num_packed + TXNUM_PADDING)
+                tx_num = unpack_txnum(tx_num_packed)
                 hash, _height = self.db.fs_tx_hash(tx_num)
                 if hash != tx_hash:
                     assert hash is not None  # Should always be found
@@ -793,6 +794,7 @@ class LTORBlockProcessor(BlockProcessor):
         update_touched = self.touched.update
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
+        _pack_txnum = pack_txnum
 
         hashXs_by_tx = [set() for _ in txs]
 
@@ -800,7 +802,7 @@ class LTORBlockProcessor(BlockProcessor):
         for tx, hashXs in zip(txs, hashXs_by_tx):
             tx_hash = tx.txid
             add_hashXs = hashXs.add
-            tx_numb = to_le_uint64(tx_num)[:TXNUM_LEN]
+            tx_numb = _pack_txnum(tx_num)
 
             for idx, txout in enumerate(tx.outputs):
                 # Ignore unspendable outputs

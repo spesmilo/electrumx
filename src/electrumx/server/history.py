@@ -17,8 +17,10 @@ from typing import TYPE_CHECKING, Type, Optional
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
-from electrumx.lib.util import (pack_be_uint16, pack_le_uint64,
-                                unpack_be_uint16_from, unpack_le_uint64)
+from electrumx.lib.util import (
+    pack_le_uint32, unpack_le_uint32,
+    pack_be_uint64, unpack_be_uint64,
+)
 
 if TYPE_CHECKING:
     from electrumx.server.storage import Storage
@@ -30,9 +32,17 @@ TXOUTIDX_LEN = 3
 TXOUTIDX_PADDING = bytes(4 - TXOUTIDX_LEN)
 
 
+def unpack_txnum(tx_numb: bytes) -> int:
+    return unpack_be_uint64(TXNUM_PADDING + tx_numb)[0]
+
+
+def pack_txnum(tx_num: int) -> bytes:
+    return pack_be_uint64(tx_num)[-TXNUM_LEN:]
+
+
 class History:
 
-    DB_VERSIONS = (3, )
+    DB_VERSIONS = (4, )
     DB_STATE_KEY = b'state\0\0'
 
     db: Optional['Storage']
@@ -103,7 +113,7 @@ class History:
         keys = []
         for db_key, db_val in self.db.iterator(prefix=b'H'):
             tx_numb = db_key[-TXNUM_LEN:]
-            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
+            tx_num = unpack_txnum(tx_numb)
             if tx_num >= utxo_db_tx_count:
                 keys.append(db_key)
 
@@ -132,7 +142,7 @@ class History:
         count = 0
         tx_num = None
         for tx_num, hashXs in enumerate(hashXs_by_tx, start=first_tx_num):
-            tx_numb = pack_le_uint64(tx_num)[:TXNUM_LEN]
+            tx_numb = pack_txnum(tx_num)
             hashXs = set(hashXs)
             for hashX in hashXs:
                 unflushed[hashX] += tx_numb
@@ -179,11 +189,12 @@ class History:
                 prefix = b'H' + hashX
                 for db_key, db_val in self.db.iterator(prefix=prefix, reverse=True):
                     tx_numb = db_key[-TXNUM_LEN:]
-                    tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
+                    tx_num = unpack_txnum(tx_numb)
                     if tx_num >= tx_count:
                         nremoves += 1
                         deletes.append(db_key)
                     else:
+                        # note: we can break now, due to 'reverse=True' and txnums being big endian
                         break
                 for key in deletes:
                     batch.delete(key)
@@ -204,6 +215,6 @@ class History:
             tx_numb = db_key[-TXNUM_LEN:]
             if limit == 0:
                 return
-            tx_num, = unpack_le_uint64(tx_numb + TXNUM_PADDING)
+            tx_num = unpack_txnum(tx_numb)
             yield tx_num
             limit -= 1

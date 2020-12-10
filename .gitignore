@@ -9,6 +9,7 @@ docs/_build
 /build
 /dist
 /electrumx.egg-info
+/e_x.egg-info
 .vscode/
 .mypy_cache/
 .idea/

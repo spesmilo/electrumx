@@ -1,5 +1,5 @@
 import setuptools
-version = '1.15.0'
+version = '1.16.0'
 
 setuptools.setup(
     name='e-x',

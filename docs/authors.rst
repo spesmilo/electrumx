@@ -5,7 +5,11 @@ Authors
 
 * Neil Booth
 
-  Creator and maintainer.
+  Original creator, past maintainer.
+
+* Electrum developers
+
+  Current maintainers.
 
 * Johann Bauer
 

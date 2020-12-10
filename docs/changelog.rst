@@ -199,7 +199,7 @@ This fork maintained by:
 
 .. _#5:   https://github.com/spesmilo/electrumx/pull/5
 .. _#11:  https://github.com/spesmilo/electrumx/pull/11
-.. _#22:  https://github.com/spesmilo/electrumx/issue/22
+.. _#22:  https://github.com/spesmilo/electrumx/issues/22
 .. _#24:  https://github.com/spesmilo/electrumx/pull/24
 .. _#35:  https://github.com/spesmilo/electrumx/pull/35
 .. _#67:  https://github.com/spesmilo/electrumx/pull/67

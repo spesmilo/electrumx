@@ -968,7 +968,9 @@ server.version
 ==============
 
 Identify the client to the server and negotiate the protocol version.
-Only the first :func:`server.version` message is accepted.
+The first :func:`server.version` message performs the protocol version
+negotiation as described below. Subsequent calls simply return the negotiated
+version.
 
 **Signature**
 

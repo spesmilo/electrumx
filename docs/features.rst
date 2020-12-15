@@ -39,9 +39,7 @@ blockchain indexer:
   and history.  Electrum Server stores full transaction hash and
   height for each UTXO, and does the same in its pruned history.  In
   contrast ElectrumX just stores the transaction number in the linear
-  history of transactions.  For at least another 5 years this
-  transaction number will fit in a 4-byte integer, and when necessary
-  expanding to 5 or 6 bytes is trivial.  ElectrumX can determine block
+  history of transactions.  ElectrumX can determine block
   height from a simple binary search of tx counts stored on disk.
   ElectrumX stores historical transaction hashes in a linear array on
   disk.
@@ -59,30 +57,3 @@ blockchain indexer:
 
 Python's :mod:`asyncio` means ElectrumX has no (direct) use for threads
 and associated complications.
-
-Roadmap
-=======
-
-* break ElectrumX up into simple services that initially can be run in
-  separate processes on a single host.  Then support running them on
-  different hosts, and finally support sharding.  With this we can
-  take advantage of multiple cores and hosts, and scale to much larger
-  block sizes.  This should solve several issues with the current
-  history storage mechanism.
-* fully asynchronous operation.  At present too much is synchronous, such
-  as file system access.
-* protocol improvements targeting better client and server scalability
-  to large wallets (100k addresses) and address histories.  Some
-  aspects of the current protocol are very inefficient.
-* investigate speaking the Bitcoin protocol and connecting to the
-  Bitcoin network directly for some queries.  This could lead to
-  ElectrumX being runnable with a node without a tx index, or a
-  pruning node, or not needing to run a node at all.  ElectrumX would
-  store all blocks itself and index the transactions therein.
-* lifting internal limits such as maximum 4 billion transactions
-* supporting better user privacy.  I believe significantly improved
-  user address privacy might be possible with a simple addition to the
-  protocol, and assuming a server network of which a reasonable
-  fraction (40%?) are cooperative and non-colluding
-* new features such as possibly adding label or wallet server
-  functionality

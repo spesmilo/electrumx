@@ -1143,7 +1143,7 @@ class ElectrumX(SessionBase):
 
         Status is a hex string, but must be None if there is no history.
         '''
-        # Note history is ordered and mempool unordered in electrum-server
+        # Note both confirmed history and mempool history are ordered
         # For mempool, height is -1 if it has unconfirmed inputs, otherwise 0
         db_history, cost = await self.session_mgr.limited_history(hashX)
         mempool = await self.mempool.transaction_summaries(hashX)
@@ -1234,7 +1234,7 @@ class ElectrumX(SessionBase):
         return await self.get_balance(hashX)
 
     async def unconfirmed_history(self, hashX):
-        # Note unconfirmed history is unordered in electrum-server
+        # Note both confirmed history and mempool history are ordered
         # height is -1 if it has unconfirmed inputs, otherwise 0
         result = [{'tx_hash': hash_to_hex_str(tx.hash),
                    'height': -tx.has_unconfirmed_inputs,
@@ -1244,7 +1244,7 @@ class ElectrumX(SessionBase):
         return result
 
     async def confirmed_and_unconfirmed_history(self, hashX):
-        # Note history is ordered but unconfirmed is unordered in e-s
+        # Note both confirmed history and mempool history are ordered
         history, cost = await self.session_mgr.limited_history(hashX)
         self.bump_cost(cost)
         conf = [{'tx_hash': hash_to_hex_str(tx_hash), 'height': height}

@@ -369,8 +369,9 @@ hashes>`.
 
 **Result**
 
-  A list of mempool transactions in arbitrary order.  Each mempool
-  transaction is a dictionary with the following keys:
+  A list of mempool transactions, ordered by `(-height, tx_hash)`
+  (see :ref:`below <mempool_tx_order>`).
+  Each mempool transaction is a dictionary with the following keys:
 
   * *height*
 
@@ -383,6 +384,14 @@ hashes>`.
   * *fee*
 
     The transaction fee in minimum coin units (satoshis).
+
+
+  .. _mempool_tx_order:
+
+  Mempool txs are ordered by `(-height, tx_hash)`, that is,
+  ``0`` height txs come before ``-1`` height txs, and secondarily the
+  txid (with endianness same as displayed hex) is used to arrive at
+  a canonical ordering.
 
 **Result Example**
 

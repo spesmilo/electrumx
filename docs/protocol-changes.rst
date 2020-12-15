@@ -178,6 +178,10 @@ Changes
   * Breaking change for the version negotiation: we now mandate that
     the :func:`server.version` message must be the first message sent.
     That is, version negotiation must happen before any other messages.
+  * The status of a scripthash, :func:`blockchain.scripthash.get_mempool`,
+    and :func:`blockchain.scripthash.get_history` previously did not define
+    an order for mempool transactions. We now mandate that these are sorted
+    by `(-height, tx_hash)`.
   * The previously required *height* argument for
     :func:`blockchain.transaction.get_merkle` is now optional.
   * Optional *mode* argument added to :func:`blockchain.estimatefee`.

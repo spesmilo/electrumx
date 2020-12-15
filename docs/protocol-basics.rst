@@ -153,10 +153,11 @@ block)
 
   * ``height`` is the height of the block it is in.
 
-3. Next, with mempool transactions in any order, append a similar
-string for those transactions, but where **height** is ``-1`` if the
-transaction has at least one unconfirmed input, and ``0`` if all
-inputs are confirmed.
+3. Next, with mempool transactions ordered
+:ref:`as described here <mempool_tx_order>`,
+append a similar string for those transactions,
+but where **height** is ``-1`` if the transaction has at least
+one unconfirmed input, and ``0`` if all inputs are confirmed.
 
 4. The :dfn:`status` of the script hash is the :func:`sha256` hash of the
 full string expressed as a hexadecimal string, or :const:`null` if the

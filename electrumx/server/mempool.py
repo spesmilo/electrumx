@@ -470,12 +470,15 @@ class MemPool:
         return result
 
     async def transaction_summaries(self, hashX):
-        '''Return a list of MemPoolTxSummary objects for the hashX.'''
+        '''Return a list of MemPoolTxSummary objects for the hashX,
+        sorted as expected by protocol methods.
+        '''
         result = []
         for tx_hash in self.hashXs.get(hashX, ()):
             tx = self.txs[tx_hash]
             has_ui = any(hash in self.txs for hash, idx in tx.prevouts)
             result.append(MemPoolTxSummary(tx_hash, tx.fee, has_ui))
+        result.sort(key=lambda x: (x.has_unconfirmed_inputs, x.hash))
         return result
 
     async def unordered_UTXOs(self, hashX):

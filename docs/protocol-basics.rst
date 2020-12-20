@@ -68,14 +68,12 @@ revision number.
 
 A party to a connection will speak all protocol versions in a range,
 say from `protocol_min` to `protocol_max`, which may be the same.
-When a connection is made, both client and server must initially
-assume the protocol to use is their own `protocol_min`.
 
-The client should send a :func:`server.version` RPC call as early as
-possible in order to negotiate the precise protocol version; see its
-description for more detail.  All responses received in the stream
-from and including the server's response to this call will use its
-negotiated protocol version.
+The client must send a :func:`server.version` RPC call as the first
+message on the wire, in order to negotiate the precise protocol
+version; see its description for more detail.
+All responses received in the stream from and including the server's
+response to this call will use its negotiated protocol version.
 
 
 .. _script hashes:
@@ -138,8 +136,60 @@ block public key.
 
 .. _status:
 
-Status
-------
+Status (protocol 1.5 and later)
+-------------------------------
+
+To calculate the `status` of a :ref:`script hash <script hashes>` (or
+address):
+
+1. Consider all transactions touching the script hash (both those spending
+from it, and those funding it), both confirmed and unconfirmed (in mempool).
+
+2. Order confirmed transactions by increasing height (and position in the
+block if there are more than one in a block).
+
+3. For mempool transactions, we define **height** to be ``-1`` if the
+transaction has at least one unconfirmed input, and ``0`` if all inputs are
+confirmed.
+
+4. Order mempool transactions by ``(-height, tx_hash)``, that is,
+``0`` height txs come before ``-1`` height txs, and secondarily the
+txid (in network byteorder) is used to arrive at a canonical ordering.
+
+5. For each confirmed tx, form a bytearray: ``tx_hash+height``, where:
+
+  * ``tx_hash`` is the 32-byte transaction hash in network byteorder
+    (reverse of human display endianness)
+
+  * ``height`` is the height of the block the tx is included in,
+    serialised as 8-bytes, little-endian, signed (two's complement)
+
+6. For each mempool tx, form a bytearray: ``tx_hash+height+fee``, where:
+
+  * ``tx_hash`` is the 32-byte transaction hash in network byteorder
+    (reverse of human display endianness)
+
+  * ``height`` is either ``0`` or ``-1``, as defined above,
+    serialised as 8-bytes, little-endian, signed (two's complement)
+
+  * ``fee`` is the transaction fee in minimum coin units (satoshis),
+    serialised as 8-bytes, little-endian, unsigned
+
+7. The :dfn:`status` of the script hash is defined by the following recursion:
+
+  * ``status_0`` is 32 zero bytes
+
+  * ``status_n`` is calculated as ``sha256(status_(n-1) + tx_n)``
+
+  That is, for a script hash with an empty history, the status is ``status_0``.
+  If the history contains ``n`` txs, the status is ``status_n``. The ``tx_n``
+  series consists of, first the confirmed txs touching the script hash,
+  followed by the mempool txs touching it; formatted as described above, as
+  bytearrays of length 40 or 48.
+
+
+Old Status (before protocol 1.5)
+--------------------------------
 
 To calculate the `status` of a :ref:`script hash <script hashes>` (or
 address):

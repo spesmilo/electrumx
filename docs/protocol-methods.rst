@@ -161,11 +161,18 @@ be confirmed within a certain number of blocks.
 
 **Signature**
 
-  .. function:: blockchain.estimatefee(number)
+  .. function:: blockchain.estimatefee(number, mode=None)
+  .. versionchanged:: 1.5
+     *mode* argument added
 
   *number*
 
     The number of blocks to target for confirmation.
+
+  *mode*
+
+    A string to pass to the bitcoind *estimatesmartfee* RPC as the
+    *estimate_mode* parameter. Optional.
 
 **Result**
 
@@ -294,57 +301,115 @@ blockchain.scripthash.get_history
 Return the confirmed and unconfirmed history of a :ref:`script hash
 <script hashes>`.
 
+A block interval ``[from_height, to_height[`` can be specified both by the
+client in the request if they do not want the whole history, and by the server
+in the response if the history was too large to fit.
+In the latter case, the client can tell they only received partial data
+by inspecting the *from_height* and *to_height* fields of the response,
+and initiate further requests for the missing interval.
+
 **Signature**
 
-  .. function:: blockchain.scripthash.get_history(scripthash)
+  .. function:: blockchain.scripthash.get_history(scripthash, from_height=0, to_height=-1,
+                                                  client_statushash=None, client_height=None)
   .. versionadded:: 1.1
+  .. versionchanged:: 1.5
+     significant changes to allow pagination of history
+     (added from_height, to_height, client_height, client_statushash arguments)
+     (return value changed to dict from list)
 
   *scripthash*
 
     The script hash as a hexadecimal string.
 
+  *from_height*
+
+    The first block height (inclusive) of the interval the client is interested in.
+    A non-negative integer. Optional.
+
+  *to_height*
+
+    The last block height (exclusive) of the interval the client is interested in.
+    A non-negative integer, or ``-1``. Optional. A value of ``-1`` means that the interval
+    extends to the chaintip and also includes unconfirmed/mempool transactions
+    (otherwise mempool txs are not included).
+    ``from_height <= to_height`` must hold (for the purposes of this inequality
+    and others here, treat a value of ``-1`` as infinity).
+
+  *client_statushash*
+
+    The :ref:`status <status>` of the script hash according to the client, based
+    on the history it currently has. Optional.
+
+  *client_height*
+
+    The corresponding block height for *client_statushash*, i.e. the height of the
+    last tx that was included when computing *client_statushash*.
+    This key is present if and only if the *client_statushash* key is present.
+    A non-negative integer.
+    Note that this means *client_statushash* cannot include mempool txs.
+    ``from_height <= client_height < to_height`` must hold.
+
+If the request contains *client_statushash* and *client_height*,
+the server can use them to verify the history the client already has.
+The server can compute the (potentially partial) status for the script hash up to
+and including *client_height*. To make *client_height* unambiguous, if there are
+multiple transactions included at that block height, all of them are included in the
+status calculation.
+If the server can reproduce *client_statushash*, the response can skip the
+transactions the client already knows about. The server will signal this using
+the *from_height* field in the response.
+
+**Note** It is recommended that the client sets *client_height* to a reorg-safe
+height, i.e. calculating *client_statushash* without txs in the last e.g. 200 blocks.
+
+
 **Result**
 
-  A list of confirmed transactions in blockchain order, with the
-  output of :func:`blockchain.scripthash.get_mempool` appended to the
-  list.  Each confirmed transaction is a dictionary with the following
-  keys:
+  The output is a dictionary, always containing all three of the following items:
 
-  * *height*
+  * *from_height*
 
-    The integer height of the block the transaction was confirmed in.
+    The first block height (inclusive) of the interval covered by the *history* item.
+    If *client_statushash* was not provided or the server could not reproduce it,
+    the value is set to the corresponding value from the request,
+    i.e. the server sets *from_height* to whatever the client set it to.
+    If *client_statushash* was provided and the server could reproduce it,
+    the value is set to ``client_height+1``.
+    A non-negative integer.
 
-  * *tx_hash*
+  * *to_height*
 
-    The transaction hash in hexadecimal.
+    The last block height (exclusive) of the interval covered by the *history* item.
+    If the value is lower than requested (original *to_height*), that indicates
+    the server truncated the history (usually because it was too long), and the client
+    needs to send a new request with a different block interval if it wants the rest.
+    A non-negative integer.
+    ``from_height <= to_height`` must hold.
 
-  See :func:`blockchain.scripthash.get_mempool` for how mempool
-  transactions are returned.
+  * *history*
+
+    A list of confirmed transactions in blockchain order, for the interval
+    specified by the other keys (*from_height* and *to_height*).
+    If ``to_height==-1``, the output of :func:`blockchain.scripthash.get_mempool`
+    is appended to the list.
+    Each confirmed transaction is a dictionary with the following
+    keys:
+
+    * *height*
+
+      The integer height of the block the transaction was confirmed in.
+
+    * *tx_hash*
+
+      The transaction hash in hexadecimal.
+
+    See :func:`blockchain.scripthash.get_mempool` for how mempool
+    transactions are returned.
 
 **Result Examples**
 
-::
-
-  [
-    {
-      "height": 200004,
-      "tx_hash": "acc3758bd2a26f869fcc67d48ff30b96464d476bca82c1cd6656e7d506816412"
-    },
-    {
-      "height": 215008,
-      "tx_hash": "f3e1bf48975b8d6060a9de8884296abb80be618dc00ae3cb2f6cee3085e09403"
-    }
-  ]
-
-::
-
-  [
-    {
-      "fee": 20000,
-      "height": 0,
-      "tx_hash": "9fbed79a1e970343fcd39f4a2d830a6bde6de0754ed2da70f489d0303ed558ec"
-    }
-  ]
+TODO
 
 blockchain.scripthash.get_mempool
 =================================
@@ -356,6 +421,8 @@ hashes>`.
 
   .. function:: blockchain.scripthash.get_mempool(scripthash)
   .. versionadded:: 1.1
+  .. versionchanged:: 1.5
+     results must be sorted (previously undefined order)
 
   *scripthash*
 
@@ -363,8 +430,9 @@ hashes>`.
 
 **Result**
 
-  A list of mempool transactions in arbitrary order.  Each mempool
-  transaction is a dictionary with the following keys:
+  A list of mempool transactions. The order is the same as when computing the
+  :ref:`status <status>` of the script hash.
+  Each mempool transaction is a dictionary with the following keys:
 
   * *height*
 
@@ -468,7 +536,7 @@ Subscribe to a script hash.
 
 **Result**
 
-  The :ref:`status <status>` of the script hash.
+  The :ref:`status <status>` of the script hash as a hexadecimal string.
 
 **Notifications**
 
@@ -498,6 +566,109 @@ Unsubscribe from a script hash, preventing future notifications if its :ref:`sta
   Returns :const:`True` if the scripthash was subscribed to, otherwise :const:`False`.
   Note that :const:`False` might be returned even for something subscribed to earlier,
   because the server can drop subscriptions in rare circumstances.
+
+blockchain.outpoint.subscribe
+=============================
+
+Subscribe to a transaction outpoint (TXO), to get notifications about its status.
+A status involves up to two transactions: the funding transaction that creates
+the TXO (as one of its outputs), and the spending transaction that uses it
+as an input (spends it).
+
+**Signature**
+
+  .. function:: blockchain.outpoint.subscribe(tx_hash, txout_idx)
+  .. versionadded:: 1.5
+
+  *tx_hash*
+
+    The TXID of the funding transaction as a hexadecimal string.
+    (sometimes called prevout_hash, in inputs)
+
+  *txout_idx*
+
+    The output index, a non-negative integer. (sometimes called prevout_n, in inputs)
+
+**Result**
+
+  The status of the TXO, taking the mempool into consideration.
+  The output is a dictionary, containing 0, 1, or 3 of the following items:
+
+  * *height*
+
+    The integer height of the block the funding transaction was confirmed in.
+    ``0`` if the funding transaction is in the mempool.
+    This key must be present if and only if there exists a funding transaction
+    (either in the best chain or in the mempool), regardless of spentness.
+
+  * *spender_txhash*
+
+    The TXID of the spending transaction as a hexadecimal string.
+    This key is present if and only if there exists a spending transaction
+    (either in the best chain or in the mempool).
+
+  * *spender_height*
+
+    The integer height of the block the spending transaction was confirmed in.
+    ``0`` if the spending transaction is in the mempool.
+    This key is present if and only if the *spender_txhash* key is present.
+
+
+**Result Examples**
+
+::
+
+  {}
+
+::
+
+  {
+    "height": 1866594
+  }
+
+::
+
+  {
+    "height": 1866594,
+    "spender_txhash": "4a19a360f71814c566977114c49ccfeb8a7e4719eda26cee27fa504f3f02ca09",
+    "spender_height": 0
+  }
+
+**Notifications**
+
+  The client will receive a notification when the `status` of the outpoint changes.
+  The protocol does not guarantee but the client might also receive a notification
+  if the status does not change but there was a reorg.
+  Its signature is
+
+    .. function:: blockchain.outpoint.subscribe([tx_hash, txout_idx], status)
+       :noindex:
+
+blockchain.outpoint.unsubscribe
+===============================
+
+Unsubscribe from a transaction outpoint (TXO), preventing future notifications
+if its `status` changes.
+
+**Signature**
+
+  .. function:: blockchain.outpoint.unsubscribe(tx_hash, txout_idx)
+  .. versionadded:: 1.5
+
+  *tx_hash*
+
+    The TXID of the funding transaction as a hexadecimal string.
+
+  *txout_idx*
+
+    The output index, a non-negative integer.
+
+**Result**
+
+  Returns :const:`True` if the outpoint was subscribed to, otherwise :const:`False`.
+  Note that :const:`False` might be returned even for something subscribed to earlier,
+  because the server can drop subscriptions in rare circumstances.
+
 
 blockchain.transaction.broadcast
 ================================
@@ -626,7 +797,9 @@ and height.
 
 **Signature**
 
-  .. function:: blockchain.transaction.get_merkle(tx_hash, height)
+  .. function:: blockchain.transaction.get_merkle(tx_hash, height=None)
+  .. versionchanged:: 1.5
+     *height* argument made optional (previously mandatory)
 
   *tx_hash*
 
@@ -634,7 +807,7 @@ and height.
 
   *height*
 
-    The height at which it was confirmed, an integer.
+    Optionally, the height at which it was confirmed, an integer.
 
 **Result**
 
@@ -969,6 +1142,7 @@ server.version
 ==============
 
 Identify the client to the server and negotiate the protocol version.
+This must be the first message sent on the wire.
 Only the first :func:`server.version` message is accepted.
 
 **Signature**

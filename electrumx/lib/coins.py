@@ -3856,3 +3856,21 @@ class Quebecoin(AuxPowMixin, Coin):
     TX_PER_BLOCK = 20
     REORG_LIMIT = 2000
     RPC_PORT = 10890
+
+class Beyondcoin(Coin):
+    NAME = "Beyondcoin"
+    SHORTNAME = "BYND"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("ff88b21e")
+    XPRV_VERBYTES = bytes.fromhex("ff88ade4")
+    P2PKH_VERBYTE = bytes.fromhex("19")
+    P2SH_VERBYTES = [bytes.fromhex("1a"), bytes.fromhex("05")]
+    WIF_BYTE = bytes.fromhex("b0")
+    GENESIS_HASH = ('0a9e3b5fce3aee6e04f06dfd6ad380a6'
+                    'c0f9d8420f53a4ca97845756ee5d56e7')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 287000
+    TX_COUNT_HEIGHT = 133700
+    TX_PER_BLOCK = 2
+    RPC_PORT = 10332
+    REORG_LIMIT = 5000

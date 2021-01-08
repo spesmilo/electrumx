@@ -162,7 +162,7 @@ txid (in network byteorder) is used to arrive at a canonical ordering.
     (reverse of human display endianness)
 
   * ``height`` is the height of the block the tx is included in,
-    serialised as 8-bytes, little-endian, signed (two's complement)
+    serialised as 4-bytes, little-endian, signed (two's complement)
 
 6. For each mempool tx, form a bytearray: ``tx_hash+height+fee``, where:
 
@@ -170,7 +170,7 @@ txid (in network byteorder) is used to arrive at a canonical ordering.
     (reverse of human display endianness)
 
   * ``height`` is either ``0`` or ``-1``, as defined above,
-    serialised as 8-bytes, little-endian, signed (two's complement)
+    serialised as 4-bytes, little-endian, signed (two's complement)
 
   * ``fee`` is the transaction fee in minimum coin units (satoshis),
     serialised as 8-bytes, little-endian, unsigned
@@ -185,7 +185,7 @@ txid (in network byteorder) is used to arrive at a canonical ordering.
   If the history contains ``n`` txs, the status is ``status_n``. The ``tx_n``
   series consists of, first the confirmed txs touching the script hash,
   followed by the mempool txs touching it; formatted as described above, as
-  bytearrays of length 40 or 48.
+  bytearrays of length 36 or 44.
 
 
 Old Status (before protocol 1.5)

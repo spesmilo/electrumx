@@ -172,7 +172,9 @@ be confirmed within a certain number of blocks.
   *mode*
 
     A string to pass to the bitcoind *estimatesmartfee* RPC as the
-    *estimate_mode* parameter. Optional.
+    *estimate_mode* parameter. Optional. If omitted, the corresponding
+    parameter to the bitcoind RPC is also omitted, i.e. the default
+    value is determined by bitcoind.
 
 **Result**
 
@@ -577,7 +579,7 @@ as an input (spends it).
 
 **Signature**
 
-  .. function:: blockchain.outpoint.subscribe(tx_hash, txout_idx)
+  .. function:: blockchain.outpoint.subscribe(tx_hash, txout_idx, spk_hint=None)
   .. versionadded:: 1.5
 
   *tx_hash*
@@ -589,6 +591,12 @@ as an input (spends it).
 
     The output index, a non-negative integer. (sometimes called prevout_n, in inputs)
 
+  *spk_hint*
+
+    The scriptPubKey (output script) corresponding to the outpoint, as a hexadecimal
+    string. This is optional, and if provided might be used by the server to find
+    the outpoint. The behaviour is undefined if an incorrect value is provided.
+
 **Result**
 
   The status of the TXO, taking the mempool into consideration.
@@ -597,7 +605,8 @@ as an input (spends it).
   * *height*
 
     The integer height of the block the funding transaction was confirmed in.
-    ``0`` if the funding transaction is in the mempool.
+    If the funding transaction is in the mempool; the value is
+    ``0`` if all its inputs are confirmed, and ``-1`` otherwise.
     This key must be present if and only if there exists a funding transaction
     (either in the best chain or in the mempool), regardless of spentness.
 
@@ -610,7 +619,8 @@ as an input (spends it).
   * *spender_height*
 
     The integer height of the block the spending transaction was confirmed in.
-    ``0`` if the spending transaction is in the mempool.
+    If the spending transaction is in the mempool; the value is
+    ``0`` if all its inputs are confirmed, and ``-1`` otherwise.
     This key is present if and only if the *spender_txhash* key is present.
 
 

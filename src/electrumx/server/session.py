@@ -965,6 +965,7 @@ class SessionBase(RPCSessionWithTaskGroup):
         self.coin = self.env.coin
         self.client = 'unknown'
         self.sv_seen = False  # has seen 'server.version' message?
+        self.sv_negotiated = asyncio.Event()  # done negotiating protocol version
         self.anon_logs = self.env.anon_logs
         self.txs_sent = 0
         self.log_me = SessionBase.log_new
@@ -1034,6 +1035,9 @@ class SessionBase(RPCSessionWithTaskGroup):
             await self._do_crash_old_electrum_client()
             raise ReplyAndDisconnect(RPCError(
                 BAD_REQUEST, f'use server.version to identify client'))
+        # Wait for version negotiation to finish before processing other messages.
+        if method != 'server.version' and not self.sv_negotiated.is_set():
+            await self.sv_negotiated.wait()
 
         self.session_mgr._method_counts[method] += 1
         coro = handler_invocation(handler, request)()
@@ -1525,6 +1529,7 @@ class ElectrumX(SessionBase):
                 BAD_REQUEST, f'unsupported protocol version: {protocol_version}'))
         self.set_request_handlers(ptuple)
 
+        self.sv_negotiated.set()
         return electrumx.version, self.protocol_version_string()
 
     async def transaction_broadcast(self, raw_tx):
@@ -1700,6 +1705,7 @@ class LocalRPC(SessionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.sv_seen = True
+        self.sv_negotiated.set()
         self.client = 'RPC'
         self.connection.max_response_size = 0
 

@@ -1372,10 +1372,16 @@ class ElectrumX(SessionBase):
         hashX = scripthash_to_hashX(scripthash)
         return self.unsubscribe_hashX(hashX) is not None
 
-    async def txoutpoint_subscribe(self, tx_hash, txout_idx):
-        '''Subscribe to an outpoint.'''
+    async def txoutpoint_subscribe(self, tx_hash, txout_idx, spk_hint=None):
+        '''Subscribe to an outpoint.
+
+        spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
+                  other servers, but we don't need and hence ignore it.
+        '''
         tx_hash = assert_tx_hash(tx_hash)
         txout_idx = non_negative_integer(txout_idx)
+        if spk_hint is not None:
+            assert_hex_str(spk_hint)
         spend_status = await self.txoutpoint_status(tx_hash, txout_idx)
         self.txoutpoint_subs.add((tx_hash, txout_idx))
         return spend_status

@@ -1182,7 +1182,14 @@ class ElectrumX(SessionBase):
         return self.peer_mgr.on_peers_subscribe(self.is_tor())
 
     async def address_status(self, hashX: bytes) -> Optional[str]:
-        '''Returns an address status.
+        '''Returns an address status, as hex str (or None).'''
+        if self.protocol_tuple < (1, 5):
+            return await self._address_status_proto_legacy(hashX)
+        else:
+            return await self._address_status_proto_1_5(hashX)
+
+    async def _address_status_proto_legacy(self, hashX: bytes) -> Optional[str]:
+        '''Returns an address status, as per protocol older than <1.5.
 
         Status is a hex string, but must be None if there is no history.
         '''
@@ -1205,6 +1212,32 @@ class ElectrumX(SessionBase):
             status = sha256(status.encode()).hex()
         else:
             status = None
+
+        if mempool:
+            self.mempool_hashX_statuses[hashX] = status
+        else:
+            self.mempool_hashX_statuses.pop(hashX, None)
+
+        return status
+
+    async def _address_status_proto_1_5(self, hashX: bytes) -> str:
+        '''Returns an address status, as per protocol newer than >=1.5'''
+        # Note both confirmed history and mempool history are ordered
+        # For mempool, height is -1 if it has unconfirmed inputs, otherwise 0
+        db_history, cost = await self.session_mgr.limited_history(hashX)
+        mempool = await self.mempool.transaction_summaries(hashX)
+        self.bump_cost(cost + 0.1)
+        self.bump_cost((36 * len(db_history) + 44 * len(mempool)) * 0.00002)  # cost of hashing
+
+        status = bytes(32)
+        for tx_hash, height in db_history:
+            tx_item = tx_hash + util.pack_le_int32(height)
+            status = sha256(status + tx_item)
+        for tx in mempool:
+            height = -tx.has_unconfirmed_inputs
+            tx_item = tx.hash + util.pack_le_int32(height) + util.pack_le_uint64(tx.fee)
+            status = sha256(status + tx_item)
+        status = status.hex()
 
         if mempool:
             self.mempool_hashX_statuses[hashX] = status

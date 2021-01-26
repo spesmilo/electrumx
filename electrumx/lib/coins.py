@@ -989,6 +989,7 @@ class LitecoinTestnet(Litecoin):
     PEERS = [
         'electrum-ltc.bysh.me s t',
         'electrum.ltc.xurious.com s t',
+        'ipv6-only.electrum.random.re s t',
     ]
 
 

@@ -18,7 +18,7 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any, Tuple, Set, Dict
+from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any, Tuple, Set, Dict, Mapping
 
 import attr
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
@@ -1116,8 +1116,8 @@ class ElectrumX(SessionBase):
         self.connection.max_response_size = self.env.max_send
         self.hashX_subs = {}  # type: Dict[bytes, bytes]  # hashX -> scripthash
         self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]
-        self.sv_seen = False
-        self.mempool_statuses = {}
+        self.mempool_hashX_statuses = {}  # type: Dict[bytes, str]
+        self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], Mapping[str, Any]]
         self.set_request_handlers(self.PROTOCOL_MIN)
         self.is_peer = False
         self.cost = 5.0   # Connection cost
@@ -1177,7 +1177,7 @@ class ElectrumX(SessionBase):
         return len(self.txoutpoint_subs)
 
     def unsubscribe_hashX(self, hashX):
-        self.mempool_statuses.pop(hashX, None)
+        self.mempool_hashX_statuses.pop(hashX, None)
         return self.hashX_subs.pop(hashX, None)
 
     async def notify(
@@ -1219,7 +1219,7 @@ class ElectrumX(SessionBase):
         # hashXs
         num_hashx_notifs_sent = 0
         touched_hashxs = touched_hashxs.intersection(self.hashX_subs)
-        if touched_hashxs or (height_changed and self.mempool_statuses):
+        if touched_hashxs or (height_changed and self.mempool_hashX_statuses):
             changed = {}
 
             for hashX in touched_hashxs:
@@ -1229,9 +1229,9 @@ class ElectrumX(SessionBase):
                     changed[alias] = status
 
             # Check mempool hashXs - the status is a function of the confirmed state of
-            # other transactions.
-            mempool_statuses = self.mempool_statuses.copy()
-            for hashX, old_status in mempool_statuses.items():
+            # other transactions. (this is to detect if height changed from -1 to 0)
+            mempool_hashX_statuses = self.mempool_hashX_statuses.copy()
+            for hashX, old_status in mempool_hashX_statuses.items():
                 alias = self.hashX_subs.get(hashX)
                 if alias:
                     status = await self.subscription_address_status(hashX)
@@ -1246,11 +1246,20 @@ class ElectrumX(SessionBase):
         # tx outpoints
         num_txo_notifs_sent = 0
         touched_outpoints = touched_outpoints.intersection(self.txoutpoint_subs)
-        if touched_outpoints:
+        if touched_outpoints or (height_changed and self.mempool_txoutpoint_statuses):
             method = 'blockchain.outpoint.subscribe'
             txo_to_status = {}
             for prevout in touched_outpoints:
                 txo_to_status[prevout] = await self.txoutpoint_status(*prevout)
+
+            # Check mempool TXOs - the status is a function of the confirmed state of
+            # other transactions. (this is to detect if height changed from -1 to 0)
+            mempool_txoutpoint_statuses = self.mempool_txoutpoint_statuses.copy()
+            for prevout, old_status in mempool_txoutpoint_statuses.items():
+                status = await self.txoutpoint_status(*prevout)
+                if status != old_status:
+                    txo_to_status[prevout] = status
+
             for tx_hash, txout_idx in touched_outpoints:
                 spend_status = txo_to_status[(tx_hash, txout_idx)]
                 tx_hash_hex = hash_to_hex_str(tx_hash)
@@ -1310,9 +1319,9 @@ class ElectrumX(SessionBase):
             status = None
 
         if mempool:
-            self.mempool_statuses[hashX] = status
+            self.mempool_hashX_statuses[hashX] = status
         else:
-            self.mempool_statuses.pop(hashX, None)
+            self.mempool_hashX_statuses.pop(hashX, None)
 
         return status
 
@@ -1328,23 +1337,36 @@ class ElectrumX(SessionBase):
     async def txoutpoint_status(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
         self.bump_cost(0.2)
         spend_status = await self.db.spender_for_txo(prev_txhash, txout_idx)
-        if (spend_status.prev_height is None
-                and self.mempool.txo_exists_in_mempool(prev_txhash, txout_idx)):
-            spend_status.prev_height = 0
-        if spend_status.spender_height is None:
-            mempool_spender = self.mempool.spender_for_txo(prev_txhash, txout_idx)
-            if mempool_spender is not None:
-                spend_status.spender_height = 0
-                spend_status.spender_txhash = mempool_spender
-        # convert NamedTuple to json dict the client expects
-        res = {}
+        if spend_status.spender_height is not None:
+            # TXO was created, was mined, was spent, and spend was mined.
+            assert spend_status.prev_height > 0
+            assert spend_status.spender_height > 0
+            assert spend_status.spender_txhash is not None
+        else:
+            mp_spend_status = await self.mempool.spender_for_txo(prev_txhash, txout_idx)
+            if mp_spend_status.prev_height is not None:
+                spend_status.prev_height = mp_spend_status.prev_height
+            if mp_spend_status.spender_height is not None:
+                spend_status.spender_height = mp_spend_status.spender_height
+            if mp_spend_status.spender_txhash is not None:
+                spend_status.spender_txhash = mp_spend_status.spender_txhash
+        # convert to json dict the client expects
+        status = {}
         if spend_status.prev_height is not None:
-            res['height'] = spend_status.prev_height
+            status['height'] = spend_status.prev_height
             if spend_status.spender_txhash is not None:
                 assert spend_status.spender_height is not None
-                res['spender_txhash'] = hash_to_hex_str(spend_status.spender_txhash)
-                res['spender_height'] = spend_status.spender_height
-        return res
+                status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txhash)
+                status['spender_height'] = spend_status.spender_height
+
+        prevout = (prev_txhash, txout_idx)
+        if ((spend_status.prev_height is not None and spend_status.prev_height <= 0)
+                or (spend_status.spender_height is not None and spend_status.spender_height <= 0)):
+            self.mempool_txoutpoint_statuses[prevout] = status
+        else:
+            self.mempool_txoutpoint_statuses.pop(prevout, None)
+
+        return status
 
     async def hashX_listunspent(self, hashX):
         '''Return the list of UTXOs of a script hash, including mempool
@@ -1447,6 +1469,7 @@ class ElectrumX(SessionBase):
         prevout = (tx_hash, txout_idx)
         was_subscribed = prevout in self.txoutpoint_subs
         self.txoutpoint_subs.discard(prevout)
+        self.mempool_txoutpoint_statuses.pop(prevout, None)
         return was_subscribed
 
     async def _merkle_proof(self, cp_height, height):

@@ -21,6 +21,7 @@ from aiorpcx import run_in_thread, sleep
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
 from electrumx.lib.tx import SkipTxDeserialize
 from electrumx.lib.util import class_logger, chunks, OldTaskGroup
+from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.db import UTXO
 
 if TYPE_CHECKING:
@@ -511,20 +512,35 @@ class MemPool:
                     utxos.append(UTXO(-1, pos, tx_hash, 0, value))
         return utxos
 
-    def spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> Optional[bytes]:
-        '''For a prevout, returns the txid that spent it.
-
-        This only considers spenders in the mempool, i.e. if there is a tx in
-        the mempool that spends prevout, return its txid, or None otherwise.
+    async def spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> 'TXOSpendStatus':
+        '''For an outpoint, returns its spend-status.
+        This only considers the mempool, not the DB/blockchain, so e.g. mined
+        txs are not distinguished from txs that never existed.
         '''
+        # look up funding tx
+        prev_tx = self.txs.get(prev_txhash, None)
+        if prev_tx is None:
+            # funding tx already mined or never existed
+            prev_height = None
+        else:
+            if len(prev_tx.out_pairs) <= txout_idx:
+                # output idx out of bounds...?
+                return TXOSpendStatus(prev_height=None)
+            prev_has_ui = any(hash in self.txs for hash, idx in prev_tx.prevouts)
+            prev_height = -prev_has_ui
         prevout = (prev_txhash, txout_idx)
-        return self.txo_to_spender.get(prevout, None)
-
-    def txo_exists_in_mempool(self, tx_hash: bytes, txout_idx: int) -> bool:
-        '''For an outpoint, returns whether a mempool tx created it,
-        regardless of whether it has been spent.
-        '''
-        tx = self.txs.get(tx_hash, None)
-        if tx is None:
-            return False
-        return len(tx.out_pairs) > txout_idx
+        # look up spending tx
+        spender_txhash = self.txo_to_spender.get(prevout, None)
+        spender_tx = self.txs.get(spender_txhash, None)
+        if spender_tx is None:
+            self.logger.warning(f"spender_tx {hash_to_hex_str(spender_txhash)} not in"
+                                f"mempool, but txo_to_spender referenced it as spender "
+                                f"of {hash_to_hex_str(prev_txhash)}:{txout_idx} ?!")
+            return TXOSpendStatus(prev_height=prev_height)
+        spender_has_ui = any(hash in self.txs for hash, idx in spender_tx.prevouts)
+        spender_height = -spender_has_ui
+        return TXOSpendStatus(
+            prev_height=prev_height,
+            spender_txhash=spender_txhash,
+            spender_height=spender_height,
+        )

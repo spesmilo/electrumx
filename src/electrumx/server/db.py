@@ -28,6 +28,7 @@ from electrumx.lib.util import (
     formatted_time, pack_be_uint16, pack_be_uint32, pack_le_uint64, pack_le_uint32,
     unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
 )
+from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
     History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING,
@@ -59,13 +60,6 @@ class FlushData:
     adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
     deletes = attr.ib()  # type: List[bytes]  # b'h' db keys, and b'u' db keys
     tip = attr.ib()
-
-
-@dataclass
-class TXOSpendStatus:
-    prev_height: Optional[int]  # block height TXO is mined at. None if the outpoint never existed
-    spender_txhash: bytes = None
-    spender_height: int = None
 
 
 class DB:
@@ -558,9 +552,8 @@ class DB:
         return height, tx_pos
 
     def fs_spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> 'TXOSpendStatus':
-        '''For an outpoint, returns the txid that spent it.
-        If the outpoint exists and is unspent, returns True.
-        If the outpoint never existed, returns False.
+        '''For an outpoint, returns its spend-status (considering only the DB,
+        not the mempool).
         '''
         prev_txnum = self.fs_txnum_for_txhash(prev_txhash)
         if prev_txnum is None:  # outpoint never existed (in chain)

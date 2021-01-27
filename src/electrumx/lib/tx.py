@@ -113,6 +113,13 @@ class TxOutput:
         ))
 
 
+@dataclass(kw_only=True, slots=True)
+class TXOSpendStatus:
+    prev_height: Optional[int]  # block height TXO is mined at. None if the outpoint never existed
+    spender_txhash: bytes = None
+    spender_height: int = None
+
+
 class Deserializer:
     '''Deserializes blocks into transactions.
 

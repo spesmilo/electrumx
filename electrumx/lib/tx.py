@@ -29,7 +29,7 @@
 
 from dataclasses import dataclass
 from hashlib import blake2s
-from typing import Sequence
+from typing import Sequence, Optional
 
 from electrumx.lib.hash import sha256, double_sha256, hash_to_hex_str
 from electrumx.lib.script import OpCodes
@@ -103,6 +103,13 @@ class TxOutput:
             pack_le_int64(self.value),
             pack_varbytes(self.pk_script),
         ))
+
+
+@dataclass
+class TXOSpendStatus:
+    prev_height: Optional[int]  # block height TXO is mined at. None if the outpoint never existed
+    spender_txhash: bytes = None
+    spender_height: int = None
 
 
 class Deserializer:

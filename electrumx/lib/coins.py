@@ -3857,6 +3857,7 @@ class Quebecoin(AuxPowMixin, Coin):
     REORG_LIMIT = 2000
     RPC_PORT = 10890
 
+
 class Beyondcoin(Coin):
     NAME = "Beyondcoin"
     SHORTNAME = "BYND"

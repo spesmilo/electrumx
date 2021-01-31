@@ -2738,15 +2738,17 @@ class Pivx(Coin):
     TX_PER_BLOCK = 1
     STATIC_BLOCK_HEADERS = False
     RPC_PORT = 51470
-    ZEROCOIN_HEADER = 112
+    EXPANDED_HEADER = 112
     ZEROCOIN_START_HEIGHT = 863787
+    ZEROCOIN_END_HEIGHT = 2153200
     ZEROCOIN_BLOCK_VERSION = 4
+    SAPLING_START_HEIGHT = 2700500
 
     @classmethod
     def static_header_len(cls, height):
         '''Given a header height return its length.'''
-        if height >= cls.ZEROCOIN_START_HEIGHT:
-            return cls.ZEROCOIN_HEADER
+        if (height >= cls.ZEROCOIN_START_HEIGHT and height < cls.ZEROCOIN_END_HEIGHT) or (height >= cls.SAPLING_START_HEIGHT):
+            return cls.EXPANDED_HEADER
         else:
             return cls.BASIC_HEADER_SIZE
 

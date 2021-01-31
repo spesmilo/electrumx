@@ -2733,11 +2733,13 @@ class Pivx(Coin):
     P2PKH_VERBYTE = bytes.fromhex("1e")
     P2SH_VERBYTE = bytes.fromhex("0d")
     WIF_BYTE = bytes.fromhex("d4")
+    DESERIALIZER = lib_tx.DeserializerPIVX
     TX_COUNT_HEIGHT = 569399
     TX_COUNT = 2157510
     TX_PER_BLOCK = 1
     STATIC_BLOCK_HEADERS = False
     RPC_PORT = 51470
+    REORG_LIMIT = 100
     EXPANDED_HEADER = 112
     ZEROCOIN_START_HEIGHT = 863787
     ZEROCOIN_END_HEIGHT = 2153200
@@ -2747,7 +2749,8 @@ class Pivx(Coin):
     @classmethod
     def static_header_len(cls, height):
         '''Given a header height return its length.'''
-        if (height >= cls.ZEROCOIN_START_HEIGHT and height < cls.ZEROCOIN_END_HEIGHT) or (height >= cls.SAPLING_START_HEIGHT):
+        if (height >= cls.ZEROCOIN_START_HEIGHT and height < cls.ZEROCOIN_END_HEIGHT) \
+                or (height >= cls.SAPLING_START_HEIGHT):
             return cls.EXPANDED_HEADER
         else:
             return cls.BASIC_HEADER_SIZE
@@ -2773,7 +2776,19 @@ class PivxTestnet(Pivx):
     WIF_BYTE = bytes.fromhex("EF")
     TX_PER_BLOCK = 4
     RPC_PORT = 51472
-    ZEROCOIN_START_HEIGHT = 201564
+    ZEROCOIN_START_HEIGHT = 201
+    ZEROCOIN_END_HEIGHT = 201
+    ZEROCOIN_BLOCK_VERSION = 4
+    SAPLING_START_HEIGHT = 201
+
+    @classmethod
+    def static_header_len(cls, height):
+        '''Given a header height return its length.'''
+        if (height >= cls.ZEROCOIN_START_HEIGHT and height < cls.ZEROCOIN_END_HEIGHT) or (
+                height >= cls.SAPLING_START_HEIGHT):
+            return cls.EXPANDED_HEADER
+        else:
+            return cls.BASIC_HEADER_SIZE
 
 
 class Bitg(Coin):

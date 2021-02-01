@@ -37,7 +37,7 @@ from electrumx.lib.util import (
     unpack_le_int32_from, unpack_le_int64_from, unpack_le_uint16_from,
     unpack_be_uint16_from,
     unpack_le_uint32_from, unpack_le_uint64_from, pack_le_int32, pack_varint,
-    pack_le_uint32, pack_le_int64, pack_varbytes,
+    pack_le_uint16, pack_le_uint32, pack_le_int64, pack_varbytes,
 )
 
 ZERO = bytes(32)
@@ -413,6 +413,63 @@ class DeserializerZcash(DeserializerEquihash):
 
         if is_sapling_v4 and has_shielded:
             self.cursor += 64  # bindingSig
+
+        return base_tx
+
+
+@dataclass
+class TxPIVX:
+    '''Class representing a PIVX transaction.'''
+    __slots__ = 'version', "txtype", 'inputs', 'outputs', 'locktime'
+    version: int
+    txtype: int
+    inputs: Sequence['TxInput']
+    outputs: Sequence['TxOutput']
+    locktime: int
+
+    def serialize(self):
+        return b''.join((
+            pack_le_uint16(self.version),
+            pack_le_uint16(self.txtype),
+            pack_varint(len(self.inputs)),
+            b''.join(tx_in.serialize() for tx_in in self.inputs),
+            pack_varint(len(self.outputs)),
+            b''.join(tx_out.serialize() for tx_out in self.outputs),
+            pack_le_uint32(self.locktime)
+        ))
+
+
+class DeserializerPIVX(Deserializer):
+    def read_tx(self):
+        header = self._read_le_uint32()
+        tx_type = header >> 16  # DIP2 tx type
+        if tx_type:
+            version = header & 0x0000ffff
+        else:
+            version = header
+
+        if tx_type and version < 3:
+            version = header
+            tx_type = 0
+
+        base_tx = TxPIVX(
+            version,
+            tx_type,
+            self._read_inputs(),  # inputs
+            self._read_outputs(),  # outputs
+            self._read_le_uint32()  # locktime
+        )
+
+        if version >= 3:  # >= sapling
+            self._read_varint()
+            self.cursor += 8  # valueBalance
+            shielded_spend_size = self._read_varint()
+            self.cursor += shielded_spend_size * 384  # vShieldedSpend
+            shielded_output_size = self._read_varint()
+            self.cursor += shielded_output_size * 948  # vShieldedOutput
+            self.cursor += 64  # bindingSig
+            if (tx_type > 0):
+                self.cursor += 2  # extraPayload
 
         return base_tx
 

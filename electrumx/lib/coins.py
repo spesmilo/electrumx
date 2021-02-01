@@ -3492,7 +3492,7 @@ class Primecoin(PrimeChainPowMixin, Coin):
     GENESIS_HASH = ('963d17ba4dc753138078a2f56afb3af9'
                     '674e2546822badff26837db9a0152106')
     DAEMON = daemon.FakeEstimateFeeDaemon
-    ESTIMATE_FEE = 1.024
+    ESTIMATE_FEE = 1.
     TX_COUNT = 7138730
     TX_COUNT_HEIGHT = 3639500
     TX_PER_BLOCK = 2

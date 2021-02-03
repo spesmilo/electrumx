@@ -66,6 +66,76 @@ def test_iterator_reverse(db):
         ]
 
 
+def test_iterator_seek(db):
+    db.put(b"first-key1", b"val")
+    db.put(b"first-key2", b"val")
+    db.put(b"first-key3", b"val")
+    db.put(b"key-1", b"value-1")
+    db.put(b"key-5", b"value-5")
+    db.put(b"key-3", b"value-3")
+    db.put(b"key-8", b"value-8")
+    db.put(b"key-2", b"value-2")
+    db.put(b"key-4", b"value-4")
+    db.put(b"last-key1", b"val")
+    db.put(b"last-key2", b"val")
+    db.put(b"last-key3", b"val")
+    # forward-iterate, key present, no prefix
+    it = db.iterator()
+    it.seek(b"key-4")
+    assert list(it) == [(b"key-4", b"value-4"), (b"key-5", b"value-5"), (b"key-8", b"value-8"),
+                        (b"last-key1", b"val"), (b"last-key2", b"val"), (b"last-key3", b"val")]
+    # forward-iterate, key present
+    it = db.iterator(prefix=b"key-")
+    it.seek(b"key-4")
+    assert list(it) == [(b"key-4", b"value-4"), (b"key-5", b"value-5"),
+                        (b"key-8", b"value-8")]
+    # forward-iterate, key missing
+    it = db.iterator(prefix=b"key-")
+    it.seek(b"key-6")
+    assert list(it) == [(b"key-8", b"value-8")]
+    # forward-iterate, after last prefix
+    it = db.iterator(prefix=b"key-")
+    it.seek(b"key-9")
+    assert list(it) == []
+    # forward-iterate, after last, no prefix
+    it = db.iterator()
+    it.seek(b"z")
+    assert list(it) == []
+    # forward-iterate, no such prefix
+    it = db.iterator(prefix=b"key---")
+    it.seek(b"key---5")
+    assert list(it) == []
+    # forward-iterate, seek outside prefix
+    it = db.iterator(prefix=b"key-")
+    it.seek(b"last-key2")
+    assert list(it) == []
+    # reverse-iterate, key present
+    it = db.iterator(prefix=b"key-", reverse=True)
+    it.seek(b"key-4")
+    assert list(it) == [(b"key-3", b"value-3"), (b"key-2", b"value-2"), (b"key-1", b"value-1")]
+    # reverse-iterate, key missing
+    it = db.iterator(prefix=b"key-", reverse=True)
+    it.seek(b"key-7")
+    assert list(it) == [(b"key-5", b"value-5"), (b"key-4", b"value-4"), (b"key-3", b"value-3"),
+                        (b"key-2", b"value-2"), (b"key-1", b"value-1")]
+    # reverse-iterate, before first prefix
+    it = db.iterator(prefix=b"key-", reverse=True)
+    it.seek(b"key-0")
+    assert list(it) == []
+    # reverse-iterate, before first, no prefix
+    it = db.iterator(reverse=True)
+    it.seek(b"a")
+    assert list(it) == []
+    # reverse-iterate, no such prefix
+    it = db.iterator(prefix=b"key---", reverse=True)
+    it.seek(b"key---5")
+    assert list(it) == []
+    # reverse-iterate, seek outside prefix
+    it = db.iterator(prefix=b"key-", reverse=True)
+    it.seek(b"first-key2")
+    assert list(it) == []
+
+
 def test_close(db):
     db.put(b"a", b"b")
     db.close()

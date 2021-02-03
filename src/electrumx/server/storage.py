@@ -65,6 +65,13 @@ class Storage:
         If `prefix` is set, only keys starting with `prefix` will be
         included.  If `reverse` is True the items are returned in
         reverse order.
+
+        The iterator supports .seek(key), which moves it just left of `key`.
+        - if forward-iterating
+            - if `key` is present, it will be the next item
+            - if `key` is not present, the next item will be the smallest still greater than `key`
+        - if reverse-iterating
+            - the next item will be the largest still smaller than `key`
         '''
         raise NotImplementedError
 
@@ -85,9 +92,31 @@ class LevelDB(Storage):
         self.close = self.db.close
         self.get = self.db.get
         self.put = self.db.put
-        self.iterator = self.db.iterator
         self.write_batch = partial(self.db.write_batch, transaction=True,
                                    sync=True)
+
+    def iterator(self, prefix=b'', reverse=False):
+        return LevelDBIterator(db=self.db, prefix=prefix, reverse=reverse)
+
+
+class LevelDBIterator:
+    '''An iterator for LevelDB.'''
+
+    def __init__(self, *, db, prefix, reverse):
+        self.prefix = prefix
+        self.iterator = db.iterator(prefix=prefix, reverse=reverse)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        k, v = next(self.iterator)
+        if not k.startswith(self.prefix):
+            raise StopIteration
+        return k, v
+
+    def seek(self, key: bytes) -> None:
+        self.iterator.seek(key)
 
 
 class RocksDB(Storage):
@@ -119,7 +148,7 @@ class RocksDB(Storage):
         return RocksDBWriteBatch(self.db)
 
     def iterator(self, prefix=b'', reverse=False):
-        return RocksDBIterator(self.db, prefix, reverse)
+        return RocksDBIterator(db=self.db, prefix=prefix, reverse=reverse)
 
 
 class RocksDBWriteBatch:
@@ -140,8 +169,9 @@ class RocksDBWriteBatch:
 class RocksDBIterator:
     '''An iterator for RocksDB.'''
 
-    def __init__(self, db, prefix, reverse):
+    def __init__(self, *, db, prefix, reverse):
         self.prefix = prefix
+        self._is_reverse = reverse
         if reverse:
             self.iterator = reversed(db.iteritems())
             nxt_prefix = util.increment_byte_string(prefix)
@@ -165,3 +195,11 @@ class RocksDBIterator:
         if not k.startswith(self.prefix):
             raise StopIteration
         return k, v
+
+    def seek(self, key: bytes) -> None:
+        self.iterator.seek(key)
+        if self._is_reverse:
+            try:
+                next(self)
+            except StopIteration:
+                self.iterator.seek_to_last()

@@ -386,7 +386,7 @@ height, i.e. calculating *client_statushash* without txs in the last e.g. 200 bl
     If the value is lower than requested (original *to_height*), that indicates
     the server truncated the history (usually because it was too long), and the client
     needs to send a new request with a different block interval if it wants the rest.
-    A non-negative integer.
+    A non-negative integer, or ``-1``.
     ``from_height <= to_height`` must hold.
 
   * *history*
@@ -596,6 +596,8 @@ as an input (spends it).
     The scriptPubKey (output script) corresponding to the outpoint, as a hexadecimal
     string. This is optional, and if provided might be used by the server to find
     the outpoint. The behaviour is undefined if an incorrect value is provided.
+    Note that some implementations (such as EPS/BWT) might require this parameter
+    to be able to serve the request.
 
 **Result**
 

@@ -512,16 +512,19 @@ class DB:
             hashX: bytes,
             limit: Optional[int] = 1000,
             txnum_min: Optional[int] = None,
+            txnum_max: Optional[int] = None,
     ) -> Sequence[Tuple[bytes, int, int]]:
         '''Return an unpruned, sorted list of (tx_hash, height, tx_num) tuples of
         confirmed transactions that touched the address, earliest in
         the blockchain first.  Includes both spending and receiving
         transactions.  By default returns at most 1000 entries.  Set
         limit to None to get them all.
-        txnum_min can be used to seek into the history and start from there (instead of genesis).
+        txnum_min can be used to seek into the history and start there (>=) (instead of genesis).
+        txnum_max can be used to stop early (<).
         '''
         def read_history():
-            tx_nums = list(self.history.get_txnums(hashX=hashX, limit=limit, txnum_min=txnum_min))
+            tx_nums = list(self.history.get_txnums(
+                hashX=hashX, limit=limit, txnum_min=txnum_min, txnum_max=txnum_max))
             fs_tx_hash = self.fs_tx_hash
             return [(*fs_tx_hash(tx_num), tx_num) for tx_num in tx_nums]
 
@@ -539,12 +542,12 @@ class DB:
             hashX: bytes,
             limit: Optional[int] = 1000,
             txnum_min: Optional[int] = None,
+            txnum_max: Optional[int] = None,
     ) -> Sequence[Tuple[bytes, int]]:
         '''Return a list of (tx_hash, height) tuples of confirmed txs that touched hashX.'''
         triples = await self.limited_history_triples(
-            hashX=hashX, limit=limit, txnum_min=txnum_min)
+            hashX=hashX, limit=limit, txnum_min=txnum_min, txnum_max=txnum_max)
         return [(tx_hash, height) for (tx_hash, height, tx_num) in triples]
-
 
     def fs_txnum_for_txhash(self, tx_hash: bytes) -> Optional[int]:
         return self.history.get_txnum_for_txhash(tx_hash)
@@ -571,6 +574,17 @@ class DB:
         assert height > 0
         tx_pos = tx_num - self.tx_counts[height - 1]
         return height, tx_pos
+
+    def get_next_tx_num_after_blockheight(self, height: int) -> Optional[int]:
+        '''For given block height, returns the tx_num of the coinbase tx at height+1.
+        That is, all txs at height are guaranteed to have tx_num < return value.
+        '''
+        # tx_counts[N] has the cumulative number of txs at the end of
+        # height N.  So tx_counts[0] is 1 - the genesis coinbase
+        assert height >= 0, f"height must non-negative, not {height}"
+        if len(self.tx_counts) < height:
+            return None
+        return self.tx_counts[height]
 
     def fs_spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> 'TXOSpendStatus':
         '''For an outpoint, returns its spend-status (considering only the DB,

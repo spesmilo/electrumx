@@ -307,25 +307,31 @@ class History:
             hashX: bytes,
             limit: Optional[int] = 1000,
             txnum_min: Optional[int] = None,
+            txnum_max: Optional[int] = None,
     ):
         '''Generator that returns an unpruned, sorted list of tx_nums in the
         history of a hashX.  Includes both spending and receiving
         transactions.  By default yields at most 1000 entries.  Set
         limit to None to get them all.
-        txnum_min can be used to seek into the history and start from there (instead of genesis).
+        txnum_min can be used to seek into the history and start there (>=) (instead of genesis).
+        txnum_max can be used to stop early (<).
         '''
         limit = util.resolve_limit(limit)
         prefix = b'H' + hashX
         it = self.db.iterator(prefix=prefix)
         if txnum_min is not None:
             it.seek(prefix + pack_txnum(txnum_min))
+        txnum_min = txnum_min if txnum_min is not None else 0
+        txnum_max = txnum_max if txnum_max is not None else float('inf')
         for db_key, db_val in it:
             tx_numb = db_key[-TXNUM_LEN:]
             if limit == 0:
                 return
             tx_num = unpack_txnum(tx_numb)
-            if txnum_min is not None:
-                assert tx_num >= txnum_min, f"tx_num={tx_num}, txnum_min={txnum_min}"
+            if tx_num >= txnum_max:
+                return
+            assert txnum_min <= tx_num < txnum_max, (f"txnum_min={txnum_min}, tx_num={tx_num}, "
+                                                     f"txnum_max={txnum_max}")
             yield tx_num
             limit -= 1
 

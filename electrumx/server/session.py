@@ -18,7 +18,8 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Optional, TYPE_CHECKING, Tuple, Sequence, Set, Dict, Iterable, Any, Mapping
+from typing import (Optional, TYPE_CHECKING, Tuple, Sequence, Set, Dict, Iterable, Any, Mapping,
+                    List)
 import asyncio
 
 import attr
@@ -72,6 +73,17 @@ def non_negative_integer(value):
                    f'{value} should be a non-negative integer')
 
 
+def integer(value):
+    '''Return param value it is or can be converted to an
+    integer, otherwise raise an RPCError.'''
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        pass
+    raise RPCError(BAD_REQUEST,
+                   f'{value} should be a non-negative integer')
+
+
 def assert_boolean(value):
     '''Return param value it is boolean otherwise raise an RPCError.'''
     if value in (False, True):
@@ -93,6 +105,21 @@ def assert_tx_hash(value):
     raise RPCError(BAD_REQUEST, f'{value} should be a transaction hash')
 
 
+def assert_status_hash(value):
+    '''Raise an RPCError if the value is not a valid hexadecimal scripthash status.
+
+    If it is valid, return it as 32-byte binary hash.
+    '''
+    # note that unlike for tx_hash, we keep the endianness here
+    try:
+        raw_hash = util.hex_to_bytes(value)
+        if len(raw_hash) == 32:
+            return raw_hash
+    except (ValueError, TypeError):
+        pass
+    raise RPCError(BAD_REQUEST, f'{value} should be a scripthash status')
+
+
 def is_hex_str(text: Any) -> bool:
     if not isinstance(text, str):
         return False
@@ -109,6 +136,13 @@ def is_hex_str(text: Any) -> bool:
 def assert_hex_str(value: Any) -> None:
     if not is_hex_str(value):
         raise RPCError(BAD_REQUEST, f'{value} should be a hex str')
+
+
+# Constants used to limit the size of returned history to ensure it fits within a response.
+# These are all overestimating somewhat, for paranoia.
+HISTORY_OVER_WIRE_OVERHEAD_BYTES = 200  # a few bytes are reserved for overhead
+HISTORY_CONF_ITEM_SIZE_BYTES = 107      # a conf tx item is ~this many bytes when JSON-encoded
+HISTORY_UNCONF_ITEM_SIZE_BYTES = 140    # a mempool tx item is ~this many bytes when JSON-encoded
 
 
 @attr.s(slots=True)
@@ -782,22 +816,6 @@ class SessionManager:
         self.txs_sent += 1
         return hex_hash
 
-    async def limited_history(self, hashX):
-        '''Returns a pair (history, cost).
-
-        History is a sorted list of (tx_hash, height) tuples, or an RPCError.'''
-        # History DoS limit.  Each element of history is about 99 bytes when encoded
-        # as JSON.
-        limit = self.env.max_send // 99
-        result = await self.db.limited_history(hashX=hashX, limit=limit)
-        cost = 0.2 + len(result) * 0.001
-        if len(result) >= limit:
-            result = RPCError(BAD_REQUEST, f'history too large', cost=cost)
-
-        if isinstance(result, Exception):
-            raise result
-        return result, cost
-
     async def _notify_sessions(
             self,
             *,
@@ -1179,7 +1197,7 @@ class ElectrumX(SessionBase):
         '''
         # Note both confirmed history and mempool history are ordered
         # For mempool, height is -1 if it has unconfirmed inputs, otherwise 0
-        db_history, cost = await self.session_mgr.limited_history(hashX)
+        db_history = await self.limited_history(hashX)
         mempool = await self.mempool.transaction_summaries(hashX)
 
         status = ''.join(f'{hash_to_hex_str(tx_hash)}:'
@@ -1190,7 +1208,7 @@ class ElectrumX(SessionBase):
                           for tx in mempool)
 
         # Add status hashing cost
-        self.bump_cost(cost + 0.1 + len(status) * 0.00002)
+        self.bump_cost(0.1 + len(status) * 0.00002)
 
         if status:
             status = sha256(status.encode()).hex()
@@ -1313,7 +1331,19 @@ class ElectrumX(SessionBase):
         hashX = scripthash_to_hashX(scripthash)
         return await self.get_balance(hashX)
 
-    async def unconfirmed_history(self, hashX):
+    async def limited_history(self, hashX):
+        '''Returns a sorted list of (tx_hash, height) tuples.
+        Raises RPCError if history would not fit within a response.
+        '''
+        limit_bytes = self.env.max_send - HISTORY_OVER_WIRE_OVERHEAD_BYTES
+        limit_nconf = limit_bytes // HISTORY_CONF_ITEM_SIZE_BYTES
+        result = await self.db.limited_history(hashX=hashX, limit=limit_nconf)
+        self.bump_cost(0.2 + len(result) * 0.001)
+        if len(result) >= limit_nconf:
+            raise RPCError(BAD_REQUEST, f'history too large')
+        return result
+
+    async def unconfirmed_history(self, hashX) -> List[Dict[str, Any]]:
         # Note both confirmed history and mempool history are ordered
         # height is -1 if it has unconfirmed inputs, otherwise 0
         result = [{'tx_hash': hash_to_hex_str(tx.hash),
@@ -1323,18 +1353,99 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.25 + len(result) / 50)
         return result
 
-    async def confirmed_and_unconfirmed_history(self, hashX):
-        # Note both confirmed history and mempool history are ordered
-        history, cost = await self.session_mgr.limited_history(hashX)
-        self.bump_cost(cost)
+    async def scripthash_get_history_proto_legacy(self, scripthash):
+        '''Return the confirmed and unconfirmed history of a scripthash,
+        as per protocol older than <1.5.
+        '''
+        hashX = scripthash_to_hashX(scripthash)
+        history = await self.limited_history(hashX)
         conf = [{'tx_hash': hash_to_hex_str(tx_hash), 'height': height}
                 for tx_hash, height in history]
         return conf + await self.unconfirmed_history(hashX)
 
-    async def scripthash_get_history(self, scripthash):
-        '''Return the confirmed and unconfirmed history of a scripthash.'''
+    async def scripthash_get_history_proto_1_5(
+            self,
+            scripthash,
+            from_height=0,
+            to_height=-1,
+            client_statushash=None,
+            client_height=None
+    ):
+        '''Return the confirmed and unconfirmed history of a scripthash,
+        as per protocol newer than >=1.5.
+        '''
         hashX = scripthash_to_hashX(scripthash)
-        return await self.confirmed_and_unconfirmed_history(hashX)
+        from_height = non_negative_integer(from_height)
+        to_height = integer(to_height)
+        if not (-1 <= to_height):
+            raise RPCError(BAD_REQUEST, f'{to_height} should be an integer >= -1')
+        to_height_or_inf = to_height if to_height >= 0 else float('inf')
+        if not (from_height <= to_height_or_inf):
+            raise RPCError(BAD_REQUEST, f'from_height={from_height} '
+                                        f'<= to_height={to_height} must hold.')
+        if (client_statushash is None) != (client_height is None):
+            raise RPCError(BAD_REQUEST, f'either both or neither of client_statushash and '
+                                        f'client_height must be present')
+        if client_statushash is not None:
+            client_statushash = assert_status_hash(client_statushash)
+            client_height = non_negative_integer(client_height)
+            if not (from_height <= client_height < to_height_or_inf):
+                raise RPCError(BAD_REQUEST, f'from_height={from_height} '
+                                            f'<= client_height={client_height} '
+                                            f'< to_height={to_height} must hold.')
+            # TODO implement handling. they are ignored for now
+
+        # Limit size of returned history to ensure it fits within a response.
+        limit_bytes = self.env.max_send - HISTORY_OVER_WIRE_OVERHEAD_BYTES
+        limit_nconf = limit_bytes // HISTORY_CONF_ITEM_SIZE_BYTES
+        if from_height == 0:
+            txnum_min = 0
+        else:
+            txnum_min = self.db.get_next_tx_num_after_blockheight(from_height - 1)
+        if to_height == -1:
+            txnum_max = None
+        else:
+            txnum_max = self.db.get_next_tx_num_after_blockheight(to_height - 1)
+        if txnum_min is not None:
+            db_history = await self.db.limited_history(
+                hashX=hashX,
+                limit=limit_nconf,
+                txnum_min=txnum_min,
+                txnum_max=txnum_max,
+            )
+        else:
+            db_history = []
+        self.bump_cost(0.2 + len(db_history) * 0.001)
+
+        if len(db_history) >= limit_nconf:
+            # History might have gotten truncated.
+            # Note that the truncation might have happened mid-block;
+            # hence we need to exclude txs in the last block.
+            _, height_last = db_history[-1]
+            _, height_first = db_history[0]
+            assert height_first < height_last, "history cannot even fit one block of txs"
+            db_history = [(tx_hash, height) for (tx_hash, height) in db_history
+                          if height != height_last]
+            to_height = height_last
+        hist_conf = [{'tx_hash': hash_to_hex_str(tx_hash), 'height': height}
+                     for tx_hash, height in db_history]
+        ret_history = hist_conf
+        if to_height == -1:
+            # If conf history is long, mempool hist might not fit within response.
+            # We either include all mempool txs, or none of them.
+            limit_nunconf = ((limit_bytes - len(hist_conf) * HISTORY_CONF_ITEM_SIZE_BYTES)
+                             // HISTORY_UNCONF_ITEM_SIZE_BYTES)
+            hist_unconf = await self.unconfirmed_history(hashX)
+            if len(hist_unconf) <= limit_nunconf:
+                ret_history += hist_unconf
+            else:
+                to_height = max(self.db.db_height + 1, from_height)
+        assert (to_height == -1) or (from_height <= to_height)
+        return {
+            'from_height': from_height,
+            'to_height': to_height,
+            'history': ret_history,
+        }
 
     async def scripthash_get_mempool(self, scripthash):
         '''Return the mempool transactions touching a scripthash.'''
@@ -1683,7 +1794,7 @@ class ElectrumX(SessionBase):
             'blockchain.headers.subscribe': self.headers_subscribe,
             'blockchain.relayfee': self.relayfee,
             'blockchain.scripthash.get_balance': self.scripthash_get_balance,
-            'blockchain.scripthash.get_history': self.scripthash_get_history,
+            'blockchain.scripthash.get_history': self.scripthash_get_history_proto_legacy,
             'blockchain.scripthash.get_mempool': self.scripthash_get_mempool,
             'blockchain.scripthash.listunspent': self.scripthash_listunspent,
             'blockchain.scripthash.subscribe': self.scripthash_subscribe,
@@ -1707,6 +1818,7 @@ class ElectrumX(SessionBase):
         if ptuple >= (1, 5):
             handlers['blockchain.outpoint.subscribe'] = self.txoutpoint_subscribe
             handlers['blockchain.outpoint.unsubscribe'] = self.txoutpoint_unsubscribe
+            handlers['blockchain.scripthash.get_history'] = self.scripthash_get_history_proto_1_5
 
         self.request_handlers = handlers
 

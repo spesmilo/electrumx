@@ -163,9 +163,6 @@ class SessionManager:
         self.start_time = time.time()
         self._method_counts = defaultdict(int)
         self._reorg_count = 0
-        self._history_cache = pylru.lrucache(1000)
-        self._history_lookups = 0
-        self._history_hits = 0
         self._tx_hashes_cache = pylru.lrucache(1000)
         self._tx_hashes_lookups = 0
         self._tx_hashes_hits = 0
@@ -335,8 +332,6 @@ class SessionManager:
             'daemon height': self.daemon.cached_height(),
             'db height': self.db.db_height,
             'groups': len(self.session_groups),
-            'history cache': cache_fmt.format(
-                self._history_lookups, self._history_hits, len(self._history_cache)),
             'merkle cache': cache_fmt.format(
                 self._merkle_lookups, self._merkle_hits, len(self._merkle_cache)),
             'pid': os.getpid(),
@@ -574,7 +569,7 @@ class SessionManager:
             if not hashX:
                 continue
             n = None
-            history = await db.limited_history(hashX, limit=limit)
+            history = await db.limited_history(hashX=hashX, limit=limit)
             for n, (tx_hash, height) in enumerate(history):
                 lines.append(f'History #{n:,d}: height {height:,d} '
                              f'tx_hash {hash_to_hex_str(tx_hash)}')
@@ -794,17 +789,10 @@ class SessionManager:
         # History DoS limit.  Each element of history is about 99 bytes when encoded
         # as JSON.
         limit = self.env.max_send // 99
-        cost = 0.1
-        self._history_lookups += 1
-        try:
-            result = self._history_cache[hashX]
-            self._history_hits += 1
-        except KeyError:
-            result = await self.db.limited_history(hashX, limit=limit)
-            cost += 0.1 + len(result) * 0.001
-            if len(result) >= limit:
-                result = RPCError(BAD_REQUEST, f'history too large', cost=cost)
-            self._history_cache[hashX] = result
+        result = await self.db.limited_history(hashX=hashX, limit=limit)
+        cost = 0.2 + len(result) * 0.001
+        if len(result) >= limit:
+            result = RPCError(BAD_REQUEST, f'history too large', cost=cost)
 
         if isinstance(result, Exception):
             raise result
@@ -821,10 +809,6 @@ class SessionManager:
         height_changed = height != self.notified_height
         if height_changed:
             await self._refresh_hsub_results(height)
-            # Invalidate our history cache for touched hashXs
-            cache = self._history_cache
-            for hashX in set(cache).intersection(touched_hashxs):
-                del cache[hashX]
 
         for session in self.sessions:
             coro = session.notify(
@@ -1222,17 +1206,24 @@ class ElectrumX(SessionBase):
 
     async def _address_status_proto_1_5(self, hashX: bytes) -> str:
         '''Returns an address status, as per protocol newer than >=1.5'''
-        # Note both confirmed history and mempool history are ordered
-        # For mempool, height is -1 if it has unconfirmed inputs, otherwise 0
-        db_history, cost = await self.session_mgr.limited_history(hashX)
-        mempool = await self.mempool.transaction_summaries(hashX)
-        self.bump_cost(cost + 0.1)
-        self.bump_cost((36 * len(db_history) + 44 * len(mempool)) * 0.00002)  # cost of hashing
-
-        status = bytes(32)
-        for tx_hash, height in db_history:
+        # first, consider confirmed history
+        tx_num_calced, status = await self.db.history.get_intermediate_statushash_for_hashx(hashX)
+        db_history = await self.db.limited_history_triples(
+            hashX=hashX, limit=None, txnum_min=tx_num_calced+1)
+        self.bump_cost(0.3 + len(db_history) * 0.001)  # cost of history-lookup
+        self.bump_cost(36 * len(db_history) * 0.00002)  # cost of hashing mined txs
+        reorgsafe_height = self.db.db_height - self.env.reorg_limit
+        storestatus_period = self.db.history.STORE_INTERMEDIATE_STATUSHASH_EVERY_N_TXS
+        for cnt, (tx_hash, height, tx_num) in enumerate(db_history, start=1):
             tx_item = tx_hash + util.pack_le_int32(height)
             status = sha256(status + tx_item)
+            if cnt % storestatus_period == 0 and height < reorgsafe_height:
+                self.db.history.store_intermediate_statushash_for_hashx(
+                    hashX=hashX, tx_num=tx_num, status=status)
+
+        # second, consider mempool txs
+        mempool = await self.mempool.transaction_summaries(hashX)
+        self.bump_cost(44 * len(mempool) * 0.00002)  # cost of hashing mempool txs
         for tx in mempool:
             height = -tx.has_unconfirmed_inputs
             tx_item = tx.hash + util.pack_le_int32(height) + util.pack_le_uint64(tx.fee)

@@ -506,25 +506,45 @@ class DB:
 
         return [self.coin.header_hash(header) for header in headers]
 
-    async def limited_history(self, hashX, *, limit=1000):
-        '''Return an unpruned, sorted list of (tx_hash, height) tuples of
+    async def limited_history_triples(
+            self,
+            *,
+            hashX: bytes,
+            limit: Optional[int] = 1000,
+            txnum_min: Optional[int] = None,
+    ) -> Sequence[Tuple[bytes, int, int]]:
+        '''Return an unpruned, sorted list of (tx_hash, height, tx_num) tuples of
         confirmed transactions that touched the address, earliest in
         the blockchain first.  Includes both spending and receiving
         transactions.  By default returns at most 1000 entries.  Set
         limit to None to get them all.
+        txnum_min can be used to seek into the history and start from there (instead of genesis).
         '''
         def read_history():
-            tx_nums = list(self.history.get_txnums(hashX, limit))
+            tx_nums = list(self.history.get_txnums(hashX=hashX, limit=limit, txnum_min=txnum_min))
             fs_tx_hash = self.fs_tx_hash
-            return [fs_tx_hash(tx_num) for tx_num in tx_nums]
+            return [(*fs_tx_hash(tx_num), tx_num) for tx_num in tx_nums]
 
         while True:
             history = await run_in_thread(read_history)
-            if all(hash is not None for hash, height in history):
+            if all(tx_hash is not None for tx_hash, height, tx_num in history):
                 return history
             self.logger.warning(f'limited_history: tx hash '
                                 f'not found (reorg?), retrying...')
             await sleep(0.25)
+
+    async def limited_history(
+            self,
+            *,
+            hashX: bytes,
+            limit: Optional[int] = 1000,
+            txnum_min: Optional[int] = None,
+    ) -> Sequence[Tuple[bytes, int]]:
+        '''Return a list of (tx_hash, height) tuples of confirmed txs that touched hashX.'''
+        triples = await self.limited_history_triples(
+            hashX=hashX, limit=limit, txnum_min=txnum_min)
+        return [(tx_hash, height) for (tx_hash, height, tx_num) in triples]
+
 
     def fs_txnum_for_txhash(self, tx_hash: bytes) -> Optional[int]:
         return self.history.get_txnum_for_txhash(tx_hash)

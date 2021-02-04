@@ -11,8 +11,10 @@
 import ast
 import time
 from collections import defaultdict
-from typing import TYPE_CHECKING, Type, Optional, Dict, Sequence, Tuple
+from typing import TYPE_CHECKING, Type, Optional, Dict, Sequence, Tuple, List
 import itertools
+
+from aiorpcx import run_in_thread
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
@@ -41,6 +43,7 @@ def pack_txnum(tx_num: int) -> bytes:
 class History:
 
     DB_VERSIONS = (3, )
+    STORE_INTERMEDIATE_STATUSHASH_EVERY_N_TXS = 5000
 
     db: Optional['Storage']
 
@@ -55,6 +58,9 @@ class History:
         self._unflushed_hashxs_count = 0
         self._unflushed_txhash_to_txnum_map = {}  # type: Dict[bytes, int]
         self._unflushed_txo_to_spender = {}  # type: Dict[bytes, int]  # (tx_num+txout_idx)->tx_num
+        # hashX -> list of (tx_num, status):
+        self._unflushed_hashx_to_statushash = {}  # type: Dict[bytes, List[Tuple[int, bytes]]]
+        self._unflushed_statushash_count = 0
 
         # Key: b'H' + address_hashX + tx_num
         # Value: <null>
@@ -65,6 +71,11 @@ class History:
         # Key: b's' + tx_num + txout_idx
         # Value: tx_num
         # "which tx spent this TXO?" -- note that UTXOs are not stored.
+        # ---
+        # Key: b'S' + address_hashX + tx_num
+        # Value: status_hash
+        # Status hash of hashX including only txs up to tx_num.
+        # An append-only cache of partial statuses: only reorg-safe depths are stored.
         self.db = None
 
     def open_db(
@@ -197,10 +208,13 @@ class History:
             unflushed_spenders[prev_txnumb+prev_idx_packed] = spender_txnum
 
     def unflushed_memsize(self):
+        # note: the magic numbers here were estimated using util.deep_getsizeof
         hashXs = len(self._unflushed_hashxs) * 180 + self._unflushed_hashxs_count * TXNUM_LEN
         txs = 232 + 93 * len(self._unflushed_txhash_to_txnum_map)
         spenders = 102 + 113 * len(self._unflushed_txo_to_spender)
-        return hashXs + txs + spenders
+        statushashes = (232 + 100 * len(self._unflushed_hashx_to_statushash)
+                        + 161 * self._unflushed_statushash_count)
+        return hashXs + txs + spenders + statushashes
 
     def assert_flushed(self):
         assert not self._unflushed_hashxs
@@ -225,21 +239,29 @@ class History:
                 db_key = b's' + prevout
                 db_val = pack_txnum(spender_txnum)
                 batch.put(db_key, db_val)
+            for hashX, lst in sorted(self._unflushed_hashx_to_statushash.items()):
+                for tx_num, status in lst:
+                    db_key = b'S' + hashX + pack_txnum(tx_num)
+                    batch.put(db_key, status)
             self.hist_db_tx_count = self.hist_db_tx_count_next
             self.write_state(batch)
 
         addr_count = len(unflushed_hashxs)
         tx_count = len(self._unflushed_txhash_to_txnum_map)
         spend_count = len(self._unflushed_txo_to_spender)
+        statushash_count = self._unflushed_statushash_count
         unflushed_hashxs.clear()
         self._unflushed_hashxs_count = 0
         self._unflushed_txhash_to_txnum_map.clear()
         self._unflushed_txo_to_spender.clear()
+        self._unflushed_statushash_count = 0
+        self._unflushed_hashx_to_statushash.clear()
 
         if self.db.for_sync:
             elapsed = time.monotonic() - start_time
             self.logger.info(f'flushed history in {elapsed:.1f}s, for: '
-                             f'{addr_count:,d} addrs, {tx_count:,d} txs, {spend_count:,d} spends')
+                             f'{addr_count:,d} addrs, {tx_count:,d} txs, {spend_count:,d} spends, '
+                             f'{statushash_count:,d} statushashes')
 
     def backup(self, *, hashXs, tx_count, tx_hashes: Sequence[bytes], spends: Sequence[bytes]):
         self.assert_flushed()
@@ -279,18 +301,31 @@ class History:
         self.logger.info(f'backing up history, removed {nremoves_addr:,d} addrs, '
                          f'{len(tx_hashes):,d} txs, and {len(spends):,d} spends')
 
-    def get_txnums(self, hashX: bytes, limit: Optional[int] = 1000):
+    def get_txnums(
+            self,
+            *,
+            hashX: bytes,
+            limit: Optional[int] = 1000,
+            txnum_min: Optional[int] = None,
+    ):
         '''Generator that returns an unpruned, sorted list of tx_nums in the
         history of a hashX.  Includes both spending and receiving
         transactions.  By default yields at most 1000 entries.  Set
-        limit to None to get them all.  '''
+        limit to None to get them all.
+        txnum_min can be used to seek into the history and start from there (instead of genesis).
+        '''
         limit = util.resolve_limit(limit)
         prefix = b'H' + hashX
-        for db_key, db_val in self.db.iterator(prefix=prefix):
+        it = self.db.iterator(prefix=prefix)
+        if txnum_min is not None:
+            it.seek(prefix + pack_txnum(txnum_min))
+        for db_key, db_val in it:
             tx_numb = db_key[-TXNUM_LEN:]
             if limit == 0:
                 return
             tx_num = unpack_txnum(tx_numb)
+            if txnum_min is not None:
+                assert tx_num >= txnum_min, f"tx_num={tx_num}, txnum_min={txnum_min}"
             yield tx_num
             limit -= 1
 
@@ -317,3 +352,48 @@ class History:
             if spender_txnumb:
                 spender_txnum = unpack_txnum(spender_txnumb)
         return spender_txnum
+
+    def fs_get_intermediate_statushash_for_hashx(self, hashX: bytes) -> Tuple[int, bytes]:
+        '''For a hashX, returns (tx_num, status), with the latest stored statushash
+        and corresponding tx_num.
+        This can be used to efficiently calculate the status of a hashX as
+        only the txs mined after(>) tx_num will need to be hashed.
+        '''
+        unflushed_statushashes = self._unflushed_hashx_to_statushash.get(hashX, [])
+        if len(unflushed_statushashes) > 0:
+            tx_num, status = unflushed_statushashes[-1]
+        else:
+            prefix = b'S' + hashX
+            for db_key, db_val in self.db.iterator(prefix=prefix, reverse=True):
+                tx_numb = db_key[-TXNUM_LEN:]
+                tx_num = unpack_txnum(tx_numb)
+                status = db_val
+                break
+            else:
+                tx_num = -1
+                status = bytes(32)
+        return tx_num, status
+
+    async def get_intermediate_statushash_for_hashx(self, hashX: bytes) -> Tuple[int, bytes]:
+        return await run_in_thread(self.fs_get_intermediate_statushash_for_hashx, hashX)
+
+    def store_intermediate_statushash_for_hashx(
+            self,
+            *,
+            hashX: bytes,
+            tx_num: int,
+            status: bytes,
+    ) -> None:
+        '''For a hashX, store a partial status calculated up to (and including) tx_num.
+        tx_num must be at a reorg-safe depth.
+        The status is only stored in memory at first; it will be written to the DB
+        during the next flush().
+        '''
+        if hashX not in self._unflushed_hashx_to_statushash:
+            self._unflushed_hashx_to_statushash[hashX] = []
+        if len(self._unflushed_hashx_to_statushash[hashX]) > 0:
+            tx_num_last, status_last = self._unflushed_hashx_to_statushash[hashX][-1]
+            if tx_num <= tx_num_last:
+                return
+        self._unflushed_hashx_to_statushash[hashX].append((tx_num, status))
+        self._unflushed_statushash_count += 1

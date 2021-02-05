@@ -13,6 +13,7 @@ import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Type, Optional, Dict, Sequence, Tuple, List
 import itertools
+from functools import partial
 
 from aiorpcx import run_in_thread
 
@@ -323,6 +324,7 @@ class History:
             it.seek(prefix + pack_txnum(txnum_min))
         txnum_min = txnum_min if txnum_min is not None else 0
         txnum_max = txnum_max if txnum_max is not None else float('inf')
+        assert txnum_min <= txnum_max, f"txnum_min={txnum_min}, txnum_max={txnum_max}"
         for db_key, db_val in it:
             tx_numb = db_key[-TXNUM_LEN:]
             if limit == 0:
@@ -359,29 +361,46 @@ class History:
                 spender_txnum = unpack_txnum(spender_txnumb)
         return spender_txnum
 
-    def fs_get_intermediate_statushash_for_hashx(self, hashX: bytes) -> Tuple[int, bytes]:
+    def fs_get_intermediate_statushash_for_hashx(
+            self,
+            *,
+            hashX: bytes,
+            txnum_max: int = None,
+    ) -> Tuple[int, bytes]:
         '''For a hashX, returns (tx_num, status), with the latest stored statushash
-        and corresponding tx_num.
+        and corresponding tx_num, where tx_num < txnum_max.
         This can be used to efficiently calculate the status of a hashX as
         only the txs mined after(>) tx_num will need to be hashed.
         '''
+        # first, search in-memory, among the unflushed statuses
         unflushed_statushashes = self._unflushed_hashx_to_statushash.get(hashX, [])
         if len(unflushed_statushashes) > 0:
-            tx_num, status = unflushed_statushashes[-1]
+            for tx_num, status in reversed(unflushed_statushashes):
+                if txnum_max is None or tx_num < txnum_max:
+                    return tx_num, status
+        # second, search in the on-disk DB
+        prefix = b'S' + hashX
+        it = self.db.iterator(prefix=prefix, reverse=True)
+        if txnum_max is not None:
+            it.seek(prefix + pack_txnum(txnum_max))
+        for db_key, db_val in it:
+            tx_numb = db_key[-TXNUM_LEN:]
+            tx_num = unpack_txnum(tx_numb)
+            status = db_val
+            break
         else:
-            prefix = b'S' + hashX
-            for db_key, db_val in self.db.iterator(prefix=prefix, reverse=True):
-                tx_numb = db_key[-TXNUM_LEN:]
-                tx_num = unpack_txnum(tx_numb)
-                status = db_val
-                break
-            else:
-                tx_num = -1
-                status = bytes(32)
+            tx_num = 0
+            status = bytes(32)
         return tx_num, status
 
-    async def get_intermediate_statushash_for_hashx(self, hashX: bytes) -> Tuple[int, bytes]:
-        return await run_in_thread(self.fs_get_intermediate_statushash_for_hashx, hashX)
+    async def get_intermediate_statushash_for_hashx(
+            self,
+            *,
+            hashX: bytes,
+            txnum_max: int = None,
+    ) -> Tuple[int, bytes]:
+        f = partial(self.fs_get_intermediate_statushash_for_hashx, hashX=hashX, txnum_max=txnum_max)
+        return await run_in_thread(f)
 
     def store_intermediate_statushash_for_hashx(
             self,
@@ -397,6 +416,7 @@ class History:
         '''
         if hashX not in self._unflushed_hashx_to_statushash:
             self._unflushed_hashx_to_statushash[hashX] = []
+        # maintain invariant that unflushed statuses are in order (increasing tx_num):
         if len(self._unflushed_hashx_to_statushash[hashX]) > 0:
             tx_num_last, status_last = self._unflushed_hashx_to_statushash[hashX][-1]
             if tx_num <= tx_num_last:

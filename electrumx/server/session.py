@@ -1222,12 +1222,19 @@ class ElectrumX(SessionBase):
 
         return status
 
-    async def _address_status_proto_1_5(self, hashX: bytes) -> str:
-        '''Returns an address status, as per protocol newer than >=1.5'''
-        # first, consider confirmed history
-        tx_num_calced, status = await self.db.history.get_intermediate_statushash_for_hashx(hashX)
+    async def _calc_intermediate_status_for_hashX(
+            self,
+            *,
+            hashX: bytes,
+            txnum_max: int = None,
+    ) -> bytes:
+        '''Returns the status of a hashX, considering only confirmed history
+        up to (<) txnum_max.
+        '''
+        tx_num_calced, status = await self.db.history.get_intermediate_statushash_for_hashx(
+            hashX=hashX, txnum_max=txnum_max)
         db_history = await self.db.limited_history_triples(
-            hashX=hashX, limit=None, txnum_min=tx_num_calced+1)
+            hashX=hashX, limit=None, txnum_min=tx_num_calced+1, txnum_max=txnum_max)
         self.bump_cost(0.3 + len(db_history) * 0.001)  # cost of history-lookup
         self.bump_cost(36 * len(db_history) * 0.00002)  # cost of hashing mined txs
         reorgsafe_height = self.db.db_height - self.env.reorg_limit
@@ -1238,6 +1245,12 @@ class ElectrumX(SessionBase):
             if cnt % storestatus_period == 0 and height < reorgsafe_height:
                 self.db.history.store_intermediate_statushash_for_hashx(
                     hashX=hashX, tx_num=tx_num, status=status)
+        return status
+
+    async def _address_status_proto_1_5(self, hashX: bytes) -> str:
+        '''Returns an address status, as per protocol newer than >=1.5'''
+        # first, consider confirmed history
+        status = await self._calc_intermediate_status_for_hashX(hashX=hashX)
 
         # second, consider mempool txs
         mempool = await self.mempool.transaction_summaries(hashX)
@@ -1393,7 +1406,16 @@ class ElectrumX(SessionBase):
                 raise RPCError(BAD_REQUEST, f'from_height={from_height} '
                                             f'<= client_height={client_height} '
                                             f'< to_height={to_height} must hold.')
-            # TODO implement handling. they are ignored for now
+        # Done sanitising args; start handling
+        # Check if client status is consistent with server; if so we can fast-forward from_height
+        if client_statushash is not None:
+            client_txnum = self.db.get_next_tx_num_after_blockheight(client_height)
+            server_statushash = await self._calc_intermediate_status_for_hashX(
+                hashX=hashX,
+                txnum_max=client_txnum + 1,
+            )
+            if server_statushash == client_statushash:
+                from_height = client_height + 1
 
         # Limit size of returned history to ensure it fits within a response.
         limit_bytes = self.env.max_send - HISTORY_OVER_WIRE_OVERHEAD_BYTES

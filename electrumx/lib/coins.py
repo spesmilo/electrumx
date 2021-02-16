@@ -2750,20 +2750,25 @@ class Pivx(Coin):
     P2PKH_VERBYTE = bytes.fromhex("1e")
     P2SH_VERBYTE = bytes.fromhex("0d")
     WIF_BYTE = bytes.fromhex("d4")
+    DESERIALIZER = lib_tx.DeserializerPIVX
     TX_COUNT_HEIGHT = 569399
     TX_COUNT = 2157510
     TX_PER_BLOCK = 1
     STATIC_BLOCK_HEADERS = False
     RPC_PORT = 51470
-    ZEROCOIN_HEADER = 112
+    REORG_LIMIT = 100
+    EXPANDED_HEADER = 112
     ZEROCOIN_START_HEIGHT = 863787
+    ZEROCOIN_END_HEIGHT = 2153200
     ZEROCOIN_BLOCK_VERSION = 4
+    SAPLING_START_HEIGHT = 2700500
 
     @classmethod
     def static_header_len(cls, height):
         '''Given a header height return its length.'''
-        if height >= cls.ZEROCOIN_START_HEIGHT:
-            return cls.ZEROCOIN_HEADER
+        if (height >= cls.ZEROCOIN_START_HEIGHT and height < cls.ZEROCOIN_END_HEIGHT) \
+                or (height >= cls.SAPLING_START_HEIGHT):
+            return cls.EXPANDED_HEADER
         else:
             return cls.BASIC_HEADER_SIZE
 
@@ -2788,7 +2793,19 @@ class PivxTestnet(Pivx):
     WIF_BYTE = bytes.fromhex("EF")
     TX_PER_BLOCK = 4
     RPC_PORT = 51472
-    ZEROCOIN_START_HEIGHT = 201564
+    ZEROCOIN_START_HEIGHT = 201
+    ZEROCOIN_END_HEIGHT = 201
+    ZEROCOIN_BLOCK_VERSION = 4
+    SAPLING_START_HEIGHT = 201
+
+    @classmethod
+    def static_header_len(cls, height):
+        '''Given a header height return its length.'''
+        if (height >= cls.ZEROCOIN_START_HEIGHT and height < cls.ZEROCOIN_END_HEIGHT) or (
+                height >= cls.SAPLING_START_HEIGHT):
+            return cls.EXPANDED_HEADER
+        else:
+            return cls.BASIC_HEADER_SIZE
 
 
 class Bitg(Coin):
@@ -3509,7 +3526,7 @@ class Primecoin(PrimeChainPowMixin, Coin):
     GENESIS_HASH = ('963d17ba4dc753138078a2f56afb3af9'
                     '674e2546822badff26837db9a0152106')
     DAEMON = daemon.FakeEstimateFeeDaemon
-    ESTIMATE_FEE = 1.024
+    ESTIMATE_FEE = 1.
     TX_COUNT = 7138730
     TX_COUNT_HEIGHT = 3639500
     TX_PER_BLOCK = 2
@@ -3873,7 +3890,8 @@ class Quebecoin(AuxPowMixin, Coin):
     TX_PER_BLOCK = 20
     REORG_LIMIT = 2000
     RPC_PORT = 10890
-    
+
+
 class Powerblockcoin(NameIndexMixin, AuxPowMixin, Coin):
     NAME = "Powerblockcoin"
     SHORTNAME = "PBC"
@@ -3909,4 +3927,23 @@ class Powerblockcoin(NameIndexMixin, AuxPowMixin, Coin):
         NAME_FIRSTUPDATE_OPS,
         NAME_UPDATE_OPS,
     )
+
+
+class Beyondcoin(Coin):
+    NAME = "Beyondcoin"
+    SHORTNAME = "BYND"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("ff88b21e")
+    XPRV_VERBYTES = bytes.fromhex("ff88ade4")
+    P2PKH_VERBYTE = bytes.fromhex("19")
+    P2SH_VERBYTES = [bytes.fromhex("1a"), bytes.fromhex("05")]
+    WIF_BYTE = bytes.fromhex("b0")
+    GENESIS_HASH = ('0a9e3b5fce3aee6e04f06dfd6ad380a6'
+                    'c0f9d8420f53a4ca97845756ee5d56e7')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 287000
+    TX_COUNT_HEIGHT = 133700
+    TX_PER_BLOCK = 2
+    RPC_PORT = 10332
+    REORG_LIMIT = 5000
 

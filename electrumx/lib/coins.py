@@ -1198,6 +1198,7 @@ class Dogecoin(AuxPowMixin, Coin):
     TX_COUNT_HEIGHT = 1604979
     TX_PER_BLOCK = 20
     REORG_LIMIT = 2000
+    DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
 
 
 class DogecoinTestnet(Dogecoin):

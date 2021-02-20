@@ -574,6 +574,43 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
         read_varbytes = self._read_varbytes
         return [read_varbytes() for _ in range(self._read_varint())]
 
+    def _read_outputs(self):
+        read_output = self._read_output
+        return [read_output() for i in range(self._read_varint())]
+
+    def _read_output(self):
+        value = self._read_le_int64()
+        if value == -1:
+            value = self._read_le_int64()
+            ek = self._read_varbytes()
+            ok = self._read_varbytes()
+            sk = self._read_varbytes()
+            v_count = self._read_varint()
+            v = []
+            for i in range(v_count):
+                v.append(self._read_varbytes())
+            l = []
+            l_count = self._read_varint()
+            for i in range(l_count):
+                l.append(self._read_varbytes())
+            r = []
+            r_count = self._read_varint()
+            for i in range(r_count):
+                r.append(self._read_varbytes())
+            A = self._read_varbytes()
+            S = self._read_varbytes()
+            T1 = self._read_varbytes()
+            T2 = self._read_varbytes()
+            taux = self._read_varbytes()
+            mu = self._read_varbytes()
+            a = self._read_varbytes()
+            b = self._read_varbytes()
+            t = self._read_varbytes()
+        return TxOutput(
+            value,  # value
+            self._read_varbytes(),  # pk_script
+        )
+
     def read_tx_no_segwit(self):
         version = self._read_le_int32()
         time = self._read_le_uint32()
@@ -583,6 +620,10 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
         strDZeel = ""
         if version >= 2:
             strDZeel = self._read_varbytes()
+        if version & 0x10 or version & 0x20:
+            vchbalsig = self._read_varbytes()
+        if version & 0x10:
+            vchtxsig = self._read_varbytes()
         return TxTime(
             version,
             time,

@@ -533,6 +533,7 @@ class PrimeChainPowMixin:
         deserializer = cls.DESERIALIZER(block)
         return deserializer.read_header(cls.BASIC_HEADER_SIZE)
 
+
 class Verge(Coin):
     NAME = "Verge"
     SHORTNAME = "XVG"

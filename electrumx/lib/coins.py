@@ -533,6 +533,29 @@ class PrimeChainPowMixin:
         deserializer = cls.DESERIALIZER(block)
         return deserializer.read_header(cls.BASIC_HEADER_SIZE)
 
+class Verge(Coin):
+    NAME = "Verge"
+    SHORTNAME = "XVG"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("022d2533")
+    XPRV_VERBYTES = bytes.fromhex("0221312b")
+    P2PKH_VERBYTE = bytes.fromhex("30")
+    P2SH_VERBYTES = [bytes.fromhex("33")]
+    WIF_BYTE = bytes.fromhex("9E")
+    GENESIS_HASH = ('00000fc63692467faeb20cdb3b53200d'
+                    'c601d75bdfa1001463304cc790d77278')
+    RPC_PORT = 20102
+    TX_COUNT = 500000
+    TX_COUNT_HEIGHT = 3082138
+    TX_PER_BLOCK = 1
+    DESERIALIZER = lib_tx.DeserializerVerge
+
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return the hash.'''
+        import scrypt
+        return scrypt.hash(header, header, 1024, 1, 1, 32)
+
 
 class HOdlcoin(Coin):
     NAME = "HOdlcoin"

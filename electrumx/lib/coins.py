@@ -100,12 +100,14 @@ class Coin:
     BLACKLIST_URL = None
     ESTIMATEFEE_MODES = (None, 'CONSERVATIVE', 'ECONOMICAL')
 
-    TX_COUNT: int
-    TX_COUNT_HEIGHT: int
-    TX_PER_BLOCK: int
     RPC_PORT: int
     NAME: str
     NET: str
+
+    # only used for initial db sync ETAs:
+    TX_COUNT_HEIGHT: int  # at a given snapshot of the chain,
+    TX_COUNT: int         # there have been this many txs so far,
+    TX_PER_BLOCK: int     # and from that height onwards, we guess this many txs per block
 
     @classmethod
     def lookup_coin_class(cls, name, net):

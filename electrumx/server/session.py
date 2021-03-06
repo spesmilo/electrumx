@@ -1343,7 +1343,7 @@ class ElectrumX(SessionBase):
         '''
         self.bump_cost(0.5)
         if self.sv_seen:
-            raise RPCError(BAD_REQUEST, f'server.version already sent')
+            return electrumx.version, self.protocol_version_string()
         self.sv_seen = True
 
         if client_name:

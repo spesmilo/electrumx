@@ -147,6 +147,8 @@ Removed methods
   * :func:`blockchain.block.get_header`
   * :func:`blockchain.block.get_chunk`
 
+.. _version 1.4.1:
+
 Version 1.4.1
 =============
 
@@ -158,11 +160,18 @@ Changes
     nonzero.  AuxPoW data is still present when *cp_height* is zero.
     Non-AuxPoW chains are unaffected.
 
-
-Version 1.4.1
-=============
-
 New methods
 -----------
 
   * :func:`blockchain.scipthash.unsubscribe` to unsubscribe from a script hash.
+
+.. _version 1.4.2:
+
+Version 1.4.2
+=============
+
+Changes
+-------
+
+  * :func:`server.version` now always reports the current versions in use;
+    however, only the first message performs protocol negotiation.

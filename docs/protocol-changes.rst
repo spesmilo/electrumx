@@ -159,7 +159,7 @@ Changes
     Non-AuxPoW chains are unaffected.
 
 
-Version 1.4.1
+Version 1.4.2
 =============
 
 New methods

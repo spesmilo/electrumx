@@ -165,4 +165,4 @@ Version 1.4.1
 New methods
 -----------
 
-  * :func:`blockchain.scipthash.unsubscribe` to unsubscribe from a script hash.
+  * :func:`blockchain.scripthash.unsubscribe` to unsubscribe from a script hash.

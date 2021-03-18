@@ -1994,26 +1994,30 @@ class AuxPoWElectrumX(ElectrumX):
             return result
 
         # Covered by a checkpoint; truncate AuxPoW data
-        result['header'] = self.truncate_auxpow(result['header'], height)
+        result['header'] = result['header'][:self.coin.TRUNCATED_HEADER_SIZE]
         return result
 
     async def block_headers(self, start_height, count, cp_height=0):
-        result = await super().block_headers(start_height, count, cp_height)
-
         # Older protocol versions don't truncate AuxPoW
         if self.protocol_tuple < (1, 4, 1):
-            return result
+            return await super().block_headers(start_height, count, cp_height)
 
         # Not covered by a checkpoint; return full AuxPoW data
         if cp_height == 0:
-            return result
+            return await super().block_headers(start_height, count, cp_height)
+
+        result = await super().block_headers_array(start_height, count, cp_height)
 
         # Covered by a checkpoint; truncate AuxPoW data
-        if self.protocol_tuple >= (1, 6):
-            result['headers'] = self.truncate_auxpow_headers(result['headers'])
-            return
+        result['headers'] = self.truncate_auxpow_headers(result['headers'])
 
-        result['hex'] = self.truncate_auxpow(result['hex'], start_height)
+        # Return headers in array form
+        if self.protocol_tuple >= (1, 6):
+            return result
+
+        # Return headers in concatenated form
+        result['hex'] = ''.join(result['headers'])
+        del result['headers']
         return result
 
     def truncate_auxpow_headers(self, headers):
@@ -2021,19 +2025,6 @@ class AuxPoWElectrumX(ElectrumX):
         for header in headers:
             result.append(header[:self.coin.TRUNCATED_HEADER_SIZE])
         return result
-
-    def truncate_auxpow(self, headers_full_hex, start_height):
-        height = start_height
-        headers_full = util.hex_to_bytes(headers_full_hex)
-        cursor = 0
-        headers = bytearray()
-
-        while cursor < len(headers_full):
-            headers += headers_full[cursor:cursor+self.coin.TRUNCATED_HEADER_SIZE]
-            cursor += self.db.dynamic_header_len(height)
-            height += 1
-
-        return headers.hex()
 
 
 class NameIndexElectrumX(ElectrumX):

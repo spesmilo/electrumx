@@ -1994,7 +1994,7 @@ class AuxPoWElectrumX(ElectrumX):
             return result
 
         # Covered by a checkpoint; truncate AuxPoW data
-        result['header'] = result['header'][:self.coin.TRUNCATED_HEADER_SIZE]
+        result['header'] = self.truncate_auxpow_single(result['header'])
         return result
 
     async def block_headers(self, start_height, count, cp_height=0):
@@ -2023,8 +2023,12 @@ class AuxPoWElectrumX(ElectrumX):
     def truncate_auxpow_headers(self, headers):
         result = []
         for header in headers:
-            result.append(header[:self.coin.TRUNCATED_HEADER_SIZE])
+            result.append(self.truncate_auxpow_single(header))
         return result
+
+    def truncate_auxpow_single(self, header: str):
+        # 2 hex chars per byte
+        return header[:2*self.coin.TRUNCATED_HEADER_SIZE]
 
 
 class NameIndexElectrumX(ElectrumX):

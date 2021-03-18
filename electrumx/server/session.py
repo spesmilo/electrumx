@@ -1605,7 +1605,7 @@ class ElectrumX(SessionBase):
         while cursor < len(headers):
             next_cursor = self.db.header_offset(height + 1)
             header = headers[cursor:next_cursor]
-            result['headers'].append(header)
+            result['headers'].append(header.hex())
             cursor = next_cursor
             height += 1
 

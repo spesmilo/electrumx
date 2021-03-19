@@ -198,6 +198,8 @@ Changes
   * The previously required *height* argument for
     :func:`blockchain.transaction.get_merkle` is now optional.
   * Optional *mode* argument added to :func:`blockchain.estimatefee`.
+  * :func:`blockchain.block.headers` now returns headers as a list,
+    instead of a single concatenated hex string.
 
 New methods
 -----------

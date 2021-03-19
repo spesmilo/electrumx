@@ -76,7 +76,7 @@ With *cp_height* 8::
 blockchain.block.headers
 ========================
 
-Return a concatenated chunk of block headers from the main chain.
+Return a chunk of block headers from the main chain.
 
 **Signature**
 
@@ -85,6 +85,7 @@ Return a concatenated chunk of block headers from the main chain.
   .. versionchanged:: 1.4
      *cp_height* parameter added
   .. versionchanged:: 1.4.1
+  .. versionchanged:: 1.5
 
   *start_height*
 
@@ -112,11 +113,19 @@ Return a concatenated chunk of block headers from the main chain.
     the available headers will be returned.  If more headers than
     *max* were requested at most *max* will be returned.
 
+  * *headers*
+
+    An array containing the binary block headers in-order; each header is a
+    hexadecimal string.  AuxPoW data (if present in the original header) is
+    truncated if *cp_height* is nonzero.  Only present in version 1.5 and
+    higher.
+
   * *hex*
 
     The binary block headers concatenated together in-order as a
     hexadecimal string.  Starting with version 1.4.1, AuxPoW data (if present
-    in the original header) is truncated if *cp_height* is nonzero.
+    in the original header) is truncated if *cp_height* is nonzero.  Only
+    present in versions lower than 1.5.
 
   * *max*
 

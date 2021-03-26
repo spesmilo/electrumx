@@ -3919,3 +3919,21 @@ class Beyondcoin(Coin):
     TX_PER_BLOCK = 2
     RPC_PORT = 10332
     REORG_LIMIT = 5000
+
+
+class Syscoin(AuxPowMixin, Coin):
+    NAME = "Syscoin"
+    SHORTNAME = "SYS"
+    NET = "mainnet"
+    P2PKH_VERBYTE = bytes.fromhex("3f")
+    P2SH_VERBYTES = (bytes.fromhex("05"),)
+    WIF_BYTE = bytes.fromhex("80")
+    GENESIS_HASH = ('0000022642db0346b6e01c2a397471f4'
+                    'f12e65d4f4251ec96c1f85367a61a7ab')
+    DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
+    TX_COUNT = 911232
+    TX_COUNT_HEIGHT = 954572
+    TX_PER_BLOCK = 1
+    RPC_PORT = 8370
+    REORG_LIMIT = 2000
+    CHUNK_SIZE = 360

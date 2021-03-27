@@ -3919,3 +3919,27 @@ class Beyondcoin(Coin):
     TX_PER_BLOCK = 2
     RPC_PORT = 10332
     REORG_LIMIT = 5000
+
+class Scalaris(Coin):
+    NAME = "Scalaris"
+    SHORTNAME = "SCA"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488B21E")
+    XPRV_VERBYTES = bytes.fromhex("0488ADE4")
+    GENESIS_HASH = ('000003bf95cf7875987b333cc8e49a7c'
+                    '1a83583e5f5039b9af9555a92cb29651')
+    DAEMON = daemon.LegacyRPCDaemon
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    P2PKH_VERBYTE = bytes.fromhex("3f")
+    P2SH_VERBYTES = (bytes.fromhex("17"),)
+    WIF_BYTE = bytes.fromhex("9a")
+    TX_COUNT_HEIGHT = 23000
+    TX_COUNT = 44330
+    TX_PER_BLOCK = 1
+    RPC_PORT = 42510
+
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return the hash.'''
+        import quark_hash
+        return quark_hash.getPoWHash(header)

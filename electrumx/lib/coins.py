@@ -582,7 +582,7 @@ class BitcoinSV(BitcoinMixin, Coin):
     TX_COUNT_HEIGHT = 557037
     TX_PER_BLOCK = 400
     PEERS = [
-        'electrumx.bitcoinsv.io s',
+        'electrumx.sv.io s',
         'satoshi.vision.cash s',
         'sv.usebsv.com s t',
         'sv.jochen-hoenicke.de s t',
@@ -3919,3 +3919,27 @@ class Beyondcoin(Coin):
     TX_PER_BLOCK = 2
     RPC_PORT = 10332
     REORG_LIMIT = 5000
+
+class Raptoreum(Coin):
+    NAME = "Raptoreum"
+    SHORTNAME = "RTM"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    GENESIS_HASH = ('b79e5df07278b9567ada8fc655ffbfa9'
+    		     'd3f586dc38da3dd93053686f41caeea0')
+    P2PKH_VERBYTE = bytes.fromhex("3c")
+    P2SH_VERBYTES = (bytes.fromhex("10"),)
+    WIF_BYTE = bytes.fromhex("80")
+    TX_COUNT_HEIGHT = 29048
+    TX_COUNT = 79817
+    TX_PER_BLOCK = 4
+    RPC_PORT = 10225
+    PEERS = [
+       
+    ]
+    SESSIONCLS = DashElectrumX
+    DAEMON = daemon.DashDaemon
+    DESERIALIZER = lib_tx_dash.DeserializerDash
+
+

@@ -582,7 +582,7 @@ class BitcoinSV(BitcoinMixin, Coin):
     TX_COUNT_HEIGHT = 557037
     TX_PER_BLOCK = 400
     PEERS = [
-        'electrumx.sv.io s',
+        'electrumx.bitcoinsv.io s',
         'satoshi.vision.cash s',
         'sv.usebsv.com s t',
         'sv.jochen-hoenicke.de s t',
@@ -3936,8 +3936,8 @@ class Raptoreum(Coin):
     TX_PER_BLOCK = 4
     RPC_PORT = 10225
     PEERS = [
-       'ny1.raptoreum.com',
-       'ger1.raptoreum.com'
+       'ny1.raptoreum.com t',
+       'ger1.raptoreum.com t'
     ]
     SESSIONCLS = DashElectrumX
     DAEMON = daemon.DashDaemon

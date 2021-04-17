@@ -932,6 +932,20 @@ class BitcoinSegwitRegtest(BitcoinRegtest):
     NAME = "BitcoinSegwit"  # support legacy name
 
 
+class BitcoinSignet(BitcoinTestnet):
+    NAME = "Bitcoin"
+    NET = "signet"
+    GENESIS_HASH = ('00000008819873e925422c1ff0f99f7c'
+                    'c9bbb232af63a077a480a3633bee1ef6')
+    PEERS = []
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+
+
+class BitcoinSegwitSignet(BitcoinSignet):
+    NAME = "BitcoinSegwit"  # support legacy name
+
+
 class BitcoinNolnet(BitcoinCash):
     '''Bitcoin Unlimited nolimit testnet.'''
     NET = "nolnet"

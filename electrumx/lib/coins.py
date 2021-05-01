@@ -3489,6 +3489,38 @@ class Simplicity(Coin):
             return double_sha256(header)
 
 
+class ElectraProtocol(Coin):
+    NAME = 'ElectraProtocol'
+    SHORTNAME = 'XEP'
+    NET = 'mainnet'
+    XPUB_VERBYTES = bytes.fromhex('0488b21e')
+    XPRV_VERBYTES = bytes.fromhex('0488ade4')
+    P2PKH_VERBYTE = bytes.fromhex('37')
+    P2SH_VERBYTE = bytes.fromhex('89')
+    WIF_BYTE = bytes.fromhex('a2')
+    GENESIS_HASH = '000000954c02f260a6db02c712557adcb5a7a8a0a9acfd3d3c2b3a427376c56f'
+    RPC_PORT = 16816
+    TX_COUNT = 264299
+    TX_COUNT_HEIGHT = 130000
+    TX_PER_BLOCK = 5
+    REORG_LIMIT = 1080
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    PEERS = [
+        'electrumx1.electraprotocol.eu s t',
+        'electrumx2.electraprotocol.eu s t',
+        'electrumx3.electraprotocol.eu s t',
+        'electrumx4.electraprotocol.eu s t',
+        'electrumx5.electraprotocol.eu s t',
+    ]
+
+    @classmethod
+    def genesis_block(cls, block):
+        super().genesis_block(block)
+
+        # XEP has spendable genesis outputs, so we return the full block here.
+        return block
+
+
 class Myce(Coin):
     NAME = "Myce"
     SHORTNAME = "YCE"

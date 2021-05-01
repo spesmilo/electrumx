@@ -1730,6 +1730,9 @@ class PeercoinTestnet(Peercoin):
     GENESIS_HASH = ('00000001f757bb737f6596503e17cd17'
                     'b0658ce630cc727c0cca81aec47c9f06')
     ESTIMATE_FEE = 0.001
+    PEERS = [
+        "testnet-electrum.peercoinexplorer.net s"
+    ]
 
 
 class Trezarcoin(Coin):

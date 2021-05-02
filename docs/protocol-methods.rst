@@ -121,7 +121,8 @@ Return a concatenated chunk of block headers from the main chain.
   * *max*
 
     The maximum number of headers the server will return in a single
-    request.
+    request.  (Recommended to be at least one difficulty retarget period,
+    i.e. 2016)
 
   The dictionary additionally has the following keys if *count* and
   *cp_height* are not zero.  This provides a proof that all the given

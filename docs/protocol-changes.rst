@@ -159,10 +159,10 @@ Changes
     Non-AuxPoW chains are unaffected.
 
 
-Version 1.4.1
+Version 1.4.2
 =============
 
 New methods
 -----------
 
-  * :func:`blockchain.scipthash.unsubscribe` to unsubscribe from a script hash.
+  * :func:`blockchain.scripthash.unsubscribe` to unsubscribe from a script hash.

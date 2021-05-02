@@ -3678,7 +3678,8 @@ class Defcoin(Coin):
     TX_PER_BLOCK = 1
     RPC_PORT = 9386
     REORG_LIMIT = 5000
-
+    DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
+    
 
 class Auroracoin(Coin):
     NAME = "Auroracoin"

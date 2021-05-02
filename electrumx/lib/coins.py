@@ -3971,17 +3971,17 @@ class Quebecoin(AuxPowMixin, Coin):
     RPC_PORT = 10890
 
 
-class Powerblockcoin(NameIndexMixin, AuxPowMixin, Coin):
-    NAME = "Powerblockcoin"
-    SHORTNAME = "PBC"
+class SmartUSD(NameIndexMixin, AuxPowMixin, Coin):
+    NAME = "SmartUSD"
+    SHORTNAME = "SFUSD"
     NET = "mainnet"
     XPUB_VERBYTES = bytes.fromhex("0488b21e")
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
-    P2PKH_VERBYTE = bytes.fromhex("3c")
+    P2PKH_VERBYTE = bytes.fromhex("3f")
     P2SH_VERBYTES = (bytes.fromhex("55"),)
     WIF_BYTE = bytes.fromhex("bc")
-    GENESIS_HASH = ('00000000a9eab671c3f2753a9d21e449'
-                    'b3c12a1fd62b3a9c388e580617e5a363')
+    GENESIS_HASH = ('00000000c36f0406d516605e0a2d2702'
+                    '085d565ec0c1283883002127dfcd52b7')
     DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
     TX_COUNT = 11000
     TX_COUNT_HEIGHT = 11000

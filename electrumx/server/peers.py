@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING, Type
 
 import aiohttp
 from aiorpcx import (Event, Notification, RPCError, RPCSession, SOCKSError,
-                     SOCKSProxy, TaskGroup, TaskTimeout, connect_rs,
-                     handler_invocation, ignore_after, sleep)
+                     SOCKSProxy, TaskGroup, TaskTimeout, UnixAddress,
+                     connect_rs, handler_invocation, ignore_after, sleep)
 from aiorpcx.jsonrpc import CodeMessageError
 
 from electrumx.lib.peer import Peer
@@ -185,15 +185,21 @@ class PeerManager:
 
         If found self.proxy is set to a SOCKSProxy instance, otherwise None.
         '''
-        host = self.env.tor_proxy_host
-        if self.env.tor_proxy_port is None:
-            ports = [9050, 9150, 1080]
-        else:
-            ports = [self.env.tor_proxy_port]
+        path = self.env.tor_proxy_path
+        if path is None:
+            host = self.env.tor_proxy_host
+            if self.env.tor_proxy_port is None:
+                ports = [9050, 9150, 1080]
+            else:
+                ports = [self.env.tor_proxy_port]
         while True:
-            self.logger.info(f'trying to detect proxy on "{host}" '
-                             f'ports {ports}')
-            proxy = await SOCKSProxy.auto_detect_at_host(host, ports, None)
+            if path is None:
+                self.logger.info(f'trying to detect proxy on "{host}" '
+                                f'ports {ports}')
+                proxy = await SOCKSProxy.auto_detect_at_host(host, ports, None)
+            else:
+                self.logger.info(f'trying to detect proxy on "{path}"')
+                proxy = await SOCKSProxy.auto_detect_at_address(UnixAddress(path), None)
             if proxy:
                 self.proxy = proxy
                 self.logger.info(f'detected {proxy}')

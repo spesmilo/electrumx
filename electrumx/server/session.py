@@ -23,9 +23,10 @@ import asyncio
 
 import attr
 import pylru
-from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
+from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection, NetAddress,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
-                     TaskGroup, handler_invocation, serve_rs, serve_ws, sleep)
+                     TaskGroup, UnixAddress, handler_invocation, serve_rs,
+                     serve_ws, sleep)
 
 import electrumx
 import electrumx.lib.util as util
@@ -1236,6 +1237,8 @@ class ElectrumX(SessionBase):
         proxy_address = self.peer_mgr.proxy_address()
         if not proxy_address:
             return False
+        if isinstance(proxy_address, UnixAddress):
+            proxy_address = NetAddress("127.0.0.1", 9150)
         return self.remote_address().host == proxy_address.host
 
     async def replaced_banner(self, banner):

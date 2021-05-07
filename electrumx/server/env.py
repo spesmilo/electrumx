@@ -60,6 +60,7 @@ class Env(EnvBase):
         self.force_proxy = self.boolean('FORCE_PROXY', False)
         self.tor_proxy_host = self.default('TOR_PROXY_HOST', 'localhost')
         self.tor_proxy_port = self.integer('TOR_PROXY_PORT', None)
+        self.tor_proxy_path = self.default('TOR_PROXY_IPC_PATH', None)
 
         # Misc
 

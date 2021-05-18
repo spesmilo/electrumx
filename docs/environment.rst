@@ -307,6 +307,14 @@ raise them.
   SSL listening sockets are closed until the session count drops
   naturally to 95% of the limit.  Defaults to 1,000.
 
+.. envvar:: MAX_RECV
+
+  The maximum size of an incoming message in bytes, the default is 1,000,000 bytes.
+  Note that the smallest sane/safe value for Bitcoin is ~800,100 bytes,
+  as the largest standard tx can have a weight of 400K but the protocol hex-encodes that,
+  plus there is a few bytes of protocol overhead. Setting this to lower than that
+  would preclude clients from broadcasting txs that could propagate over the network.
+
 .. envvar:: MAX_SEND
 
   The maximum size of a response message to send over the wire, in

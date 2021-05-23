@@ -3990,3 +3990,36 @@ class Syscoin(AuxPowMixin, Coin):
     RPC_PORT = 8370
     REORG_LIMIT = 2000
     CHUNK_SIZE = 360
+
+
+class Bitweb(Coin):
+    NAME = "Bitweb"
+    SHORTNAME = "BTE"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    P2PKH_VERBYTE = bytes.fromhex("21")
+    P2SH_VERBYTES = (bytes.fromhex("1E"),)
+    WIF_BYTE = bytes.fromhex("80")
+    GENESIS_HASH = ('00043e9c6bc54d9bd266c3767a83a7b9'
+                    'da435dd7f84e485a2bf2a869be62f1f3')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 31788
+    TX_COUNT_HEIGHT = 29511
+    TX_PER_BLOCK = 2
+    RPC_PORT = 1605
+    PEERS = [
+        'seed.bitwebcore.info s t',
+        'seed1.bitwebcore.info s t',
+        'seed2.bitwebcore.info s t',
+        'seed1atscalaris.scalaris.info s t',
+        'seed2atscalaris.scalaris.info s t',
+        'seed3atscalaris.scalaris.info s t',
+        'seed4atscalaris.scalaris.info s t',
+    ]
+
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return the hash.'''
+        import bitweb_yespower
+        return bitweb_yespower.getPoWHash(header)

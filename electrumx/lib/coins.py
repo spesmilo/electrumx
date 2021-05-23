@@ -4009,9 +4009,9 @@ class Bitweb(Coin):
     TX_PER_BLOCK = 2
     RPC_PORT = 1605
     PEERS = [
-        'seed.bitwebcore.info s t',
-        'seed1.bitwebcore.info s t',
-        'seed2.bitwebcore.info s t',
+        'seed.bitwebcore.org s t',
+        'seed1.bitwebcore.org s t',
+        'seed2.bitwebcore.org s t',
         'seed1atscalaris.scalaris.info s t',
         'seed2atscalaris.scalaris.info s t',
         'seed3atscalaris.scalaris.info s t',

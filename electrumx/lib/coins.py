@@ -962,6 +962,26 @@ class BitcoinNolnet(BitcoinCash):
     RPC_PORT = 28332
     PEER_DEFAULT_PORTS = {'t': '52001', 's': '52002'}
 
+    
+# Source: https://github.com/fastcoin-project/fastcoin    
+class Fastcoin(AuxPowMixin, Coin):
+    NAME = "Fastcoin"
+    SHORTNAME = "FST"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e") 
+    XPRV_VERBYTES = bytes.fromhex("0488ade4") 
+    P2PKH_VERBYTE = bytes.fromhex("60")  
+    P2SH_VERBYTES = [bytes.fromhex("14")]  
+    WIF_BYTE = bytes.fromhex("E0")
+    GENESIS_HASH = ('ecba185817b726ef62e53afb14241a80'
+                    '95bd9613d2d3df679911029b83c98e5b')
+    TX_COUNT = 2068178
+    TX_COUNT_HEIGHT = 11485363
+    TX_PER_BLOCK = 20
+    REORG_LIMIT = 2000
+    RPC_PORT = 9527    
+    DESERIALIZER = lib_tx.DeserializerAuxPowSegWit    
+    
 
 # Source: https://github.com/sumcoinlabs/sumcoin
 class Sumcoin(Coin):

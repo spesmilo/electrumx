@@ -1493,7 +1493,19 @@ class ZelCash(EquihashMixin, Coin):
     TX_PER_BLOCK = 3
     RPC_PORT = 16124
     REORG_LIMIT = 800
-
+    
+class Picacoin(Coin):
+    NAME = "Picacoin"
+    NET = "mainnet"
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    P2PKH_VERBYTE = bytes.fromhex("00")
+    P2SH_VERBYTES = bytes.fromhex("05")
+    WIF_BYTE = bytes.fromhex("80")
+    GENESIS_HASH = ('00000000decb9cc2528a3817c887fa1f'
+                    '286e6d6710f3ecb80ae63f9e044deddb')
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 2
+    TX_PER_BLOCK = 2
 
 class Zclassic(EquihashMixin, Coin):
     NAME = "Zclassic"

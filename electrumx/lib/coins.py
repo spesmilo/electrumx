@@ -618,6 +618,20 @@ class BitcoinCash(BitcoinMixin, Coin):
                     '<br/><br/>')
         return False
 
+class Picacoin(Coin):
+    NAME = "Picacoin"
+    NET = "mainnet"
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    #MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
+    P2PKH_VERBYTE = bytes.fromhex("00")
+    P2SH_VERBYTES = bytes.fromhex("05")
+    WIF_BYTE = bytes.fromhex("80")
+    GENESIS_HASH = ('00000000decb9cc2528a3817c887fa1f'
+                    '286e6d6710f3ecb80ae63f9e044deddb')
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 2
+    TX_PER_BLOCK = 2
+    #CRASH_CLIENT_VER = (3, 2, 3)
 
 class Bitcoin(BitcoinMixin, Coin):
     NAME = "Bitcoin"

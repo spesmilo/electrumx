@@ -667,9 +667,20 @@ as an input (spends it).
 **Notifications**
 
   The client will receive a notification when the `status` of the outpoint changes.
-  The protocol does not guarantee but the client might also receive a notification
-  if the status does not change but there was a reorg.
-  Its signature is
+  That is, any event that changes any field of the `status` dictionary results in a
+  notification. Some examples:
+
+  * a funding/spending tx appearing in the mempool if there was no such tx when the client subbed
+  * funding/spending tx height changing from -1 to 0 as its inputs got mined
+  * funding/spending tx height changing from 0 to a (positive) block height when it gets mined
+  * note that reorgs can change any of the `status` fields and result in notifications
+  * note that mempool replacement (e.g. due to RBF) or mempool eviction (and potentially other
+    mempool quirks) can also change some of the `status` fields and hence result in notifications
+
+  The client MAY receive a notification even if the status did not change
+  (when e.g. there was a reorg changing the blockhash the tx is mined in but not the height).
+
+  The signature of the notification is
 
     .. function:: blockchain.outpoint.subscribe([tx_hash, txout_idx], status)
        :noindex:

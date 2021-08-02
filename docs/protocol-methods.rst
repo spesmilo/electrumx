@@ -671,6 +671,7 @@ as an input (spends it).
   notification. Some examples:
 
   * a funding/spending tx appearing in the mempool if there was no such tx when the client subbed
+    (note: the server MUST save the subscription even if the outpoint does not exist yet)
   * funding/spending tx height changing from -1 to 0 as its inputs got mined
   * funding/spending tx height changing from 0 to a (positive) block height when it gets mined
   * note that reorgs can change any of the `status` fields and result in notifications

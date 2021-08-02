@@ -611,6 +611,12 @@ as an input (spends it).
     Note that some implementations (such as EPS/BWT) might require this parameter
     to be able to serve the request.
 
+.. note::  The server MAY automatically clean up subscriptions (unsubscribe the client)
+  where the spending transaction is already deeply mined at a reorg-safe height (typically
+  100+ blocks deep).
+  Similarly, the server MAY ignore new subscription requests if the spending tx is already
+  mined at a reorg-safe height but it still MUST send at least one full response.
+
 **Result**
 
   The status of the TXO, taking the mempool into consideration.

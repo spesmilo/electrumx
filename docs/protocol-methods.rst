@@ -674,6 +674,41 @@ as an input (spends it).
     .. function:: blockchain.outpoint.subscribe([tx_hash, txout_idx], status)
        :noindex:
 
+**Full JSON-RPC Example**
+
+Here is an example where the client sends a request, gets an immediate response,
+and then at some point later - while the connection is still open -
+receives a notification.
+
+::
+
+  -> {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "blockchain.outpoint.subscribe",
+    "params": ["1872b27abc497492a775fe335abfe368af575733144a7ecd4b249d8fd885b3cf", 1]
+  }
+  <- {
+    "jsonrpc": "2.0",
+    "result": {"height": 1866594},
+    "id": 4
+  }
+
+  # notification after broadcasting tx 4a19a360f71814c566977114c49ccfeb8a7e4719eda26cee27fa504f3f02ca09
+  <- {
+    "jsonrpc": "2.0",
+    "method": "blockchain.outpoint.subscribe",
+    "params": [
+      ["1872b27abc497492a775fe335abfe368af575733144a7ecd4b249d8fd885b3cf", 1],
+      {
+        "height": 1866594,
+        "spender_txhash": "4a19a360f71814c566977114c49ccfeb8a7e4719eda26cee27fa504f3f02ca09",
+        "spender_height": 0
+      }
+    ]
+  }
+
+
 blockchain.outpoint.unsubscribe
 ===============================
 

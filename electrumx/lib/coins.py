@@ -4012,7 +4012,3 @@ class Marscoin(Coin):
     TX_PER_BLOCK = 2 
     RPC_PORT = 9981 
     REORG_LIMIT = 800
-    PEERS = [
-        '107.170.70.121 s t',
-        '159.89.186.177 s t',
-    ]

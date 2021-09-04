@@ -1707,7 +1707,7 @@ class Peercoin(Coin):
     WIF_BYTE = bytes.fromhex("b7")
     GENESIS_HASH = ('0000000032fe677166d54963b62a4677'
                     'd8957e87c508eaa4fd7eb1c880cd27e3')
-    DESERIALIZER = lib_tx.DeserializerTxTimeSegWit
+    DESERIALIZER = lib_tx.DeserializerPeercoin
     DAEMON = daemon.FakeEstimateFeeDaemon
     ESTIMATE_FEE = 0.001
     RELAY_FEE = 0.01

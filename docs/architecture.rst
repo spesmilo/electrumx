@@ -7,7 +7,7 @@ Architecture
 Env
 ---
 
-Holds configuration taken from the environment, with apprioriate
+Holds configuration taken from the environment, with appropriate
 defaulting appropriately.  Generally passed to the constructor of
 other components which take their settings from it.
 

@@ -46,7 +46,7 @@ See :ref:`HOWTO`.
 
 There is also an `installer`_ available that simplifies the
 installation on various Linux-based distributions, and a `Dockerfile`_
-available .
+available.
 
 .. _installer: https://github.com/bauerj/electrumx-installer
 .. _Dockerfile: https://github.com/lukechilds/docker-electrumx

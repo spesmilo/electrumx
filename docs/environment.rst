@@ -327,9 +327,9 @@ raise them.
   served all at once or not at all, an obvious avenue for abuse.
   :envvar:`MAX_SEND` is a stop-gap until the protocol is improved to
   admit incremental history requests.  Each history entry is
-  approximately 100 bytes so the default is equivalent to a history
+  approximately 100 bytes, so the default is equivalent to a history
   limit of around 10,000 entries, which should be ample for most
-  legitimate users.  If you use a higher default bear in mind one
+  legitimate users.  If you use a higher default, bear in mind one
   client can request history for multiple addresses.  Also note that
   the largest raw transaction you will be able to serve to a client is
   just under half of :envvar:`MAX_SEND`, as each raw byte becomes 2
@@ -418,7 +418,7 @@ If you are not running a Tor proxy ElectrumX will be unable to connect
 to onion server peers, in which case rather than returning no onion
 peers it will fall back to a hard-coded list.
 
-To give incoming clients a full range of onion servers you will need
+To give incoming clients a full range of onion servers, you will need
 to be running a Tor proxy for ElectrumX to use.
 
 ElectrumX will perform peer-discovery by default and announce itself

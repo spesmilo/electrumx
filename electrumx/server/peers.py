@@ -17,7 +17,7 @@ from ipaddress import IPv4Address, IPv6Address
 from typing import TYPE_CHECKING, Type
 
 import aiohttp
-from aiorpcx import (Event, Notification, RPCError, RPCSession, SOCKSError,
+from aiorpcx import (Event, Notification, RPCSession, SOCKSError,
                      SOCKSProxy, TaskGroup, TaskTimeout, connect_rs,
                      handler_invocation, ignore_after, sleep)
 from aiorpcx.jsonrpc import CodeMessageError

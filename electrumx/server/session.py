@@ -1230,22 +1230,31 @@ class ElectrumX(SessionBase):
     ) -> bytes:
         '''Returns the status of a hashX, considering only confirmed history
         up to (<) txnum_max.
+        TODO maybe also store intermediate status hashes as part of initial sync? to prep cache...
         '''
-        tx_num_calced, status = await self.db.history.get_intermediate_statushash_for_hashx(
-            hashX=hashX, txnum_max=txnum_max)
-        db_history = await self.db.limited_history_triples(
-            hashX=hashX, limit=None, txnum_min=tx_num_calced+1, txnum_max=txnum_max)
-        self.bump_cost(0.3 + len(db_history) * 0.001)  # cost of history-lookup
-        self.bump_cost(36 * len(db_history) * 0.00002)  # cost of hashing mined txs
-        reorgsafe_height = self.db.db_height - self.env.reorg_limit
         storestatus_period = self.db.history.STORE_INTERMEDIATE_STATUSHASH_EVERY_N_TXS
-        for cnt, (tx_hash, height, tx_num) in enumerate(db_history, start=1):
-            tx_item = tx_hash + util.pack_le_int32(height)
-            status = sha256(status + tx_item)
-            if cnt % storestatus_period == 0 and height < reorgsafe_height:
-                self.db.history.store_intermediate_statushash_for_hashx(
-                    hashX=hashX, tx_num=tx_num, status=status)
-        return status
+        reorgsafe_height = self.db.db_height - self.env.reorg_limit
+        # get partial status from cache
+        tx_num, status = await self.db.history.get_intermediate_statushash_for_hashx(
+            hashX=hashX, txnum_max=txnum_max)
+        while True:
+            # get a history part from db, update status to incorporate it, and maybe store status
+            db_history_part = await self.db.limited_history_triples(
+                hashX=hashX, limit=storestatus_period, txnum_min=tx_num+1, txnum_max=txnum_max)
+            self.bump_cost(0.3 + len(db_history_part) * 0.001)  # cost of history-lookup
+            self.bump_cost(36 * len(db_history_part) * 0.00002)  # cost of hashing mined txs
+            for (tx_hash, height, tx_num) in db_history_part:
+                tx_item = tx_hash + util.pack_le_int32(height)
+                status = sha256(status + tx_item)
+                if height < reorgsafe_height:
+                    self.db.history.store_intermediate_statushash_for_hashx(
+                        hashX=hashX, tx_num=tx_num, status=status)
+            # if db_history_part is not max-sized, then there are no more parts.
+            # (note: even if max-sized, the next part might be empty)
+            if len(db_history_part) < storestatus_period:
+                return status
+            self.logger.info(f"calculated intermediate status for hashX={hashX.hex()}, "
+                             f"up to tx_num={tx_num}")
 
     async def _address_status_proto_1_5(self, hashX: bytes) -> str:
         '''Returns an address status, as per protocol newer than >=1.5'''
@@ -1418,6 +1427,8 @@ class ElectrumX(SessionBase):
                 from_height = client_height + 1
 
         # Limit size of returned history to ensure it fits within a response.
+        # TODO add a min() here so that this won't become "consensus".
+        #      or maybe sessions should negotiate max msg size...
         limit_bytes = self.env.max_send - HISTORY_OVER_WIRE_OVERHEAD_BYTES
         limit_nconf = limit_bytes // HISTORY_CONF_ITEM_SIZE_BYTES
         if from_height == 0:

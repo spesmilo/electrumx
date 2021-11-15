@@ -1708,9 +1708,6 @@ class Peercoin(Coin):
     GENESIS_HASH = ('0000000032fe677166d54963b62a4677'
                     'd8957e87c508eaa4fd7eb1c880cd27e3')
     DESERIALIZER = lib_tx.DeserializerPeercoin
-    DAEMON = daemon.FakeEstimateFeeDaemon
-    ESTIMATE_FEE = 0.001
-    RELAY_FEE = 0.01
     TX_COUNT = 1691771
     TX_COUNT_HEIGHT = 455409
     TX_PER_BLOCK = 4

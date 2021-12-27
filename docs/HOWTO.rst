@@ -29,7 +29,7 @@ functions. For example, `x11_hash`_ is required for DASH. Scrypt coins
 require a Python interpreter compiled and/or linked with OpenSSL 1.1.0
 or higher.
 
-You **must** to be running a non-pruning bitcoin daemon with::
+You **must** be running a non-pruning bitcoin daemon with::
 
   txindex=1
 
@@ -64,7 +64,7 @@ Database Engine
 
 You can choose from LevelDB and RocksDB to store transaction
 information on disk.  The time taken and DB size is not significantly
-different.  We tried to support LMDB but its history write performance
+different.  We tried to support LMDB, but its history write performance
 was much worse.
 
 You will need to install one of:

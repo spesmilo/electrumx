@@ -25,7 +25,8 @@ import attr
 import pylru
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
-                     TaskGroup, handler_invocation, serve_rs, serve_ws, sleep)
+                     TaskGroup, handler_invocation, serve_rs, serve_ws, sleep,
+                     NewlineFramer)
 
 import electrumx
 import electrumx.lib.util as util
@@ -876,6 +877,9 @@ class SessionBase(RPCSession):
 
     async def notify(self, touched, height_changed):
         pass
+
+    def default_framer(self):
+        return NewlineFramer(max_size=self.env.max_recv)
 
     def remote_address_string(self, *, for_log=True):
         '''Returns the peer's IP address and port as a human-readable

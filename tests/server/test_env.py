@@ -415,17 +415,3 @@ def test_ban_versions():
 def test_coin_class_provided():
     e = Env(lib_coins.BitcoinSV)
     assert e.coin == lib_coins.BitcoinSV
-
-
-def test_drop_unknown_clients():
-    e = Env()
-    assert e.drop_client_unknown is False
-    os.environ['DROP_CLIENT_UNKNOWN'] = ""
-    e = Env()
-    assert e.drop_client_unknown is False
-    os.environ['DROP_CLIENT_UNKNOWN'] = "1"
-    e = Env()
-    assert e.drop_client_unknown is True
-    os.environ['DROP_CLIENT_UNKNOWN'] = "whatever"
-    e = Env()
-    assert e.drop_client_unknown is True

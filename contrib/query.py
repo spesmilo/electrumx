@@ -72,7 +72,7 @@ async def query(args):
         if not hashX:
             continue
         n = None
-        history = await db.limited_history(hashX, limit=limit)
+        history = await db.limited_history(hashX=hashX, limit=limit)
         for n, (tx_hash, height) in enumerate(history, start=1):
             print(f'History #{n:,d}: height {height:,d} '
                   f'tx_hash {hash_to_hex_str(tx_hash)}')

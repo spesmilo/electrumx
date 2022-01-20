@@ -18,7 +18,8 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Optional, TYPE_CHECKING
+from typing import (Optional, TYPE_CHECKING, Tuple, Sequence, Set, Dict, Iterable, Any, Mapping,
+                    List)
 import asyncio
 
 import attr
@@ -72,6 +73,17 @@ def non_negative_integer(value):
                    f'{value} should be a non-negative integer')
 
 
+def integer(value):
+    '''Return param value it is or can be converted to an
+    integer, otherwise raise an RPCError.'''
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        pass
+    raise RPCError(BAD_REQUEST,
+                   f'{value} should be a non-negative integer')
+
+
 def assert_boolean(value):
     '''Return param value it is boolean otherwise raise an RPCError.'''
     if value in (False, True):
@@ -93,11 +105,51 @@ def assert_tx_hash(value):
     raise RPCError(BAD_REQUEST, f'{value} should be a transaction hash')
 
 
+def assert_status_hash(value):
+    '''Raise an RPCError if the value is not a valid hexadecimal scripthash status.
+
+    If it is valid, return it as 32-byte binary hash.
+    '''
+    # note that unlike for tx_hash, we keep the endianness here
+    try:
+        raw_hash = util.hex_to_bytes(value)
+        if len(raw_hash) == 32:
+            return raw_hash
+    except (ValueError, TypeError):
+        pass
+    raise RPCError(BAD_REQUEST, f'{value} should be a scripthash status')
+
+
+def is_hex_str(text: Any) -> bool:
+    if not isinstance(text, str):
+        return False
+    try:
+        b = bytes.fromhex(text)
+    except Exception:
+        return False
+    # forbid whitespaces in text:
+    if len(text) != 2 * len(b):
+        return False
+    return True
+
+
+def assert_hex_str(value: Any) -> None:
+    if not is_hex_str(value):
+        raise RPCError(BAD_REQUEST, f'{value} should be a hex str')
+
+
+# Constants used to limit the size of returned history to ensure it fits within a response.
+# These are all overestimating somewhat, for paranoia.
+HISTORY_OVER_WIRE_OVERHEAD_BYTES = 200  # a few bytes are reserved for overhead
+HISTORY_CONF_ITEM_SIZE_BYTES = 107      # a conf tx item is ~this many bytes when JSON-encoded
+HISTORY_UNCONF_ITEM_SIZE_BYTES = 140    # a mempool tx item is ~this many bytes when JSON-encoded
+
+
 @attr.s(slots=True)
 class SessionGroup:
     name = attr.ib()
     weight = attr.ib()
-    sessions = attr.ib()
+    sessions = attr.ib()  # type: Set[ElectrumX]
     retained_cost = attr.ib()
 
     def session_cost(self):
@@ -138,16 +190,13 @@ class SessionManager:
         self.shutdown_event = shutdown_event
         self.logger = util.class_logger(__name__, self.__class__.__name__)
         self.servers = {}           # service->server
-        self.sessions = {}          # session->iterable of its SessionGroups
-        self.session_groups = {}    # group name->SessionGroup instance
+        self.sessions = {}          # type: Dict[ElectrumX, Iterable[SessionGroup]]
+        self.session_groups = {}    # type: Dict[str, SessionGroup]
         self.txs_sent = 0
         # Would use monotonic time, but aiorpcx sessions use Unix time:
         self.start_time = time.time()
         self._method_counts = defaultdict(int)
         self._reorg_count = 0
-        self._history_cache = pylru.lrucache(1000)
-        self._history_lookups = 0
-        self._history_hits = 0
         self._tx_hashes_cache = pylru.lrucache(1000)
         self._tx_hashes_lookups = 0
         self._tx_hashes_hits = 0
@@ -304,7 +353,7 @@ class SessionManager:
             # cost_decay_per_sec.
             for session in self.sessions:
                 # Subs have an on-going cost so decay more slowly with more subs
-                session.cost_decay_per_sec = hard_limit / (10000 + 5 * session.sub_count())
+                session.cost_decay_per_sec = hard_limit / (10000 + 5 * session.sub_count_total())
                 session.recalc_concurrency()
 
     def _get_info(self):
@@ -316,10 +365,7 @@ class SessionManager:
             'daemon': self.daemon.logged_url(),
             'daemon height': self.daemon.cached_height(),
             'db height': self.db.db_height,
-            'db_flush_count': self.db.history.flush_count,
             'groups': len(self.session_groups),
-            'history cache': cache_fmt.format(
-                self._history_lookups, self._history_hits, len(self._history_cache)),
             'merkle cache': cache_fmt.format(
                 self._merkle_lookups, self._merkle_hits, len(self._merkle_cache)),
             'pid': os.getpid(),
@@ -328,11 +374,14 @@ class SessionManager:
             'request total': sum(self._method_counts.values()),
             'sessions': {
                 'count': len(sessions),
-                'count with subs': sum(len(getattr(s, 'hashX_subs', ())) > 0 for s in sessions),
+                'count with subs_sh': sum(s.sub_count_scripthashes() > 0 for s in sessions),
+                'count with subs_txo': sum(s.sub_count_txoutpoints() > 0 for s in sessions),
+                'count with subs_any': sum(s.sub_count_total() > 0 for s in sessions),
                 'errors': sum(s.errors for s in sessions),
                 'logged': len([s for s in sessions if s.log_me]),
                 'pending requests': sum(s.unanswered_request_count() for s in sessions),
-                'subs': sum(s.sub_count() for s in sessions),
+                'subs_sh': sum(s.sub_count_scripthashes() for s in sessions),
+                'subs_txo': sum(s.sub_count_txoutpoints() for s in sessions),
             },
             'tx hashes cache': cache_fmt.format(
                 self._tx_hashes_lookups, self._tx_hashes_hits, len(self._tx_hashes_cache)),
@@ -354,7 +403,7 @@ class SessionManager:
                  session.extra_cost(),
                  session.unanswered_request_count(),
                  session.txs_sent,
-                 session.sub_count(),
+                 session.sub_count_total(),
                  session.recv_count, session.recv_size,
                  session.send_count, session.send_size,
                  now - session.start_time)
@@ -371,7 +420,7 @@ class SessionManager:
                            group.retained_cost,
                            sum(s.unanswered_request_count() for s in sessions),
                            sum(s.txs_sent for s in sessions),
-                           sum(s.sub_count() for s in sessions),
+                           sum(s.sub_count_total() for s in sessions),
                            sum(s.recv_count for s in sessions),
                            sum(s.recv_size for s in sessions),
                            sum(s.send_count for s in sessions),
@@ -554,7 +603,7 @@ class SessionManager:
             if not hashX:
                 continue
             n = None
-            history = await db.limited_history(hashX, limit=limit)
+            history = await db.limited_history(hashX=hashX, limit=limit)
             for n, (tx_hash, height) in enumerate(history):
                 lines.append(f'History #{n:,d}: height {height:,d} '
                              f'tx_hash {hash_to_hex_str(tx_hash)}')
@@ -679,16 +728,32 @@ class SessionManager:
         branch = [hash_to_hex_str(hash) for hash in branch]
         return branch, cost / 2500
 
-    async def merkle_branch_for_tx_hash(self, height, tx_hash):
-        '''Return a triple (branch, tx_pos, cost).'''
-        tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height)
-        try:
-            tx_pos = tx_hashes.index(tx_hash)
-        except ValueError:
+    async def merkle_branch_for_tx_hash(
+            self, *, tx_hash: bytes, height: int = None,
+    ) -> Tuple[int, Sequence[str], int, float]:
+        '''Returns (height, branch, tx_pos, cost).'''
+        cost = 0
+        tx_pos = None
+        if height is None:
+            cost += 0.1
+            height, tx_pos = await self.db.get_blockheight_and_txpos_for_txhash(tx_hash)
+        if height is None:
             raise RPCError(BAD_REQUEST,
-                           f'tx {hash_to_hex_str(tx_hash)} not in block at height {height:,d}')
+                           f'tx {hash_to_hex_str(tx_hash)} not in any block')
+        tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height)
+        if tx_pos is None:
+            try:
+                tx_pos = tx_hashes.index(tx_hash)
+            except ValueError:
+                raise RPCError(BAD_REQUEST,
+                               f'tx {hash_to_hex_str(tx_hash)} not in block at height {height:,d}')
+        elif not (len(tx_hashes) > tx_pos and tx_hashes[tx_pos] == tx_hash):
+            # there was a reorg while processing the request... TODO maybe retry?
+            raise RPCError(BAD_REQUEST,
+                           f'tx {hash_to_hex_str(tx_hash)} was reorged while processing request')
         branch, merkle_cost = await self._merkle_branch(height, tx_hashes, tx_pos)
-        return branch, tx_pos, tx_hashes_cost + merkle_cost
+        cost += tx_hashes_cost + merkle_cost
+        return height, branch, tx_pos, cost
 
     async def merkle_branch_for_tx_pos(self, height, tx_pos):
         '''Return a triple (branch, tx_hash_hex, cost).'''
@@ -751,41 +816,25 @@ class SessionManager:
         self.txs_sent += 1
         return hex_hash
 
-    async def limited_history(self, hashX):
-        '''Returns a pair (history, cost).
-
-        History is a sorted list of (tx_hash, height) tuples, or an RPCError.'''
-        # History DoS limit.  Each element of history is about 99 bytes when encoded
-        # as JSON.
-        limit = self.env.max_send // 99
-        cost = 0.1
-        self._history_lookups += 1
-        try:
-            result = self._history_cache[hashX]
-            self._history_hits += 1
-        except KeyError:
-            result = await self.db.limited_history(hashX, limit=limit)
-            cost += 0.1 + len(result) * 0.001
-            if len(result) >= limit:
-                result = RPCError(BAD_REQUEST, f'history too large', cost=cost)
-            self._history_cache[hashX] = result
-
-        if isinstance(result, Exception):
-            raise result
-        return result, cost
-
-    async def _notify_sessions(self, height, touched):
+    async def _notify_sessions(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height: int,
+    ):
         '''Notify sessions about height changes and touched addresses.'''
         height_changed = height != self.notified_height
         if height_changed:
             await self._refresh_hsub_results(height)
-            # Invalidate our history cache for touched hashXs
-            cache = self._history_cache
-            for hashX in set(cache).intersection(touched):
-                del cache[hashX]
 
         for session in self.sessions:
-            await self._task_group.spawn(session.notify, touched, height_changed)
+            coro = session.notify(
+                touched_hashxs=touched_hashxs,
+                touched_outpoints=touched_outpoints,
+                height_changed=height_changed,
+            )
+            await self._task_group.spawn(coro)
 
     def _ip_addr_group_name(self, session) -> Optional[str]:
         host = session.remote_address().host
@@ -861,6 +910,8 @@ class SessionBase(RPCSession):
         self.env = session_mgr.env
         self.coin = self.env.coin
         self.client = 'unknown'
+        self.sv_seen = False  # has seen 'server.version' message?
+        self.sv_negotiated = asyncio.Event()  # done negotiating protocol version
         self.anon_logs = self.env.anon_logs
         self.txs_sent = 0
         self.log_me = SessionBase.log_new
@@ -875,7 +926,13 @@ class SessionBase(RPCSession):
         self.session_mgr.add_session(self)
         self.recalc_concurrency()  # must be called after session_mgr.add_session
 
-    async def notify(self, touched, height_changed):
+    async def notify(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         pass
 
     def default_framer(self):
@@ -911,8 +968,14 @@ class SessionBase(RPCSession):
             msg = 'disconnected' + msg
             self.logger.info(msg)
 
-    def sub_count(self):
+    def sub_count_scripthashes(self):
         return 0
+
+    def sub_count_txoutpoints(self):
+        return 0
+
+    def sub_count_total(self):
+        return self.sub_count_scripthashes() + self.sub_count_txoutpoints()
 
     async def handle_request(self, request):
         '''Handle an incoming request.  ElectrumX doesn't receive
@@ -924,31 +987,49 @@ class SessionBase(RPCSession):
             handler = None
         method = 'invalid method' if handler is None else request.method
 
-        # If DROP_CLIENT_UNKNOWN is enabled, check if the client identified
-        # by calling server.version previously. If not, disconnect the session
-        if self.env.drop_client_unknown and method != 'server.version' and self.client == 'unknown':
-            self.logger.info(f'disconnecting because client is unknown')
-            raise ReplyAndDisconnect(
-                BAD_REQUEST, f'use server.version to identify client')
+        # Version negotiation must happen before any other messages.
+        if not self.sv_seen and method != 'server.version':
+            self.logger.info(f'closing session: server.version must be first msg. got: {method}')
+            await self._do_crash_old_electrum_client()
+            raise ReplyAndDisconnect(BAD_REQUEST, f'use server.version to identify client')
+        # Wait for version negotiation to finish before processing other messages.
+        if method != 'server.version' and not self.sv_negotiated.is_set():
+            await self.sv_negotiated.wait()
 
         self.session_mgr._method_counts[method] += 1
         coro = handler_invocation(handler, request)()
         return await coro
+
+    async def maybe_crash_old_client(self, ptuple, crash_client_ver):
+        if crash_client_ver:
+            client_ver = util.protocol_tuple(self.client)
+            is_old_protocol = ptuple is None or ptuple <= (1, 2)
+            is_old_client = client_ver != (0,) and client_ver <= crash_client_ver
+            if is_old_protocol and is_old_client:
+                await self._do_crash_old_electrum_client()
+
+    async def _do_crash_old_electrum_client(self):
+        self.logger.info(f'attempting to crash old client with version {self.client}')
+        # this can crash electrum client 2.6 <= v < 3.1.2
+        await self.send_notification('blockchain.relayfee', ())
+        # this can crash electrum client (v < 2.8.2) UNION (3.0.0 <= v < 3.3.0)
+        await self.send_notification('blockchain.estimatefee', ())
 
 
 class ElectrumX(SessionBase):
     '''A TCP server that handles incoming Electrum connections.'''
 
     PROTOCOL_MIN = (1, 4)
-    PROTOCOL_MAX = (1, 4, 2)
+    PROTOCOL_MAX = (1, 5)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.subscribe_headers = False
         self.connection.max_response_size = self.env.max_send
-        self.hashX_subs = {}
-        self.sv_seen = False
-        self.mempool_statuses = {}
+        self.hashX_subs = {}  # type: Dict[bytes, bytes]  # hashX -> scripthash
+        self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]
+        self.mempool_hashX_statuses = {}  # type: Dict[bytes, str]
+        self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], Mapping[str, Any]]
         self.set_request_handlers(self.PROTOCOL_MIN)
         self.is_peer = False
         self.cost = 5.0   # Connection cost
@@ -1000,35 +1081,47 @@ class ElectrumX(SessionBase):
         group_names = [group.name for group in groups]
         self.logger.info(f"closing session over res usage. ip: {ip_addr}. groups: {group_names}")
 
-    def sub_count(self):
+    def sub_count_scripthashes(self):
         return len(self.hashX_subs)
 
+    def sub_count_txoutpoints(self):
+        return len(self.txoutpoint_subs)
+
     def unsubscribe_hashX(self, hashX):
-        self.mempool_statuses.pop(hashX, None)
+        self.mempool_hashX_statuses.pop(hashX, None)
         return self.hashX_subs.pop(hashX, None)
 
-    async def notify(self, touched, height_changed):
+    async def notify(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         '''Notify the client about changes to touched addresses (from mempool
         updates or new blocks) and height.
         '''
+        # block headers
         if height_changed and self.subscribe_headers:
             args = (await self.subscribe_headers_result(), )
             await self.send_notification('blockchain.headers.subscribe', args)
 
-        touched = touched.intersection(self.hashX_subs)
-        if touched or (height_changed and self.mempool_statuses):
+        # hashXs
+        num_hashx_notifs_sent = 0
+        touched_hashxs = touched_hashxs.intersection(self.hashX_subs)
+        if touched_hashxs or (height_changed and self.mempool_hashX_statuses):
             changed = {}
 
-            for hashX in touched:
+            for hashX in touched_hashxs:
                 alias = self.hashX_subs.get(hashX)
                 if alias:
                     status = await self.subscription_address_status(hashX)
                     changed[alias] = status
 
             # Check mempool hashXs - the status is a function of the confirmed state of
-            # other transactions.
-            mempool_statuses = self.mempool_statuses.copy()
-            for hashX, old_status in mempool_statuses.items():
+            # other transactions. (this is to detect if height changed from -1 to 0)
+            mempool_hashX_statuses = self.mempool_hashX_statuses.copy()
+            for hashX, old_status in mempool_hashX_statuses.items():
                 alias = self.hashX_subs.get(hashX)
                 if alias:
                     status = await self.subscription_address_status(hashX)
@@ -1038,10 +1131,36 @@ class ElectrumX(SessionBase):
             method = 'blockchain.scripthash.subscribe'
             for alias, status in changed.items():
                 await self.send_notification(method, (alias, status))
+            num_hashx_notifs_sent = len(changed)
 
-            if changed:
-                es = '' if len(changed) == 1 else 'es'
-                self.logger.info(f'notified of {len(changed):,d} address{es}')
+        # tx outpoints
+        num_txo_notifs_sent = 0
+        touched_outpoints = touched_outpoints.intersection(self.txoutpoint_subs)
+        if touched_outpoints or (height_changed and self.mempool_txoutpoint_statuses):
+            method = 'blockchain.outpoint.subscribe'
+            txo_to_status = {}
+            for prevout in touched_outpoints:
+                txo_to_status[prevout] = await self.txoutpoint_status(*prevout)
+
+            # Check mempool TXOs - the status is a function of the confirmed state of
+            # other transactions. (this is to detect if height changed from -1 to 0)
+            mempool_txoutpoint_statuses = self.mempool_txoutpoint_statuses.copy()
+            for prevout, old_status in mempool_txoutpoint_statuses.items():
+                status = await self.txoutpoint_status(*prevout)
+                if status != old_status:
+                    txo_to_status[prevout] = status
+
+            for tx_hash, txout_idx in touched_outpoints:
+                spend_status = txo_to_status[(tx_hash, txout_idx)]
+                tx_hash_hex = hash_to_hex_str(tx_hash)
+                await self.send_notification(method, ((tx_hash_hex, txout_idx), spend_status))
+            num_txo_notifs_sent = len(touched_outpoints)
+
+        if num_hashx_notifs_sent + num_txo_notifs_sent > 0:
+            es1 = '' if num_hashx_notifs_sent == 1 else 'es'
+            s2 = '' if num_txo_notifs_sent == 1 else 's'
+            self.logger.info(f'notified of {num_hashx_notifs_sent:,d} address{es1} and '
+                             f'{num_txo_notifs_sent:,d} outpoint{s2}')
 
     async def subscribe_headers_result(self):
         '''The result of a header subscription or notification.'''
@@ -1064,14 +1183,21 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         return self.peer_mgr.on_peers_subscribe(self.is_tor())
 
-    async def address_status(self, hashX):
-        '''Returns an address status.
+    async def address_status(self, hashX: bytes) -> Optional[str]:
+        '''Returns an address status, as hex str (or None).'''
+        if self.protocol_tuple < (1, 5):
+            return await self._address_status_proto_legacy(hashX)
+        else:
+            return await self._address_status_proto_1_5(hashX)
+
+    async def _address_status_proto_legacy(self, hashX: bytes) -> Optional[str]:
+        '''Returns an address status, as per protocol older than <1.5.
 
         Status is a hex string, but must be None if there is no history.
         '''
-        # Note history is ordered and mempool unordered in electrum-server
+        # Note both confirmed history and mempool history are ordered
         # For mempool, height is -1 if it has unconfirmed inputs, otherwise 0
-        db_history, cost = await self.session_mgr.limited_history(hashX)
+        db_history = await self.limited_history(hashX)
         mempool = await self.mempool.transaction_summaries(hashX)
 
         status = ''.join(f'{hash_to_hex_str(tx_hash)}:'
@@ -1082,7 +1208,7 @@ class ElectrumX(SessionBase):
                           for tx in mempool)
 
         # Add status hashing cost
-        self.bump_cost(cost + 0.1 + len(status) * 0.00002)
+        self.bump_cost(0.1 + len(status) * 0.00002)
 
         if status:
             status = sha256(status.encode()).hex()
@@ -1090,9 +1216,64 @@ class ElectrumX(SessionBase):
             status = None
 
         if mempool:
-            self.mempool_statuses[hashX] = status
+            self.mempool_hashX_statuses[hashX] = status
         else:
-            self.mempool_statuses.pop(hashX, None)
+            self.mempool_hashX_statuses.pop(hashX, None)
+
+        return status
+
+    async def _calc_intermediate_status_for_hashX(
+            self,
+            *,
+            hashX: bytes,
+            txnum_max: int = None,
+    ) -> bytes:
+        '''Returns the status of a hashX, considering only confirmed history
+        up to (<) txnum_max.
+        TODO maybe also store intermediate status hashes as part of initial sync? to prep cache...
+        '''
+        storestatus_period = self.db.history.STORE_INTERMEDIATE_STATUSHASH_EVERY_N_TXS
+        reorgsafe_height = self.db.db_height - self.env.reorg_limit
+        # get partial status from cache
+        tx_num, status = await self.db.history.get_intermediate_statushash_for_hashx(
+            hashX=hashX, txnum_max=txnum_max)
+        while True:
+            # get a history part from db, update status to incorporate it, and maybe store status
+            db_history_part = await self.db.limited_history_triples(
+                hashX=hashX, limit=storestatus_period, txnum_min=tx_num+1, txnum_max=txnum_max)
+            self.bump_cost(0.3 + len(db_history_part) * 0.001)  # cost of history-lookup
+            self.bump_cost(36 * len(db_history_part) * 0.00002)  # cost of hashing mined txs
+            for (tx_hash, height, tx_num) in db_history_part:
+                tx_item = tx_hash + util.pack_le_int32(height)
+                status = sha256(status + tx_item)
+                if height < reorgsafe_height:
+                    self.db.history.store_intermediate_statushash_for_hashx(
+                        hashX=hashX, tx_num=tx_num, status=status)
+            # if db_history_part is not max-sized, then there are no more parts.
+            # (note: even if max-sized, the next part might be empty)
+            if len(db_history_part) < storestatus_period:
+                return status
+            self.logger.info(f"calculated intermediate status for hashX={hashX.hex()}, "
+                             f"up to tx_num={tx_num}")
+
+    async def _address_status_proto_1_5(self, hashX: bytes) -> str:
+        '''Returns an address status, as per protocol newer than >=1.5'''
+        # first, consider confirmed history
+        status = await self._calc_intermediate_status_for_hashX(hashX=hashX)
+
+        # second, consider mempool txs
+        mempool = await self.mempool.transaction_summaries(hashX)
+        self.bump_cost(44 * len(mempool) * 0.00002)  # cost of hashing mempool txs
+        for tx in mempool:
+            height = -tx.has_unconfirmed_inputs
+            tx_item = tx.hash + util.pack_le_int32(height) + util.pack_le_uint64(tx.fee)
+            status = sha256(status + tx_item)
+        status = status.hex()
+
+        if mempool:
+            self.mempool_hashX_statuses[hashX] = status
+        else:
+            self.mempool_hashX_statuses.pop(hashX, None)
 
         return status
 
@@ -1104,6 +1285,40 @@ class ElectrumX(SessionBase):
         except RPCError:
             self.unsubscribe_hashX(hashX)
             return None
+
+    async def txoutpoint_status(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
+        self.bump_cost(0.2)
+        spend_status = await self.db.spender_for_txo(prev_txhash, txout_idx)
+        if spend_status.spender_height is not None:
+            # TXO was created, was mined, was spent, and spend was mined.
+            assert spend_status.prev_height > 0
+            assert spend_status.spender_height > 0
+            assert spend_status.spender_txhash is not None
+        else:
+            mp_spend_status = await self.mempool.spender_for_txo(prev_txhash, txout_idx)
+            if mp_spend_status.prev_height is not None:
+                spend_status.prev_height = mp_spend_status.prev_height
+            if mp_spend_status.spender_height is not None:
+                spend_status.spender_height = mp_spend_status.spender_height
+            if mp_spend_status.spender_txhash is not None:
+                spend_status.spender_txhash = mp_spend_status.spender_txhash
+        # convert to json dict the client expects
+        status = {}
+        if spend_status.prev_height is not None:
+            status['height'] = spend_status.prev_height
+            if spend_status.spender_txhash is not None:
+                assert spend_status.spender_height is not None
+                status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txhash)
+                status['spender_height'] = spend_status.spender_height
+
+        prevout = (prev_txhash, txout_idx)
+        if ((spend_status.prev_height is not None and spend_status.prev_height <= 0)
+                or (spend_status.spender_height is not None and spend_status.spender_height <= 0)):
+            self.mempool_txoutpoint_statuses[prevout] = status
+        else:
+            self.mempool_txoutpoint_statuses.pop(prevout, None)
+
+        return status
 
     async def hashX_listunspent(self, hashX):
         '''Return the list of UTXOs of a script hash, including mempool
@@ -1138,8 +1353,20 @@ class ElectrumX(SessionBase):
         hashX = scripthash_to_hashX(scripthash)
         return await self.get_balance(hashX)
 
-    async def unconfirmed_history(self, hashX):
-        # Note unconfirmed history is unordered in electrum-server
+    async def limited_history(self, hashX):
+        '''Returns a sorted list of (tx_hash, height) tuples.
+        Raises RPCError if history would not fit within a response.
+        '''
+        limit_bytes = self.env.max_send - HISTORY_OVER_WIRE_OVERHEAD_BYTES
+        limit_nconf = limit_bytes // HISTORY_CONF_ITEM_SIZE_BYTES
+        result = await self.db.limited_history(hashX=hashX, limit=limit_nconf)
+        self.bump_cost(0.2 + len(result) * 0.001)
+        if len(result) >= limit_nconf:
+            raise RPCError(BAD_REQUEST, f'history too large')
+        return result
+
+    async def unconfirmed_history(self, hashX) -> List[Dict[str, Any]]:
+        # Note both confirmed history and mempool history are ordered
         # height is -1 if it has unconfirmed inputs, otherwise 0
         result = [{'tx_hash': hash_to_hex_str(tx.hash),
                    'height': -tx.has_unconfirmed_inputs,
@@ -1148,18 +1375,110 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.25 + len(result) / 50)
         return result
 
-    async def confirmed_and_unconfirmed_history(self, hashX):
-        # Note history is ordered but unconfirmed is unordered in e-s
-        history, cost = await self.session_mgr.limited_history(hashX)
-        self.bump_cost(cost)
+    async def scripthash_get_history_proto_legacy(self, scripthash):
+        '''Return the confirmed and unconfirmed history of a scripthash,
+        as per protocol older than <1.5.
+        '''
+        hashX = scripthash_to_hashX(scripthash)
+        history = await self.limited_history(hashX)
         conf = [{'tx_hash': hash_to_hex_str(tx_hash), 'height': height}
                 for tx_hash, height in history]
         return conf + await self.unconfirmed_history(hashX)
 
-    async def scripthash_get_history(self, scripthash):
-        '''Return the confirmed and unconfirmed history of a scripthash.'''
+    async def scripthash_get_history_proto_1_5(
+            self,
+            scripthash,
+            from_height=0,
+            to_height=-1,
+            client_statushash=None,
+            client_height=None
+    ):
+        '''Return the confirmed and unconfirmed history of a scripthash,
+        as per protocol newer than >=1.5.
+        '''
         hashX = scripthash_to_hashX(scripthash)
-        return await self.confirmed_and_unconfirmed_history(hashX)
+        from_height = non_negative_integer(from_height)
+        to_height = integer(to_height)
+        if not (-1 <= to_height):
+            raise RPCError(BAD_REQUEST, f'{to_height} should be an integer >= -1')
+        to_height_or_inf = to_height if to_height >= 0 else float('inf')
+        if not (from_height <= to_height_or_inf):
+            raise RPCError(BAD_REQUEST, f'from_height={from_height} '
+                                        f'<= to_height={to_height} must hold.')
+        if (client_statushash is None) != (client_height is None):
+            raise RPCError(BAD_REQUEST, f'either both or neither of client_statushash and '
+                                        f'client_height must be present')
+        if client_statushash is not None:
+            client_statushash = assert_status_hash(client_statushash)
+            client_height = non_negative_integer(client_height)
+            if not (from_height <= client_height < to_height_or_inf):
+                raise RPCError(BAD_REQUEST, f'from_height={from_height} '
+                                            f'<= client_height={client_height} '
+                                            f'< to_height={to_height} must hold.')
+        # Done sanitising args; start handling
+        # Check if client status is consistent with server; if so we can fast-forward from_height
+        if client_statushash is not None:
+            client_txnum = self.db.get_next_tx_num_after_blockheight(client_height)
+            server_statushash = await self._calc_intermediate_status_for_hashX(
+                hashX=hashX,
+                txnum_max=client_txnum + 1,
+            )
+            if server_statushash == client_statushash:
+                from_height = client_height + 1
+
+        # Limit size of returned history to ensure it fits within a response.
+        # TODO add a min() here so that this won't become "consensus".
+        #      or maybe sessions should negotiate max msg size...
+        limit_bytes = self.env.max_send - HISTORY_OVER_WIRE_OVERHEAD_BYTES
+        limit_nconf = limit_bytes // HISTORY_CONF_ITEM_SIZE_BYTES
+        if from_height == 0:
+            txnum_min = 0
+        else:
+            txnum_min = self.db.get_next_tx_num_after_blockheight(from_height - 1)
+        if to_height == -1:
+            txnum_max = None
+        else:
+            txnum_max = self.db.get_next_tx_num_after_blockheight(to_height - 1)
+        if txnum_min is not None:
+            db_history = await self.db.limited_history(
+                hashX=hashX,
+                limit=limit_nconf,
+                txnum_min=txnum_min,
+                txnum_max=txnum_max,
+            )
+        else:
+            db_history = []
+        self.bump_cost(0.2 + len(db_history) * 0.001)
+
+        if len(db_history) >= limit_nconf:
+            # History might have gotten truncated.
+            # Note that the truncation might have happened mid-block;
+            # hence we need to exclude txs in the last block.
+            _, height_last = db_history[-1]
+            _, height_first = db_history[0]
+            assert height_first < height_last, "history cannot even fit one block of txs"
+            db_history = [(tx_hash, height) for (tx_hash, height) in db_history
+                          if height != height_last]
+            to_height = height_last
+        hist_conf = [{'tx_hash': hash_to_hex_str(tx_hash), 'height': height}
+                     for tx_hash, height in db_history]
+        ret_history = hist_conf
+        if to_height == -1:
+            # If conf history is long, mempool hist might not fit within response.
+            # We either include all mempool txs, or none of them.
+            limit_nunconf = ((limit_bytes - len(hist_conf) * HISTORY_CONF_ITEM_SIZE_BYTES)
+                             // HISTORY_UNCONF_ITEM_SIZE_BYTES)
+            hist_unconf = await self.unconfirmed_history(hashX)
+            if len(hist_unconf) <= limit_nunconf:
+                ret_history += hist_unconf
+            else:
+                to_height = max(self.db.db_height + 1, from_height)
+        assert (to_height == -1) or (from_height <= to_height)
+        return {
+            'from_height': from_height,
+            'to_height': to_height,
+            'history': ret_history,
+        }
 
     async def scripthash_get_mempool(self, scripthash):
         '''Return the mempool transactions touching a scripthash.'''
@@ -1183,6 +1502,31 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.1)
         hashX = scripthash_to_hashX(scripthash)
         return self.unsubscribe_hashX(hashX) is not None
+
+    async def txoutpoint_subscribe(self, tx_hash, txout_idx, spk_hint=None):
+        '''Subscribe to an outpoint.
+
+        spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
+                  other servers, but we don't need and hence ignore it.
+        '''
+        tx_hash = assert_tx_hash(tx_hash)
+        txout_idx = non_negative_integer(txout_idx)
+        if spk_hint is not None:
+            assert_hex_str(spk_hint)
+        spend_status = await self.txoutpoint_status(tx_hash, txout_idx)
+        self.txoutpoint_subs.add((tx_hash, txout_idx))
+        return spend_status
+
+    async def txoutpoint_unsubscribe(self, tx_hash, txout_idx):
+        '''Unsubscribe from an outpoint.'''
+        tx_hash = assert_tx_hash(tx_hash)
+        txout_idx = non_negative_integer(txout_idx)
+        self.bump_cost(0.1)
+        prevout = (tx_hash, txout_idx)
+        was_subscribed = prevout in self.txoutpoint_subs
+        self.txoutpoint_subs.discard(prevout)
+        self.mempool_txoutpoint_statuses.pop(prevout, None)
+        return was_subscribed
 
     async def _merkle_proof(self, cp_height, height):
         max_height = self.db.db_height
@@ -1218,6 +1562,8 @@ class ElectrumX(SessionBase):
         start_height and count must be non-negative integers.  At most
         MAX_CHUNK_SIZE headers will be returned.
         '''
+        if self.protocol_tuple >= (1, 5):
+            return await self.block_headers_array(start_height, count, cp_height)
         start_height = non_negative_integer(start_height)
         count = non_negative_integer(count)
         cp_height = non_negative_integer(cp_height)
@@ -1231,6 +1577,38 @@ class ElectrumX(SessionBase):
             cost += 1.0
             last_height = start_height + count - 1
             result.update(await self._merkle_proof(cp_height, last_height))
+        self.bump_cost(cost)
+        return result
+
+    async def block_headers_array(self, start_height, count, cp_height=0):
+        '''Return block headers in an array for the main chain;
+        starting at start_height.
+        start_height and count must be non-negative integers.  At most
+        MAX_CHUNK_SIZE headers will be returned.
+        '''
+        start_height = non_negative_integer(start_height)
+        count = non_negative_integer(count)
+        cp_height = non_negative_integer(cp_height)
+        cost = count / 50
+
+        max_size = self.MAX_CHUNK_SIZE
+        count = min(count, max_size)
+        headers, count = await self.db.read_headers(start_height, count)
+        result = {'count': count, 'max': max_size, 'headers': []}
+        if count and cp_height:
+            cost += 1.0
+            last_height = start_height + count - 1
+            result.update(await self._merkle_proof(cp_height, last_height))
+
+        cursor = 0
+        height = 0
+        while cursor < len(headers):
+            next_cursor = self.db.header_offset(height + 1)
+            header = headers[cursor:next_cursor]
+            result['headers'].append(header.hex())
+            cursor = next_cursor
+            height += 1
+
         self.bump_cost(cost)
         return result
 
@@ -1363,7 +1741,7 @@ class ElectrumX(SessionBase):
         ptuple, client_min = util.protocol_version(
             protocol_version, self.PROTOCOL_MIN, self.PROTOCOL_MAX)
 
-        await self.crash_old_client(ptuple, self.env.coin.CRASH_CLIENT_VER)
+        await self.maybe_crash_old_client(ptuple, self.env.coin.CRASH_CLIENT_VER)
 
         if ptuple is None:
             if client_min > self.PROTOCOL_MIN:
@@ -1374,19 +1752,8 @@ class ElectrumX(SessionBase):
                 BAD_REQUEST, f'unsupported protocol version: {protocol_version}'))
         self.set_request_handlers(ptuple)
 
+        self.sv_negotiated.set()
         return electrumx.version, self.protocol_version_string()
-
-    async def crash_old_client(self, ptuple, crash_client_ver):
-        if crash_client_ver:
-            client_ver = util.protocol_tuple(self.client)
-            is_old_protocol = ptuple is None or ptuple <= (1, 2)
-            is_old_client = client_ver != (0,) and client_ver <= crash_client_ver
-            if is_old_protocol and is_old_client:
-                self.logger.info(f'attempting to crash old client with version {self.client}')
-                # this can crash electrum client 2.6 <= v < 3.1.2
-                await self.send_notification('blockchain.relayfee', ())
-                # this can crash electrum client (v < 2.8.2) UNION (3.0.0 <= v < 3.3.0)
-                await self.send_notification('blockchain.estimatefee', ())
 
     async def transaction_broadcast(self, raw_tx):
         '''Broadcast a raw transaction to the network.
@@ -1421,14 +1788,24 @@ class ElectrumX(SessionBase):
         tx_hash: the transaction hash as a hexadecimal string
         verbose: passed on to the daemon
         '''
-        assert_tx_hash(tx_hash)
+        tx_hash_bytes = assert_tx_hash(tx_hash)
+        tx_hash_hex = tx_hash
+        del tx_hash
         if verbose not in (True, False):
             raise RPCError(BAD_REQUEST, '"verbose" must be a boolean')
 
         self.bump_cost(1.0)
-        return await self.daemon_request('getrawtransaction', tx_hash, verbose)
 
-    async def transaction_merkle(self, tx_hash, height):
+        blockhash = None
+        if not self.env.daemon_has_txindex:
+            height, tx_pos = await self.db.get_blockheight_and_txpos_for_txhash(tx_hash_bytes)
+            if height is not None:
+                block_header = self.db.raw_header(height)
+                blockhash = self.coin.header_hash(block_header).hex()
+
+        return await self.daemon_request('getrawtransaction', tx_hash_hex, verbose, blockhash)
+
+    async def transaction_merkle(self, tx_hash, height=None):
         '''Return the merkle branch to a confirmed transaction given its hash
         and height.
 
@@ -1436,12 +1813,14 @@ class ElectrumX(SessionBase):
         height: the height of the block it is in
         '''
         tx_hash = assert_tx_hash(tx_hash)
-        height = non_negative_integer(height)
+        if height is not None:
+            height = non_negative_integer(height)
 
-        branch, tx_pos, cost = await self.session_mgr.merkle_branch_for_tx_hash(
-            height, tx_hash)
+        height, branch, tx_pos, cost = await self.session_mgr.merkle_branch_for_tx_hash(
+            tx_hash=tx_hash, height=height)
         self.bump_cost(cost)
 
+        assert height is not None
         return {"block_height": height, "merkle": branch, "pos": tx_pos}
 
     async def transaction_id_from_pos(self, height, tx_pos, merkle=False):
@@ -1482,7 +1861,7 @@ class ElectrumX(SessionBase):
             'blockchain.headers.subscribe': self.headers_subscribe,
             'blockchain.relayfee': self.relayfee,
             'blockchain.scripthash.get_balance': self.scripthash_get_balance,
-            'blockchain.scripthash.get_history': self.scripthash_get_history,
+            'blockchain.scripthash.get_history': self.scripthash_get_history_proto_legacy,
             'blockchain.scripthash.get_mempool': self.scripthash_get_mempool,
             'blockchain.scripthash.listunspent': self.scripthash_listunspent,
             'blockchain.scripthash.subscribe': self.scripthash_subscribe,
@@ -1503,6 +1882,11 @@ class ElectrumX(SessionBase):
         if ptuple >= (1, 4, 2):
             handlers['blockchain.scripthash.unsubscribe'] = self.scripthash_unsubscribe
 
+        if ptuple >= (1, 5):
+            handlers['blockchain.outpoint.subscribe'] = self.txoutpoint_subscribe
+            handlers['blockchain.outpoint.unsubscribe'] = self.txoutpoint_unsubscribe
+            handlers['blockchain.scripthash.get_history'] = self.scripthash_get_history_proto_1_5
+
         self.request_handlers = handlers
 
 
@@ -1511,6 +1895,8 @@ class LocalRPC(SessionBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.sv_seen = True
+        self.sv_negotiated.set()
         self.client = 'RPC'
         self.connection.max_response_size = 0
 
@@ -1538,9 +1924,19 @@ class DashElectrumX(ElectrumX):
             'protx.info': self.protx_info,
         })
 
-    async def notify(self, touched, height_changed):
+    async def notify(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height_changed: bool,
+    ):
         '''Notify the client about changes in masternode list.'''
-        await super().notify(touched, height_changed)
+        await super().notify(
+            touched_hashxs=touched_hashxs,
+            touched_outpoints=touched_outpoints,
+            height_changed=height_changed,
+        )
         for mn in self.mns.copy():
             status = await self.daemon_request('masternode_list',
                                                ('status', mn))
@@ -1751,33 +2147,38 @@ class AuxPoWElectrumX(ElectrumX):
             return result
 
         # Covered by a checkpoint; truncate AuxPoW data
-        result['header'] = self.truncate_auxpow(result['header'], height)
+        result['header'] = self.truncate_auxpow_single(result['header'])
         return result
 
     async def block_headers(self, start_height, count, cp_height=0):
-        result = await super().block_headers(start_height, count, cp_height)
-
         # Older protocol versions don't truncate AuxPoW
         if self.protocol_tuple < (1, 4, 1):
-            return result
+            return await super().block_headers(start_height, count, cp_height)
 
         # Not covered by a checkpoint; return full AuxPoW data
         if cp_height == 0:
-            return result
+            return await super().block_headers(start_height, count, cp_height)
+
+        result = await super().block_headers_array(start_height, count, cp_height)
 
         # Covered by a checkpoint; truncate AuxPoW data
-        result['hex'] = self.truncate_auxpow(result['hex'], start_height)
+        result['headers'] = self.truncate_auxpow_headers(result['headers'])
+
+        # Return headers in array form
+        if self.protocol_tuple >= (1, 5):
+            return result
+
+        # Return headers in concatenated form
+        result['hex'] = ''.join(result['headers'])
+        del result['headers']
         return result
 
-    def truncate_auxpow(self, headers_full_hex, start_height):
-        height = start_height
-        headers_full = util.hex_to_bytes(headers_full_hex)
-        cursor = 0
-        headers = bytearray()
+    def truncate_auxpow_headers(self, headers):
+        result = []
+        for header in headers:
+            result.append(self.truncate_auxpow_single(header))
+        return result
 
-        while cursor < len(headers_full):
-            headers += headers_full[cursor:cursor+self.coin.TRUNCATED_HEADER_SIZE]
-            cursor += self.db.dynamic_header_len(height)
-            height += 1
-
-        return headers.hex()
+    def truncate_auxpow_single(self, header: str):
+        # 2 hex chars per byte
+        return header[:2*self.coin.TRUNCATED_HEADER_SIZE]

@@ -6,7 +6,7 @@ setuptools.setup(
     version=version,
     scripts=['electrumx_server', 'electrumx_rpc', 'electrumx_compact_history'],
     python_requires='>=3.8',
-    install_requires=['aiorpcX[ws]>=0.18.5,<0.19', 'attrs',
+    install_requires=['aiorpcX[ws]>=0.22.0,<0.23', 'attrs',
                       'plyvel', 'pylru', 'aiohttp>=3.3,<4'],
     extras_require={
         'rapidjson': ['python-rapidjson>=0.4.1,<2.0'],

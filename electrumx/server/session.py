@@ -25,11 +25,12 @@ import attr
 import pylru
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
-                     TaskGroup, handler_invocation, serve_rs, serve_ws, sleep,
+                     handler_invocation, serve_rs, serve_ws, sleep,
                      NewlineFramer)
 
 import electrumx
 import electrumx.lib.util as util
+from electrumx.lib.util import OldTaskGroup
 from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
                                 hex_str_to_hash, sha256)
 from electrumx.lib.merkle import MerkleCache
@@ -158,7 +159,7 @@ class SessionManager:
         self.estimatefee_cache = pylru.lrucache(1000)
         self.notified_height = None
         self.hsub_results = None
-        self._task_group = TaskGroup()
+        self._task_group = OldTaskGroup()
         self._sslc = None
         # Event triggered when electrumx is listening for incoming requests.
         self.server_listening = Event()
@@ -642,7 +643,7 @@ class SessionManager:
         finally:
             # Close servers then sessions
             await self._stop_servers(self.servers.keys())
-            async with TaskGroup() as group:
+            async with OldTaskGroup() as group:
                 for session in list(self.sessions):
                     await group.spawn(session.close(force_after=1))
 

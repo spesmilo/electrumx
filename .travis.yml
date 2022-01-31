@@ -5,7 +5,6 @@ before_install:
   - sudo apt-get -qq update
   - sudo apt-get install -yq libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev liblz4-dev librocksdb-dev libleveldb-dev libboost-all-dev libsodium-dev
 python:
-  - "3.7"
   - "3.8"
   - "3.9-dev"
 # command to install dependencies
@@ -44,7 +43,7 @@ script:
   - sh -c "cd docs && make html"
 # Dont report coverage from nightly
 after_success:
-  - if [[ $(python3 -V 2>&1) == *"Python 3.7"* ]]; then
+  - if [[ $(python3 -V 2>&1) == *"Python 3.8"* ]]; then
       pip install coveralls;
       coveralls;
     fi

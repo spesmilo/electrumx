@@ -13,14 +13,14 @@ import asyncio
 import time
 from typing import Sequence, Tuple, List, Callable, Optional, TYPE_CHECKING, Type
 
-from aiorpcx import TaskGroup, run_in_thread, CancelledError
+from aiorpcx import run_in_thread, CancelledError
 
 import electrumx
 from electrumx.server.daemon import DaemonError, Daemon
 from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN
 from electrumx.lib.script import is_unspendable_legacy, is_unspendable_genesis
 from electrumx.lib.util import (
-    chunks, class_logger, pack_le_uint32, pack_le_uint64, unpack_le_uint64
+    chunks, class_logger, pack_le_uint32, pack_le_uint64, unpack_le_uint64, OldTaskGroup
 )
 from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
@@ -697,7 +697,7 @@ class BlockProcessor:
         self._caught_up_event = caught_up_event
         await self._first_open_dbs()
         try:
-            async with TaskGroup() as group:
+            async with OldTaskGroup() as group:
                 await group.spawn(self.prefetcher.main_loop(self.height))
                 await group.spawn(self._process_prefetched_blocks())
         # Don't flush for arbitrary exceptions as they might be a cause or consequence of

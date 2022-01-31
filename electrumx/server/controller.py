@@ -7,11 +7,11 @@
 
 from asyncio import Event
 
-from aiorpcx import _version as aiorpcx_version, TaskGroup
+from aiorpcx import _version as aiorpcx_version
 
 import electrumx
 from electrumx.lib.server_base import ServerBase
-from electrumx.lib.util import version_string
+from electrumx.lib.util import version_string, OldTaskGroup
 from electrumx.server.db import DB
 from electrumx.server.mempool import MemPool, MemPoolAPI
 from electrumx.server.session import SessionManager
@@ -82,8 +82,8 @@ class Controller(ServerBase):
         '''Start the RPC server and wait for the mempool to synchronize.  Then
         start serving external clients.
         '''
-        if not (0, 18, 5) <= aiorpcx_version < (0, 19):
-            raise RuntimeError('aiorpcX version 0.18.5+ is required')
+        if not (0, 22, 0) <= aiorpcx_version < (0, 23):
+            raise RuntimeError('aiorpcX version 0.22.x is required')
 
         env = self.env
         min_str, max_str = env.coin.SESSIONCLS.protocol_min_max_strings()
@@ -128,7 +128,7 @@ class Controller(ServerBase):
                 await group.spawn(db.populate_header_merkle_cache())
                 await group.spawn(mempool.keep_synchronized(mempool_event))
 
-            async with TaskGroup() as group:
+            async with OldTaskGroup() as group:
                 await group.spawn(session_mgr.serve(notifications, mempool_event))
                 await group.spawn(bp.fetch_and_process_blocks(caught_up_event))
                 await group.spawn(wait_for_catchup())

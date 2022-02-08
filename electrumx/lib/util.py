@@ -362,19 +362,15 @@ def pack_varbytes(data):
 class OldTaskGroup(TaskGroup):
     """Automatically raises exceptions on join; as in aiorpcx prior to version 0.20"""
     async def join(self):
-        await super().join()
-        # FIXME: we should raise the "first" (original) exception found by the join,
-        #        the one that is responsible for join returning.
-        #        However the current aiorpcx API does not expose that, so for now
-        #        we raise one of the exceptions found (not necessarily the first).
-        #        Note that this exception might be a consequence of the join
-        #        finding the original one and cancelling the other tasks.
-        #        see https://github.com/kyuupichan/aiorpcX/issues/43
-        for exc in self.exceptions:  # in arbitrary order
-            if exc is None:
-                continue
+        if self._wait is all:
             try:
-                raise exc
-            except asyncio.CancelledError:
-                pass
+                async for task in self:
+                    if not task.cancelled():
+                        task.result()
+            finally:
+                await super().join()
+        else:
+            await super().join()
+            if self.completed:
+                self.completed.result()
 

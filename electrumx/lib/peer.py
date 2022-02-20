@@ -40,7 +40,8 @@ class Peer:
              'source', 'ip_addr',
              'last_good', 'last_try', 'try_count')
     FEATURES = ('pruning', 'server_version', 'protocol_min', 'protocol_max',
-                'ssl_port', 'tcp_port')
+                'ssl_port', 'tcp_port',
+                'cert_md5', 'cert_sha1', 'cert_sha256', 'cert_blake2b')
     # This should be set by the application
     DEFAULT_PORTS = {}
 
@@ -250,6 +251,22 @@ class Peer:
         return self._port('tcp_port')
 
     @cachedproperty
+    def cert_md5(self):
+        return self._string('cert_md5')
+
+    @cachedproperty
+    def cert_sha1(self):
+        return self._string('cert_sha1')
+
+    @cachedproperty
+    def cert_sha256(self):
+        return self._string('cert_sha256')
+
+    @cachedproperty
+    def cert_blake2b(self):
+        return self._string('cert_blake2b')
+
+    @cachedproperty
     def server_version(self):
         '''Returns the server version as a string if known, otherwise None.'''
         return self._string('server_version')
@@ -328,6 +345,9 @@ class Peer:
                 features['protocol_max'] = features['protocol_min'] = part[1:]
             elif part[0] == 'p':
                 features['pruning'] = part[1:]
+            elif part[0] == 'x':
+                algorithm, digest = part[1:].split('=', 1)
+                ports['cert_' + algorithm] = digest
 
         features.update(ports)
         features['hosts'] = {host: ports}

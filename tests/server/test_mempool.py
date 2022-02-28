@@ -7,13 +7,12 @@ from functools import partial
 from random import randrange, choice, seed
 
 import pytest
-from aiorpcx import Event, sleep, ignore_after
+from aiorpcx import Event, TaskGroup, sleep, ignore_after
 
 from electrumx.server.mempool import MemPool, MemPoolAPI
 from electrumx.lib.coins import BitcoinCash
 from electrumx.lib.hash import HASHX_LEN, hex_str_to_hash, hash_to_hex_str
 from electrumx.lib.tx import Tx, TxInput, TxOutput
-from electrumx.lib.util import OldTaskGroup
 
 
 coin = BitcoinCash
@@ -268,7 +267,7 @@ async def test_keep_synchronized(caplog):
     mempool = MemPool(coin, api)
     event = Event()
     with caplog.at_level(logging.INFO):
-        async with OldTaskGroup() as group:
+        async with TaskGroup() as group:
             await group.spawn(mempool.keep_synchronized, event)
             await event.wait()
             await group.cancel_remaining()
@@ -287,7 +286,7 @@ async def test_balance_delta():
     api.initialize()
     mempool = MemPool(coin, api)
     event = Event()
-    async with OldTaskGroup() as group:
+    async with TaskGroup() as group:
         await group.spawn(mempool.keep_synchronized, event)
         await event.wait()
         await group.cancel_remaining()
@@ -310,7 +309,7 @@ async def test_compact_fee_histogram():
     api.initialize()
     mempool = MemPool(coin, api)
     event = Event()
-    async with OldTaskGroup() as group:
+    async with TaskGroup() as group:
         await group.spawn(mempool.keep_synchronized, event)
         await event.wait()
         await group.cancel_remaining()
@@ -362,7 +361,7 @@ async def test_potential_spends():
     api.initialize()
     mempool = MemPool(coin, api)
     event = Event()
-    async with OldTaskGroup() as group:
+    async with TaskGroup() as group:
         await group.spawn(mempool.keep_synchronized, event)
         await event.wait()
         await group.cancel_remaining()
@@ -397,7 +396,7 @@ async def test_transaction_summaries(caplog):
     mempool = MemPool(coin, api)
     event = Event()
     with caplog.at_level(logging.INFO):
-        async with OldTaskGroup() as group:
+        async with TaskGroup() as group:
             await group.spawn(mempool.keep_synchronized, event)
             await event.wait()
             await group.cancel_remaining()
@@ -417,7 +416,7 @@ async def test_unordered_UTXOs():
     api.initialize()
     mempool = MemPool(coin, api)
     event = Event()
-    async with OldTaskGroup() as group:
+    async with TaskGroup() as group:
         await group.spawn(mempool.keep_synchronized, event)
         await event.wait()
         await group.cancel_remaining()
@@ -444,7 +443,7 @@ async def test_mempool_removals():
     api.initialize()
     mempool = MemPool(coin, api, refresh_secs=0.01)
     event = Event()
-    async with OldTaskGroup() as group:
+    async with TaskGroup() as group:
         await group.spawn(mempool.keep_synchronized, event)
         await event.wait()
         # Remove half the TXs from the mempool
@@ -474,7 +473,7 @@ async def test_daemon_drops_txs():
     api.initialize()
     mempool = MemPool(coin, api, refresh_secs=0.01)
     event = Event()
-    async with OldTaskGroup() as group:
+    async with TaskGroup() as group:
         await group.spawn(mempool.keep_synchronized, event)
         await event.wait()
         await _test_summaries(mempool, api)
@@ -502,7 +501,7 @@ async def test_notifications(caplog):
 
     caplog.set_level(logging.DEBUG)
 
-    async with OldTaskGroup() as group:
+    async with TaskGroup() as group:
         # First batch enters the mempool
         api.raw_txs = {hash: raw_txs[hash] for hash in first_hashes}
         api.txs = {hash: txs[hash] for hash in first_hashes}
@@ -562,7 +561,7 @@ async def test_dropped_txs(caplog):
             del api.txs[prev_hash]
 
     with caplog.at_level(logging.INFO):
-        async with OldTaskGroup() as group:
+        async with TaskGroup() as group:
             await group.spawn(mempool.keep_synchronized, event)
             await event.wait()
             await group.cancel_remaining()

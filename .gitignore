@@ -13,3 +13,8 @@ docs/_build
 .vscode/
 .mypy_cache/
 .idea/
+
+# data and build artifacts
+.db/
+.prod/
+.multisig/

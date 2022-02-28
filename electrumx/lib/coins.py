@@ -48,7 +48,7 @@ import electrumx.lib.tx_dash as lib_tx_dash
 import electrumx.lib.tx_axe as lib_tx_axe
 import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
-from electrumx.server.session import (ElectrumX, DashElectrumX,
+from electrumx.server.session import (ElectrumX, DashElectrumX, DefiElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX)
 
 
@@ -2738,8 +2738,8 @@ class Groestlcoin(Coin):
     PEERS = [
         'electrum1.groestlcoin.org s t',
         'electrum2.groestlcoin.org s t',
-        'glzyzqiulwclsowniyjeg5tspdojfgiiizbpnepcxoswqkmsjzlkucqd.onion t',
-        'jcv7kwu3gopzxp3r2ve43m6nahrxzc426hif4o3a2vt7wl4xq6tg3xqd.onion t',
+        '6brsrbiinpc32tfc.onion t',
+        'xkj42efxrcy6vbfw.onion t',
     ]
 
     def grshash(data):
@@ -2769,27 +2769,10 @@ class GroestlcoinTestnet(Groestlcoin):
     PEERS = [
         'electrum-test1.groestlcoin.org s t',
         'electrum-test2.groestlcoin.org s t',
-        'v2wuvscywpli35kgolqrt2kw67rqfbfwfn4bv3pc6gtugkexqv675uqd.onion t',
-        '75dycxl6lqxujplls3qkhkzffptzdfohv3y5um7s5nhyu6idayqmk7id.onion t',
+        '7frvhgofuf522b5i.onion t',
+        'aocojvqcybdoxekv.onion t',
     ]
 
-class GroestlcoinRegtest(GroestlcoinTestnet):
-    SHORTNAME = "GRSRT"
-    NET = "regtest"
-    RPC_PORT = 18443
-    PEERS = []
-    TX_COUNT = 1
-    TX_COUNT_HEIGHT = 1
-
-class GroestlcoinSignet(GroestlcoinTestnet):
-    SHORTNAME = "SGRS"
-    NET = "signet"
-    GENESIS_HASH = ('0000007fcaa2a27993c6cde9e7818c25'
-                    '4357af517b876ceba2f23592bb14ab31')
-    RPC_PORT = 31441
-    PEERS = []
-    TX_COUNT = 1
-    TX_COUNT_HEIGHT = 1
 
 class Pivx(Coin):
     NAME = "PIVX"
@@ -3975,7 +3958,6 @@ class Quebecoin(AuxPowMixin, Coin):
     REORG_LIMIT = 2000
     RPC_PORT = 10890
 
-
 class Beyondcoin(Coin):
     NAME = "Beyondcoin"
     SHORTNAME = "BYND"
@@ -3994,7 +3976,6 @@ class Beyondcoin(Coin):
     RPC_PORT = 10332
     REORG_LIMIT = 5000
 
-
 class Syscoin(AuxPowMixin, Coin):
     NAME = "Syscoin"
     SHORTNAME = "SYS"
@@ -4011,3 +3992,54 @@ class Syscoin(AuxPowMixin, Coin):
     RPC_PORT = 8370
     REORG_LIMIT = 2000
     CHUNK_SIZE = 360
+
+class Defichain(Coin):
+    NAME = "DeFiChain"
+    SHORTNAME = "DFI"
+    NET = "mainnet"
+
+    RPC_PORT = 8554
+    BASIC_HEADER_SIZE = 190
+    GENESIS_HEADER_SIZE = BASIC_HEADER_SIZE - 65
+    HEADER_VALUES = ('version', 'prev_block_hash', 'merkle_root',
+                     'timestamp', 'bits', 'height', 'minted_blocks',
+                     'stake_modifier', 'sig')
+    HEADER_UNPACK = struct.Struct('< i 32s 32s I I Q Q 32s 66s').unpack_from
+    SESSIONCLS = DefiElectrumX
+    DAEMON = daemon.DefiDaemon
+
+    DESERIALIZER = lib_tx.DeserializerDefichain
+    P2PKH_VERBYTE = bytes.fromhex("12")
+    P2SH_VERBYTES = bytes.fromhex("5a")
+    WIF_BYTE = bytes.fromhex("80")
+    GENESIS_HASH = ('279b1a87aedc7b9471d4ad4e5f12967a'
+                    'b6259926cd097ade188dfcf22ebfe72a')
+    TX_COUNT = 666666
+    TX_COUNT_HEIGHT = 123456
+    TX_PER_BLOCK = 5
+    REORG_LIMIT = 4000
+    CHUNK_SIZE = 2016
+
+    @classmethod
+    def static_header_len(cls, height):
+        '''Given a header height return its length.'''
+        return super(Defichain, cls).static_header_len(height) if height > 0 else cls.GENESIS_HEADER_SIZE
+
+    @classmethod
+    def genesis_block(cls, block):
+        '''Check the Genesis block is the right one for this coin.'''
+        super(Defichain, cls).genesis_block(block)
+        return block
+
+class DefichainTestnet(Defichain):
+    NET = "testnet"
+    P2PKH_VERBYTE = bytes.fromhex("0f")
+    P2SH_VERBYTES = bytes.fromhex("80")
+    WIF_BYTE = bytes.fromhex("ef")
+    GENESIS_HASH = ('034ac8c88a1a9b846750768c1ad6f295'
+                    'bc4d0dc4b9b418aee5c0ebd609be8f90')
+    RPC_PORT = 18554
+    TX_COUNT = 256364
+    TX_COUNT_HEIGHT = 123456
+    TX_PER_BLOCK = 2
+    REORG_LIMIT = 1000

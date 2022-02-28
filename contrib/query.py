@@ -24,7 +24,7 @@ async def print_stats(hist_db, utxo_db):
     count = 0
     for key in utxo_db.iterator(prefix=b'u', include_value=False):
         count += 1
-    print(f'UTXO count: {utxos}')
+    print(f'UTXO count: {count}')
 
     count = 0
     for key in utxo_db.iterator(prefix=b'h', include_value=False):
@@ -39,11 +39,29 @@ async def print_stats(hist_db, utxo_db):
     print(f'History rows {hist:,d} entries {hist_len:,d}')
 
 
+async def print_utxo(utxo_db):
+    for key, value in utxo_db.iterator(prefix=b'u'):
+        k = key.hex()
+        v = value.hex()
+        print(f'UTXO["{k}"] = {v}')
+        
+        
+    for key, value in utxo_db.iterator(prefix=b'h'):
+        k = key.hex()
+        v = value.hex()
+        print(f'HashX["{k}"] = {v}')
+        
+async def print_history(hist_db):
+    for key, value in hist_db.iterator(prefix=b'H'):
+        k = key.hex()
+        v = value.hex()
+        print(f'History["{k}"] = {v}')
+
 def arg_to_hashX(coin, arg):
     try:
         script = bytes.fromhex(arg)
         print(f'Script: {arg}')
-        return coin.hashX_from_script(script)
+        return coin.hashX_from_script(script) if script[0:1] != b'u' else script[1:]
     except ValueError:
         pass
 
@@ -63,10 +81,14 @@ async def query(args):
 
     await db.open_for_serving()
 
-    if not args.scripts:
-        await print_stats(db.hist_db, db.utxo_db)
-        return
     limit = args.limit
+    if not args.scripts:
+        if limit:
+            await print_stats(db.history.db, db.utxo_db)
+        else:
+            await print_utxo(db.utxo_db)
+            await print_history(db.history.db)            
+        return
     for arg in args.scripts:
         hashX = arg_to_hashX(coin, arg)
         if not hashX:
@@ -100,7 +122,7 @@ def main():
         'environment as they would be invoking electrumx_server'
     )
     parser.add_argument('-l', '--limit', metavar='limit', type=int,
-                        default=10, help=f'maximum number of entries to '
+                        default=0, help=f'maximum number of entries to '
                         f'return (default: {default_limit})')
     parser.add_argument('scripts', nargs='*', default=[], type=str,
                         help='hex scripts to query')

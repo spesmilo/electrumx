@@ -1240,3 +1240,43 @@ class DeserializerPrimecoin(Deserializer):
         header_end = self.cursor
         self.cursor = start
         return self._read_nbytes(header_end - start)
+
+class TxInputDefichain(TxInput):
+    def is_generation(self):
+        return super(TxInputDefichain, self).is_generation()
+
+@dataclass
+class TxOutputDefichain(TxOutput):
+    '''Class representing a Defichain transaction output.'''
+    __slots__ = 'value', 'pk_script', 'token_id'
+    token_id: int
+
+    def serialize(self):
+        return super(TxOutputDefichain, self).serialize() + pack_varint(self.token_id)
+
+class DeserializerDefichain(DeserializerSegWit):
+    TOKENS_MIN_VERSION = 4
+    SERIALIZE_TRANSACTION_NO_TOKENS = 0x20000000
+
+    def _read_tx_parts(self):
+        self.version, = unpack_le_int32_from(self.binary, self.cursor)
+        return super(DeserializerDefichain, self)._read_tx_parts()
+
+    def _read_input(self):
+        return TxInputDefichain(
+            self._read_nbytes(32),   # prev_hash
+            self._read_le_uint32(),  # prev_idx
+            self._read_varbytes(),   # script
+            self._read_le_uint32()   # sequence
+        )
+
+    def _read_output(self):
+        if self.version < self.TOKENS_MIN_VERSION or \
+           self.version & self.SERIALIZE_TRANSACTION_NO_TOKENS:
+            return super(DeserializerDefichain, self)._read_output()
+        else:
+            return TxOutputDefichain(
+                self._read_le_int64(),  # value
+                self._read_varbytes(),  # pk_script
+                self._read_varint(),    # toked_id
+            )

@@ -15,7 +15,7 @@ small - pull requests are welcome.
 ================ ========================
 Package          Notes
 ================ ========================
-Python3          ElectrumX uses asyncio.  Python version >= 3.8 is
+Python3          ElectrumX uses asyncio.  Python version >= 3.7 is
                  **required**.
 `aiohttp`_       Python library for asynchronous HTTP.  Version >=
                  2.0 required.
@@ -64,7 +64,7 @@ Database Engine
 
 You can choose from LevelDB and RocksDB to store transaction
 information on disk.  The time taken and DB size is not significantly
-different.  We tried to support LMDB, but its history write performance
+different.  We tried to support LMDB but its history write performance
 was much worse.
 
 You will need to install one of:

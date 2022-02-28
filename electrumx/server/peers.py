@@ -17,13 +17,13 @@ from ipaddress import IPv4Address, IPv6Address
 from typing import TYPE_CHECKING, Type
 
 import aiohttp
-from aiorpcx import (Event, Notification, RPCSession, SOCKSError,
-                     SOCKSProxy, TaskTimeout, connect_rs,
+from aiorpcx import (Event, Notification, RPCError, RPCSession, SOCKSError,
+                     SOCKSProxy, TaskGroup, TaskTimeout, connect_rs,
                      handler_invocation, ignore_after, sleep)
 from aiorpcx.jsonrpc import CodeMessageError
 
 from electrumx.lib.peer import Peer
-from electrumx.lib.util import class_logger, json_deserialize, OldTaskGroup
+from electrumx.lib.util import class_logger, json_deserialize
 
 if TYPE_CHECKING:
     from electrumx.server.env import Env
@@ -84,7 +84,7 @@ class PeerManager:
         self.peers = set()
         self.permit_onion_peer_time = time.time()
         self.proxy = None
-        self.group = OldTaskGroup()
+        self.group = TaskGroup()
         self.recent_peer_adds = {}
         # refreshed
         self.blacklist = set()
@@ -384,7 +384,7 @@ class PeerManager:
         peer.server_version = server_version
         peer.features['server_version'] = server_version
 
-        async with OldTaskGroup() as g:
+        async with TaskGroup() as g:
             await g.spawn(self._send_headers_subscribe(session))
             await g.spawn(self._send_server_features(session, peer))
             peers_task = await g.spawn(self._send_peers_subscribe

@@ -25,12 +25,11 @@ import attr
 import pylru
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
-                     handler_invocation, serve_rs, serve_ws, sleep,
+                     TaskGroup, handler_invocation, serve_rs, serve_ws, sleep,
                      NewlineFramer)
 
 import electrumx
 import electrumx.lib.util as util
-from electrumx.lib.util import OldTaskGroup
 from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
                                 hex_str_to_hash, sha256)
 from electrumx.lib.merkle import MerkleCache
@@ -159,7 +158,7 @@ class SessionManager:
         self.estimatefee_cache = pylru.lrucache(1000)
         self.notified_height = None
         self.hsub_results = None
-        self._task_group = OldTaskGroup()
+        self._task_group = TaskGroup()
         self._sslc = None
         # Event triggered when electrumx is listening for incoming requests.
         self.server_listening = Event()
@@ -643,7 +642,7 @@ class SessionManager:
         finally:
             # Close servers then sessions
             await self._stop_servers(self.servers.keys())
-            async with OldTaskGroup() as group:
+            async with TaskGroup() as group:
                 for session in list(self.sessions):
                     await group.spawn(session.close(force_after=1))
 
@@ -1330,6 +1329,8 @@ class ElectrumX(SessionBase):
                 feerate = await self.daemon_request('estimatefee', number)
             assert feerate is not None
             assert blockhash is not None
+            if feerate < 0:
+                feerate = 0.0001
             cache[(number, mode)] = (blockhash, feerate, lock)
             return feerate
 
@@ -1518,6 +1519,25 @@ class LocalRPC(SessionBase):
     def protocol_version_string(self):
         return 'RPC'
 
+class DefiElectrumX(ElectrumX):
+    def set_request_handlers(self, ptuple):
+        super().set_request_handlers(ptuple)
+        self.request_handlers.update({
+            'defichain.tokens.subscribe': self.tokens_subscribe,
+            'defichain.tokens.balances': self.get_balances
+        })
+
+    async def tokens_subscribe(self):
+        '''Fetch list of tokens from the chain.'''
+        tokens = await self.daemon_request('fetch_tokens')
+        print(f'get_tokens: {tokens}')
+        return tokens
+
+    async def get_balances(self, addr):
+        '''Get token balances that belong to provided address.'''
+        balances = await self.daemon_request('token_balances', addr)
+        print(f'get_balances: {balances}')
+        return balances
 
 class DashElectrumX(ElectrumX):
     '''A TCP server that handles incoming Electrum Dash connections.'''

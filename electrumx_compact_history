@@ -15,14 +15,14 @@ This needs to lock the database so ElectrumX must not be running -
 shut it down cleanly first.
 
 It is recommended you run this script with the same environment as
-ElectrumX.  However, it is intended to be runnable with just
+ElectrumX.  However it is intended to be runnable with just
 DB_DIRECTORY and COIN set (COIN defaults as for ElectrumX).
 
 If you use daemon tools, you might run this script like so:
 
    envdir /path/to/the/environment/directory ./compact_history.py
 
-Depending on your hardware, this script may take up to 6 hours to
+Depending on your hardware this script may take up to 6 hours to
 complete; it logs progress regularly.
 
 Compaction can be interrupted and restarted harmlessly and will pick
@@ -42,8 +42,8 @@ from electrumx.server.db import DB
 
 
 async def compact_history():
-    if sys.version_info < (3, 8):
-        raise RuntimeError('Python >= 3.8 is required to run ElectrumX')
+    if sys.version_info < (3, 7):
+        raise RuntimeError('Python >= 3.7 is required to run ElectrumX')
 
     environ['DAEMON_URL'] = ''   # Avoid Env erroring out
     env = Env()

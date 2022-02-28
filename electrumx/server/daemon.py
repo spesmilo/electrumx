@@ -309,6 +309,15 @@ class Daemon:
         return self._height
 
 
+class DefiDaemon(Daemon):
+    async def fetch_tokens(self, *args):
+        '''Fetch all token accounts from the chain.'''
+        return await self._send_single('listtokens', args)
+
+    async def token_balances(self, addr, *args):
+        '''Get token balances that belong to provided address.'''
+        return await self._send_single('getaccount', (addr, *args))
+
 class DashDaemon(Daemon):
 
     async def masternode_broadcast(self, params):

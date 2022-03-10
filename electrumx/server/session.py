@@ -786,6 +786,9 @@ class SessionManager:
                 del cache[hashX]
 
         for session in self.sessions:
+            if self._task_group.joined:  # this can happen during shutdown
+                self.logger.warning(f"task group already terminated. not notifying sessions.")
+                return
             await self._task_group.spawn(session.notify, touched, height_changed)
 
     def _ip_addr_group_name(self, session) -> Optional[str]:

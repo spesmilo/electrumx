@@ -339,7 +339,7 @@ class PeerManager:
         # store IP address for peer
         if not peer.is_tor:
             address = session.remote_address()
-            if isinstance(address.host, (IPv4Address, IPv6Address)):
+            if address and isinstance(address.host, (IPv4Address, IPv6Address)):
                 peer.ip_addr = str(address.host)
 
         if self._is_blacklisted(peer):

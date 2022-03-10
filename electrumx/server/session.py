@@ -26,7 +26,7 @@ import pylru
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
                      handler_invocation, serve_rs, serve_ws, sleep,
-                     NewlineFramer)
+                     NewlineFramer, TaskTimeout, timeout_after)
 
 import electrumx
 import electrumx.lib.util as util
@@ -786,6 +786,9 @@ class SessionManager:
                 del cache[hashX]
 
         for session in self.sessions:
+            if self._task_group.joined:  # this can happen during shutdown
+                self.logger.warning(f"task group already terminated. not notifying sessions.")
+                return
             await self._task_group.spawn(session.notify, touched, height_changed)
 
     def _ip_addr_group_name(self, session) -> Optional[str]:
@@ -996,7 +999,8 @@ class ElectrumX(SessionBase):
         return self.session_mgr.extra_cost(self)
 
     def on_disconnect_due_to_excessive_session_cost(self):
-        ip_addr = self.remote_address().host
+        remote_addr = self.remote_address()
+        ip_addr = remote_addr.host if remote_addr else None
         groups = self.session_mgr.sessions[self]
         group_names = [group.name for group in groups]
         self.logger.info(f"closing session over res usage. ip: {ip_addr}. groups: {group_names}")
@@ -1009,6 +1013,17 @@ class ElectrumX(SessionBase):
         return self.hashX_subs.pop(hashX, None)
 
     async def notify(self, touched, height_changed):
+        '''Wrap _notify_inner; websockets raises exceptions for unclear reasons.'''
+        try:
+            async with timeout_after(30):
+                await self._notify_inner(touched, height_changed)
+        except TaskTimeout:
+            self.logger.warning('timeout notifying client, closing...')
+            await self.close(force_after=1.0)
+        except Exception:
+            self.logger.exception('unexpected exception notifying client')
+
+    async def _notify_inner(self, touched, height_changed):
         '''Notify the client about changes to touched addresses (from mempool
         updates or new blocks) and height.
         '''
@@ -1241,7 +1256,10 @@ class ElectrumX(SessionBase):
         proxy_address = self.peer_mgr.proxy_address()
         if not proxy_address:
             return False
-        return self.remote_address().host == proxy_address.host
+        remote_addr = self.remote_address()
+        if not remote_addr:
+            return False
+        return remote_addr.host == proxy_address.host
 
     async def replaced_banner(self, banner):
         network_info = await self.daemon_request('getnetworkinfo')
@@ -1539,9 +1557,9 @@ class DashElectrumX(ElectrumX):
             'protx.info': self.protx_info,
         })
 
-    async def notify(self, touched, height_changed):
+    async def _notify_inner(self, touched, height_changed):
         '''Notify the client about changes in masternode list.'''
-        await super().notify(touched, height_changed)
+        await super()._notify_inner(touched, height_changed)
         for mn in self.mns.copy():
             status = await self.daemon_request('masternode_list',
                                                ('status', mn))

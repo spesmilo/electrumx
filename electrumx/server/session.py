@@ -26,7 +26,7 @@ import pylru
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
                      handler_invocation, serve_rs, serve_ws, sleep,
-                     NewlineFramer)
+                     NewlineFramer, TaskTimeout, timeout_after)
 
 import electrumx
 import electrumx.lib.util as util
@@ -1010,6 +1010,17 @@ class ElectrumX(SessionBase):
         return self.hashX_subs.pop(hashX, None)
 
     async def notify(self, touched, height_changed):
+        '''Wrap _notify_inner; websockets raises exceptions for unclear reasons.'''
+        try:
+            async with timeout_after(30):
+                await self._notify_inner(touched, height_changed)
+        except TaskTimeout:
+            self.logger.warning('timeout notifying client, closing...')
+            await self.close(force_after=1.0)
+        except Exception:
+            self.logger.exception('unexpected exception notifying client')
+
+    async def _notify_inner(self, touched, height_changed):
         '''Notify the client about changes to touched addresses (from mempool
         updates or new blocks) and height.
         '''
@@ -1543,9 +1554,9 @@ class DashElectrumX(ElectrumX):
             'protx.info': self.protx_info,
         })
 
-    async def notify(self, touched, height_changed):
+    async def _notify_inner(self, touched, height_changed):
         '''Notify the client about changes in masternode list.'''
-        await super().notify(touched, height_changed)
+        await super()._notify_inner(touched, height_changed)
         for mn in self.mns.copy():
             status = await self.daemon_request('masternode_list',
                                                ('status', mn))

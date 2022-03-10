@@ -996,7 +996,8 @@ class ElectrumX(SessionBase):
         return self.session_mgr.extra_cost(self)
 
     def on_disconnect_due_to_excessive_session_cost(self):
-        ip_addr = self.remote_address().host
+        remote_addr = self.remote_address()
+        ip_addr = remote_addr.host if remote_addr else None
         groups = self.session_mgr.sessions[self]
         group_names = [group.name for group in groups]
         self.logger.info(f"closing session over res usage. ip: {ip_addr}. groups: {group_names}")
@@ -1241,7 +1242,10 @@ class ElectrumX(SessionBase):
         proxy_address = self.peer_mgr.proxy_address()
         if not proxy_address:
             return False
-        return self.remote_address().host == proxy_address.host
+        remote_addr = self.remote_address()
+        if not remote_addr:
+            return False
+        return remote_addr.host == proxy_address.host
 
     async def replaced_banner(self, banner):
         network_info = await self.daemon_request('getnetworkinfo')

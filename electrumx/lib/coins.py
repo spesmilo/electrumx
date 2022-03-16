@@ -4011,3 +4011,21 @@ class Syscoin(AuxPowMixin, Coin):
     RPC_PORT = 8370
     REORG_LIMIT = 2000
     CHUNK_SIZE = 360
+
+class Marscoin(Coin):
+    NAME = "Marscoin"
+    SHORTNAME = "MARS"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    P2PKH_VERBYTE = bytes.fromhex("30")
+    P2SH_VERBYTES = (bytes.fromhex("32"), bytes.fromhex("05"))
+    WIF_BYTE = bytes.fromhex("b0")
+    GENESIS_HASH = ('06e005f86644f15d2e4c62b59a038c79'
+                    '8a3b0816ba58dcc8c91e02ce5a685299')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 1670815 
+    TX_COUNT_HEIGHT = 1458525 
+    TX_PER_BLOCK = 2 
+    RPC_PORT = 9981 
+    REORG_LIMIT = 800

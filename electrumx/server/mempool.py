@@ -139,7 +139,8 @@ class MemPool:
             await synchronized_event.wait()
             async with self.lock:
                 # Threaded as can be expensive
-                await run_in_thread(self._update_histogram, 100_000)
+                bin_size = self.coin.MEMPOOL_COMPACT_HISTOGRAM_BINSIZE
+                await run_in_thread(self._update_histogram, bin_size)
             await sleep(self.coin.MEMPOOL_HISTOGRAM_REFRESH_SECS)
 
     def _update_histogram(self, bin_size):
@@ -165,7 +166,8 @@ class MemPool:
         '''Calculate and return a compact fee histogram as needed for
         "mempool.get_fee_histogram" protocol request.
 
-        histogram: feerate (sat/byte) -> total size in bytes of txs that pay approx feerate
+        histogram: feerate (sat/vbyte) -> total size in bytes of txs that pay approx feerate
+        bin_size: ~minimum vsize of a bucket of txs in the result (e.g. 100 kb)
         '''
         # Now compact it.  For efficiency, get_fees returns a
         # compact histogram with variable bin size.  The compact
@@ -174,7 +176,7 @@ class MemPool:
         # transactions with a fee rate in the interval
         # [rate_(n-1), rate_n)], and rate_(n-1) > rate_n.
         # Intervals are chosen to create tranches containing at
-        # least 100kb of transactions
+        # least a certain cumulative size (bin_size) of transactions.
         assert bin_size > 0
         compact = []
         cum_size = 0

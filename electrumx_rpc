@@ -74,6 +74,22 @@ other_commands = {
             'help': 'number of blocks to back up'
         },
     ),
+    'debug_memusage_list_all_objects': (
+        'Print a table of types of most common types in memory',
+        ['--limit'], {
+            'type': int,
+            'default': 50,
+            'help': 'max number of types to return',
+        },
+    ),
+    'debug_memusage_get_random_backref_chain': (
+        'Return a dotfile as text containing the backref chain for a randomly selected object of type objtype',
+        [], {
+            'type': str,
+            'dest': 'objtype',
+            'help': 'e.g. "_asyncio.Task"',
+        },
+    ),
 }
 
 
@@ -124,6 +140,12 @@ def main():
                     result = await session.send_request(method, args)
                     if method in ('query', ):
                         for line in result:
+                            print(line)
+                    elif method in (
+                            'debug_memusage_list_all_objects',
+                            'debug_memusage_get_random_backref_chain',
+                    ):
+                        for line in result.split('\n'):
                             print(line)
                     elif method in ('groups', 'peers', 'sessions'):
                         lines_func = getattr(text, f'{method}_lines')

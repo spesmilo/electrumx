@@ -9,6 +9,7 @@ setuptools.setup(
     install_requires=['aiorpcX[ws]>=0.22.0,<0.23', 'attrs',
                       'plyvel', 'pylru', 'aiohttp>=3.3,<4'],
     extras_require={
+        'dev': ['objgraph'],
         'rapidjson': ['python-rapidjson>=0.4.1,<2.0'],
         'rocksdb': ['python-rocksdb>=0.6.9'],
         'ujson': ['ujson>=2.0.0,<4.0.0'],

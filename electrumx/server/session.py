@@ -26,7 +26,7 @@ import pylru
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
                      handler_invocation, serve_rs, serve_ws, sleep,
-                     NewlineFramer, TaskTimeout, timeout_after)
+                     NewlineFramer, TaskTimeout, timeout_after, run_in_thread)
 
 import electrumx
 import electrumx.lib.util as util
@@ -167,7 +167,8 @@ class SessionManager:
 
         # Set up the RPC request handlers
         cmds = ('add_peer daemon_url disconnect getinfo groups log peers '
-                'query reorg sessions stop'.split())
+                'query reorg sessions stop debug_memusage_list_all_objects '
+                'debug_memusage_get_random_backref_chain'.split())
         LocalRPC.request_handlers = {cmd: getattr(self, 'rpc_' + cmd)
                                      for cmd in cmds}
 
@@ -592,6 +593,38 @@ class SessionManager:
         if not self.bp.force_chain_reorg(count):
             raise RPCError(BAD_REQUEST, 'still catching up with daemon')
         return f'scheduled a reorg of {count:,d} blocks'
+
+    async def rpc_debug_memusage_list_all_objects(self, limit: int) -> str:
+        """Return a string listing the most common types in memory."""
+        import objgraph  # optional dependency
+        import io
+        with io.StringIO() as fd:
+            objgraph.show_most_common_types(
+                limit=limit,
+                shortnames=False,
+                file=fd)
+            return fd.getvalue()
+
+    async def rpc_debug_memusage_get_random_backref_chain(self, objtype: str) -> str:
+        """Return a dotfile as text containing the backref chain
+        for a randomly selected object of type objtype.
+
+        Warning: very slow! and it blocks the server.
+
+        To convert to image:
+        $ dot -Tps filename.dot -o outfile.ps
+        """
+        import objgraph  # optional dependency
+        import random
+        import io
+        with io.StringIO() as fd:
+            await run_in_thread(lambda:
+                objgraph.show_chain(
+                    objgraph.find_backref_chain(
+                        random.choice(objgraph.by_type(objtype)),
+                        objgraph.is_proper_module),
+                    output=fd))
+            return fd.getvalue()
 
     # --- External Interface
 

@@ -74,6 +74,22 @@ other_commands = {
             'help': 'number of blocks to back up'
         },
     ),
+    'debug_memusage_list_all_objects': (
+        'Print a table of types of most common types in memory',
+        ['--limit'], {
+            'type': int,
+            'default': 50,
+            'help': 'max number of types to return',
+        },
+    ),
+    'debug_memusage_get_random_backref_chain': (
+        'Return a dotfile as text containing the backref chain for a randomly selected object of type objtype',
+        [], {
+            'type': str,
+            'dest': 'objtype',
+            'help': 'e.g. "_asyncio.Task"',
+        },
+    ),
 }
 
 
@@ -85,6 +101,8 @@ def main():
     )
     main_parser.add_argument('-p', '--port', metavar='port_num', type=int,
                              help='RPC port number')
+    main_parser.add_argument('--timeout', type=int, default=30,
+                             help='timeout for command in seconds')
 
     subparsers = main_parser.add_subparsers(help='sub-command help',
                                             dest='command')
@@ -110,16 +128,24 @@ def main():
     if port is None:
         port = int(environ.get('RPC_PORT', 8000))
     method = args.pop('command')
+    timeout = args.pop('timeout')
 
     # aiorpcX makes this so easy...
     async def send_request():
         try:
-            async with timeout_after(30):
+            async with timeout_after(timeout):
                 async with connect_rs('localhost', port) as session:
                     session.transport._framer.max_size = 0
+                    session.sent_request_timeout = timeout
                     result = await session.send_request(method, args)
                     if method in ('query', ):
                         for line in result:
+                            print(line)
+                    elif method in (
+                            'debug_memusage_list_all_objects',
+                            'debug_memusage_get_random_backref_chain',
+                    ):
+                        for line in result.split('\n'):
                             print(line)
                     elif method in ('groups', 'peers', 'sessions'):
                         lines_func = getattr(text, f'{method}_lines')

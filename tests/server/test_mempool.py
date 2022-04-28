@@ -343,6 +343,8 @@ def test_compress_histogram():
     }
     compact = MemPool._compress_histogram(histogram, bin_size=100_000)
     assert compact == [(19, 78000), (18, 900000), (13, 5000), (12, 10000000)]
+    compact = MemPool._compress_histogram(histogram, bin_size=30_000)
+    assert compact == [(22, 1000), (21, 75000), (19, 2000), (18, 900000), (13, 5000), (12, 10000000), (10, 101000)]
 
     histogram = {
         1.0: 10_000_000,

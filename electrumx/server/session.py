@@ -1528,6 +1528,8 @@ class ElectrumX(SessionBase):
 class LocalRPC(SessionBase):
     '''A local TCP RPC server session.'''
 
+    processing_timeout = 10**9  # disable timeouts
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.client = 'RPC'

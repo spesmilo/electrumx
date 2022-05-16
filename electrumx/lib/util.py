@@ -385,9 +385,12 @@ class OldTaskGroup(aiorpcx.TaskGroup):
 # This is to plug a memory-leak, see https://github.com/kyuupichan/aiorpcX/issues/46 .
 # Note: this breaks the TaskGroup.results and TaskGroup.exceptions APIs
 #       but we are not using them anyway.
+# TODO: this monkey-patch can be removed once we require aiorpcx versions that
+#       have the upstream fix for #46.
 def _patched_TaskGroup_add_task(self: 'aiorpcx.TaskGroup', task):
     self._orig_add_task(self, task)
-    self.tasks.clear()
+    if not hasattr(self, "_retain"):
+        self.tasks.clear()
 
 aiorpcx.TaskGroup._orig_add_task = staticmethod(aiorpcx.TaskGroup._add_task)
 aiorpcx.TaskGroup._add_task      = _patched_TaskGroup_add_task

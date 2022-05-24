@@ -306,6 +306,93 @@ class DeserializerSegWit(Deserializer):
         return tx, vsize
 
 
+class LitecoinMWTxError(Exception):
+    pass
+
+
+class DeserializerLitecoin(DeserializerSegWit):
+
+    def _read_tx_parts(self):
+        '''Return a (deserialized TX, tx_hash, vsize) tuple.'''
+        start = self.cursor
+        marker = self.binary[self.cursor + 4]
+        if marker:
+            # We could call super().read_tx here but the call stack is
+            # expensive when executed millions of times.
+            tx = Tx(
+                self._read_le_int32(),  # version
+                self._read_inputs(),    # inputs
+                self._read_outputs(),   # outputs
+                self._read_le_uint32()  # locktime
+            )
+            tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
+            return tx, tx_hash, self.binary_length
+
+        version = self._read_le_int32()
+        orig_ser = self.binary[start:self.cursor]
+
+        marker = self._read_byte()
+        flag = self._read_byte()
+
+        # Work around a quirk of litecoind v0.21.2 and -rpcserialversion=1 that
+        # returns invalid stripped MW-only transactions with regular no inputs
+        # or outputs, causing this to look like a segwit transaction, but it
+        # really has zeros for the number of inputs and outputs, which we parsed
+        # as marker and flag. The next bytes are actually from lockTime. Ignore.
+        if flag == 0:
+            raise LitecoinMWTxError
+
+        start = self.cursor
+        inputs = self._read_inputs()
+        outputs = self._read_outputs()
+        orig_ser += self.binary[start:self.cursor]
+
+        base_size = self.cursor - start
+        
+        # https://github.com/litecoin-project/litecoin/blob/948e6257aec15b52ef68b4e1ee9d73f7c740fae3/src/primitives/transaction.h#L299
+        if flag & 1: # witness flag
+            witness = self._read_witness(len(inputs))
+        else:
+            # A MW tx is allowed to not have the witness flag set, indicating no
+            # witness data encoded for the inputs.
+            witness = []
+
+        if flag & 8: # MWEB flag
+            # If this transaction is in the main block, not the MW extension
+            # block (MWEB), this should be the HogEx/integration transaction,
+            # which has no mweb tx, just a zero byte.
+            # https://github.com/litecoin-project/litecoin/blob/bb242e33551157e0db3b70f90f5738f34b82cc51/src/mweb/mweb_node.cpp#L17-L20
+            #
+            # If this is anything but a zero byte, we cannot (yet) deserialize
+            # this transaction since the mwtx at this location is variable
+            # length and we cannot determine the locktime that follows without
+            # accurately parsing it.
+            #
+            # Only in mempool should we encounter transactions with mwtx data,
+            # so for the time being we will simply ignore these transactions.
+            # When such transactions are mined, they will either have the MW
+            # data stripped when they enter the regular block, or if they have
+            # no regular inputs or outputs (MW-only) they will only be in the
+            # MWEB, not the regular block at all.
+            #
+            # Note that by running litecoind with -rpcserialversion=1, the MW
+            # data will be stripped from transactions and this tx flag will be
+            # cleared.
+            if self._read_byte() != 0:
+                raise LitecoinMWTxError
+
+        start = self.cursor
+        locktime = self._read_le_uint32()
+        orig_ser += self.binary[start:self.cursor]
+        vsize = (3 * base_size + self.binary_length) // 4
+
+        return TxSegWit(version, marker, flag, inputs, outputs, witness,
+                        locktime), self.TX_HASH_FN(orig_ser), vsize
+
+    def read_tx(self):
+        return self._read_tx_parts()[0]
+
+
 class DeserializerAuxPow(Deserializer):
     VERSION_AUXPOW = (1 << 8)
 

@@ -328,7 +328,11 @@ class MemPool:
                 # mempool or it may have gotten in a block
                 if not raw_tx:
                     continue
-                tx, tx_size = deserializer(raw_tx).read_tx_and_vsize()
+                try:
+                    tx, tx_size = deserializer(raw_tx).read_tx_and_vsize()
+                except LitecoinMWTxError:
+                    self.logger.debug(f'litecoin mw tx deserialize error for {hash_to_hex_str(hash)}')
+                    continue
                 # Convert the inputs and outputs into (hashX, value) pairs
                 # Drop generation-like inputs from MemPoolTx.prevouts
                 txin_pairs = tuple((txin.prev_hash, txin.prev_idx)

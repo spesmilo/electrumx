@@ -305,6 +305,64 @@ class DeserializerSegWit(Deserializer):
         tx, _tx_hash, vsize = self._read_tx_parts()
         return tx, vsize
 
+class DeserializerLitecoin(DeserializerSegWit):
+
+    def _read_tx_parts(self):
+        '''Return a (deserialized TX, tx_hash, vsize) tuple.'''
+        start = self.cursor
+        marker = self.binary[self.cursor + 4]
+        if marker:
+            # We could call super().read_tx here but the call stack is
+            # expensive when executed millions of times.
+            tx = Tx(
+                self._read_le_int32(),  # version
+                self._read_inputs(),    # inputs
+                self._read_outputs(),   # outputs
+                self._read_le_uint32()  # locktime
+            )
+            tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
+            return tx, tx_hash, self.binary_length
+
+        version = self._read_le_int32()
+        orig_ser = self.binary[start:self.cursor]
+
+        marker = self._read_byte()
+        flag = self._read_byte()
+
+        start = self.cursor
+        inputs = self._read_inputs()
+        outputs = self._read_outputs()
+        orig_ser += self.binary[start:self.cursor]
+
+        base_size = self.cursor - start
+        
+        # https://github.com/litecoin-project/litecoin/blob/948e6257aec15b52ef68b4e1ee9d73f7c740fae3/src/primitives/transaction.h#L299
+        if flag & 1: # witness flag
+            witness = self._read_witness(len(inputs))
+        else:
+            # The MW HogEx is allowed to (must?) not have the witness flag set,
+            # indicating no witness data encoded for the inputs.
+            witness = []
+
+        if flag & 8: # MWEB flag
+            # Given this transaction is in the main block, not the MW extension
+            # block, this should be the HogEx/integration transaction, which has
+            # no mweb tx, just a zero byte.
+            # https://github.com/litecoin-project/litecoin/blob/bb242e33551157e0db3b70f90f5738f34b82cc51/src/mweb/mweb_node.cpp#L17-L20
+            # assert self._read_byte() == 0 # fail if there is a mweb tx
+            self._read_byte()
+
+        start = self.cursor
+        locktime = self._read_le_uint32()
+        orig_ser += self.binary[start:self.cursor]
+        vsize = (3 * base_size + self.binary_length) // 4
+
+        return TxSegWit(version, marker, flag, inputs, outputs, witness,
+                        locktime), self.TX_HASH_FN(orig_ser), vsize
+
+    def read_tx(self):
+        return self._read_tx_parts()[0]
+
 
 class DeserializerAuxPow(Deserializer):
     VERSION_AUXPOW = (1 << 8)

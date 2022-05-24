@@ -1000,7 +1000,7 @@ class Litecoin(Coin):
     WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('12a765e31ffd4059bada1e25190f6e98'
                     'c99d9714d334efa41a195a7e7e04bfe2')
-    DESERIALIZER = lib_tx.DeserializerSegWit
+    DESERIALIZER = lib_tx.DeserializerLitecoin
     TX_COUNT = 8908766
     TX_COUNT_HEIGHT = 1105256
     TX_PER_BLOCK = 10

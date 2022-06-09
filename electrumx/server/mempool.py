@@ -365,14 +365,15 @@ class MemPool:
             await group.spawn(self._refresh_histogram(synchronized_event))
             await group.spawn(self._logging(synchronized_event))
 
-    async def balance_delta(self, hashX):
+    async def balance_delta(self, hashX, confirmed_txhash):
         '''Return the unconfirmed amount in the mempool for hashX.
 
         Can be positive or negative.
         '''
         value = 0
         if hashX in self.hashXs:
-            for hash in self.hashXs[hashX]:
+            unconfirmed = list(self.hashXs[hashX] - set(confirmed_txhash))
+            for hash in unconfirmed:
                 tx = self.txs[hash]
                 value -= sum(v for h168, v in tx.in_pairs if h168 == hashX)
                 value += sum(v for h168, v in tx.out_pairs if h168 == hashX)

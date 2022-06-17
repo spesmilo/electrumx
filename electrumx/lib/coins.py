@@ -4015,3 +4015,24 @@ class Syscoin(AuxPowMixin, Coin):
     RPC_PORT = 8370
     REORG_LIMIT = 2000
     CHUNK_SIZE = 360
+    
+class Membercoin(Coin):
+    NAME = "Membercoin"
+    SHORTNAME = "MEM"
+    GENESIS_HASH = ('0000002642735b23a3d2b2c554d4a9fa'
+                    'b1e7fd864ef330c434156abc3fa2fef5')
+    TX_COUNT = 50000
+    TX_COUNT_HEIGHT = 50000
+    TX_PER_BLOCK = 1
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    RPC_PORT = 8682
+    DEFAULT_MAX_SEND = 1000000
+    BLOCK_PROCESSOR = block_proc.LTORBlockProcessor
+    
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return the hash.'''
+        from blake3 import blake3
+        return blake3(header).digest()

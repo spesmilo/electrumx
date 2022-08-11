@@ -1713,6 +1713,7 @@ class Peercoin(Coin):
     TX_PER_BLOCK = 4
     RPC_PORT = 9902
     REORG_LIMIT = 5000
+    ESTIMATE_FEE = 0.01
 
     PEERS = [
         "electrum.peercoinexplorer.net s"

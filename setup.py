@@ -10,7 +10,7 @@ setuptools.setup(
                       'plyvel', 'pylru', 'aiohttp>=3.3,<4'],
     extras_require={
         'rapidjson': ['python-rapidjson>=0.4.1,<2.0'],
-        'rocksdb': ['lbry-rocksdb'],
+        'rocksdb': ['python-rocksdb-static'],
         'ujson': ['ujson>=2.0.0,<4.0.0'],
         'uvloop': ['uvloop>=0.14'],
         # For various coins

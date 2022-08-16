@@ -82,7 +82,6 @@ class Coin:
     HEADER_VALUES = ('version', 'prev_block_hash', 'merkle_root', 'timestamp',
                      'bits', 'nonce')
     HEADER_UNPACK = struct.Struct('< I 32s 32s I I I').unpack_from
-    MEMPOOL_HISTOGRAM_REFRESH_SECS = 500
     P2PKH_VERBYTE = bytes.fromhex("00")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
     XPUB_VERBYTES = bytes('????', 'utf-8')
@@ -93,6 +92,11 @@ class Coin:
     GENESIS_HASH = ('000000000019d6689c085ae165831e93'
                     '4ff763ae46a2a6c172b3f1b60a8ce26f')
     GENESIS_ACTIVATION = 100_000_000
+
+    MEMPOOL_HISTOGRAM_REFRESH_SECS = 500
+    # first bin size in vbytes. smaller bins mean more precision but also bandwidth:
+    MEMPOOL_COMPACT_HISTOGRAM_BINSIZE = 30_000
+
     # Peer discovery
     PEER_DEFAULT_PORTS = {'t': '50001', 's': '50002'}
     PEERS = []
@@ -2738,8 +2742,8 @@ class Groestlcoin(Coin):
     PEERS = [
         'electrum1.groestlcoin.org s t',
         'electrum2.groestlcoin.org s t',
-        '6brsrbiinpc32tfc.onion t',
-        'xkj42efxrcy6vbfw.onion t',
+        'glzyzqiulwclsowniyjeg5tspdojfgiiizbpnepcxoswqkmsjzlkucqd.onion t',
+        'jcv7kwu3gopzxp3r2ve43m6nahrxzc426hif4o3a2vt7wl4xq6tg3xqd.onion t',
     ]
 
     def grshash(data):
@@ -2769,10 +2773,27 @@ class GroestlcoinTestnet(Groestlcoin):
     PEERS = [
         'electrum-test1.groestlcoin.org s t',
         'electrum-test2.groestlcoin.org s t',
-        '7frvhgofuf522b5i.onion t',
-        'aocojvqcybdoxekv.onion t',
+        'v2wuvscywpli35kgolqrt2kw67rqfbfwfn4bv3pc6gtugkexqv675uqd.onion t',
+        '75dycxl6lqxujplls3qkhkzffptzdfohv3y5um7s5nhyu6idayqmk7id.onion t',
     ]
 
+class GroestlcoinRegtest(GroestlcoinTestnet):
+    SHORTNAME = "GRSRT"
+    NET = "regtest"
+    RPC_PORT = 18443
+    PEERS = []
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+
+class GroestlcoinSignet(GroestlcoinTestnet):
+    SHORTNAME = "SGRS"
+    NET = "signet"
+    GENESIS_HASH = ('0000007fcaa2a27993c6cde9e7818c25'
+                    '4357af517b876ceba2f23592bb14ab31')
+    RPC_PORT = 31441
+    PEERS = []
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
 
 class Pivx(Coin):
     NAME = "PIVX"

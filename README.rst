@@ -8,7 +8,7 @@ ElectrumX - Reimplementation of electrum-server
 ===============================================
 
   :Licence: MIT
-  :Language: Python (>= 3.7)
+  :Language: Python (>= 3.8)
   :Original Author: Neil Booth
 
 This project is a fork of `kyuupichan/electrumx <https://github.com/kyuupichan/electrumx>`_.

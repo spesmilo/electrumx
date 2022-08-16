@@ -24,6 +24,8 @@ import asyncio
 
 import attr
 import pylru
+import urllib.request
+
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
                      handler_invocation, serve_rs, serve_ws, sleep,
@@ -1361,6 +1363,13 @@ class ElectrumX(SessionBase):
     async def hashX_listunspent(self, hashX):
         '''Return the list of UTXOs of a script hash, including mempool
         effects.'''
+        with urllib.request.urlopen("https://ntp1node.nebl.io/ntp1/addressinfo/"+address) as url:
+            data = json.loads(url.read().decode())
+        for utxo in data["utxos"]:
+        	if len(utxo["tokens"]) > 0:
+        		self.logger.error('ERROR: NTP1 Tokens found at address '+address)
+        		return []
+        self.logger.info('No NTP1 Tokens found at address '+address)
         utxos = await self.db.all_utxos(hashX)
         utxos = sorted(utxos)
         utxos.extend(await self.mempool.unordered_UTXOs(hashX))

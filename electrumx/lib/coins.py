@@ -1956,6 +1956,7 @@ class Neblio(ScryptMixin, Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("35")
     P2SH_VERBYTES = (bytes.fromhex("70"),)
+    WIF_BYTE = bytes.fromhex("b5")
     GENESIS_HASH = ('7286972be4dbc1463d256049b7471c25'
                     '2e6557e222cab9be73181d359cd28bcc')
     TX_COUNT = 23675

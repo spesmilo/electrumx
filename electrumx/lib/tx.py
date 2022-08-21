@@ -715,6 +715,83 @@ class DeserializerReddcoin(Deserializer):
         return TxTime(version, time, inputs, outputs, locktime)
 
 
+class DeserializerPeercoin(DeserializerTxTime):
+    def _get_version(self):
+        result, = unpack_le_int32_from(self.binary, self.cursor)
+        return result
+
+    def _read_witness(self, fields):
+        read_witness_field = self._read_witness_field
+        return [read_witness_field() for _ in range(fields)]
+
+    def _read_witness_field(self):
+        read_varbytes = self._read_varbytes
+        return [read_varbytes() for _ in range(self._read_varint())]
+
+    def read_tx_no_segwit(self):
+        version = self._read_le_int32()
+        if version < 3:
+            time = self._read_le_uint32()
+        else:
+            time = 0
+        inputs = self._read_inputs()
+        outputs = self._read_outputs()
+        locktime = self._read_le_uint32()
+
+        return TxTime(version, time, inputs, outputs, locktime)
+
+    def _read_tx_parts(self):
+        '''Return a (deserialized TX, tx_hash, vsize) tuple.'''
+        start = self.cursor
+        tx_version = self._get_version()
+        if tx_version < 3: 
+            marker = self.binary[self.cursor + 8]
+        else:
+            marker = self.binary[self.cursor + 4]
+        if marker:
+            tx = self.read_tx_no_segwit()
+            tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
+            return tx, tx_hash, self.binary_length
+
+        version = self._read_le_int32()
+        if version < 3:
+            time = self._read_le_uint32()
+        else:
+            time = 0
+        orig_ser = self.binary[start:self.cursor]
+
+        marker = self._read_byte()
+        flag = self._read_byte()
+
+        start = self.cursor
+        inputs = self._read_inputs()
+        outputs = self._read_outputs()
+        orig_ser += self.binary[start:self.cursor]
+
+        base_size = self.cursor - start
+        witness = self._read_witness(len(inputs))
+
+        start = self.cursor
+        locktime = self._read_le_uint32()
+        vsize = (3 * base_size + self.binary_length) // 4
+        orig_ser += self.binary[start:self.cursor]
+
+        return TxTimeSegWit(
+            version, time, marker, flag, inputs, outputs, witness, locktime),\
+            self.TX_HASH_FN(orig_ser), vsize
+
+    def read_tx(self):
+        return self._read_tx_parts()[0]
+
+    def read_tx_and_hash(self):
+        tx, tx_hash, vsize = self._read_tx_parts()
+        return tx, tx_hash
+
+    def read_tx_and_vsize(self):
+        tx, tx_hash, vsize = self._read_tx_parts()
+        return tx, vsize
+
+
 class DeserializerVerge(Deserializer):
     def read_tx(self):
         version = self._read_le_int32()

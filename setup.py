@@ -1,5 +1,5 @@
 import setuptools
-version = '1.16.0'
+version = '1.17.1'
 
 setuptools.setup(
     name='e-x',
@@ -11,7 +11,7 @@ setuptools.setup(
     extras_require={
         'dev': ['objgraph'],
         'rapidjson': ['python-rapidjson>=0.4.1,<2.0'],
-        'rocksdb': ['python-rocksdb>=0.6.9'],
+        'rocksdb': ['python-rocksdb-static'],
         'ujson': ['ujson>=2.0.0,<4.0.0'],
         'uvloop': ['uvloop>=0.14'],
         # For various coins

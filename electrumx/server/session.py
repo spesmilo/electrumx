@@ -1178,7 +1178,8 @@ class ElectrumX(SessionBase):
     async def get_balance(self, hashX):
         utxos = await self.db.all_utxos(hashX)
         confirmed = sum(utxo.value for utxo in utxos)
-        unconfirmed = await self.mempool.balance_delta(hashX)
+        confirmed_txids = [utxo.tx_hash for utxo in utxos]
+        unconfirmed = await self.mempool.balance_delta(hashX, confirmed_txids)
         self.bump_cost(1.0 + len(utxos) / 50)
         return {'confirmed': confirmed, 'unconfirmed': unconfirmed}
 

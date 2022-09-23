@@ -977,7 +977,7 @@ class ElectrumX(SessionBase):
     '''A TCP server that handles incoming Electrum connections.'''
 
     PROTOCOL_MIN = (1, 4)
-    PROTOCOL_MAX = (1, 4, 2)
+    PROTOCOL_MAX = (1, 4, 3)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1835,3 +1835,49 @@ class AuxPoWElectrumX(ElectrumX):
             height += 1
 
         return headers.hex()
+
+
+class NameIndexElectrumX(ElectrumX):
+    def set_request_handlers(self, ptuple):
+        super().set_request_handlers(ptuple)
+
+        if ptuple >= (1, 4, 3):
+            self.request_handlers['blockchain.name.get_value_proof'] = self.name_get_value_proof
+
+    async def name_get_value_proof(self, scripthash, cp_height=0):
+        history = await self.scripthash_get_history(scripthash)
+
+        trimmed_history = []
+        prev_height = None
+
+        for update in history[::-1]:
+            txid = update['tx_hash']
+            height = update['height']
+
+            if self.coin.NAME_EXPIRATION is not None and prev_height is not None and height < prev_height - self.coin.NAME_EXPIRATION:
+                break
+
+            tx = await(self.transaction_get(txid))
+            update['tx'] = tx
+            del update['tx_hash']
+
+            tx_merkle = await self.transaction_merkle(txid, height)
+            del tx_merkle['block_height']
+            update['tx_merkle'] = tx_merkle
+
+            if height <= cp_height:
+                header = await self.block_header(height, cp_height)
+                update['header'] = header
+
+            trimmed_history.append(update)
+
+            if height <= cp_height:
+                break
+
+            prev_height = height
+
+        return {scripthash: trimmed_history}
+
+
+class NameIndexAuxPoWElectrumX(NameIndexElectrumX, AuxPoWElectrumX):
+    pass

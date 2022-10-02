@@ -197,6 +197,9 @@ class SessionManager:
         self.logger.info(f'public server: {self.env.is_public}')
         self.logger.info(f'bolt8 pubkey {self.bolt8_pubkey.hex()}')
         whitelist = None if self.env.is_public else self._authorized_users
+        # allow self, for watchtower
+        if whitelist is not None:
+            whitelist.add(self.bolt8_pubkey)
         return partial(create_bolt8_server, b'electrum', self.bolt8_privkey, whitelist)
 
     def add_user(self, pubkey):
@@ -690,6 +693,41 @@ class SessionManager:
                     output=fd))
             return fd.getvalue()
 
+    async def start_watchtower(self):
+        # FIXME: this creates a socket to self.
+        # We should create a Network object that taps directly into ElectrumX RPC
+        import electrum
+        for s in self.env.services:
+            if s.protocol == 'bolt8':
+                server_addr = 'localhost:%d:b:%s'%(s.port, self.bolt8_pubkey.hex())
+                break
+        else:
+            return
+        electrum.logging._configure_stderr_logging(verbosity='*')
+        electrum.util._asyncio_event_loop = asyncio.get_event_loop()
+        config = {
+            'server': server_addr,
+            'oneserver': True,
+        }
+        if self.env.coin.NET == 'regtest':
+            electrum.constants.set_regtest()
+            config['regtest'] = True
+        elif self.env.coin.NET == 'testnet':
+            electrum.constants.set_regtest()
+            config['testnet'] = True
+        config = electrum.simple_config.SimpleConfig(config)
+        config.set_bolt8_privkey_for_server(self.bolt8_pubkey.hex(), self.bolt8_privkey.hex())
+
+        self.network = electrum.network.Network(config)
+        self.network.start()
+        self.lnwatcher = electrum.lnwatcher.WatchTower(self.network)
+        self.lnwatcher.adb.start_network(self.network)
+        await self.lnwatcher.start_watching()
+
+    async def stop_watchtower(self):
+        await self.lnwatcher.stop()
+        await self.network.stop()
+
     # --- External Interface
 
     async def serve(self, notifications, event):
@@ -728,6 +766,10 @@ class SessionManager:
             # Start notifications; initialize hsub_results
             await notifications.start(self.db.db_height, self._notify_sessions)
             await self._start_external_servers()
+            # start watchtower
+            if self.env.is_watchtower:
+                self.logger.info('starting watchtower')
+                await self.start_watchtower()
             # Peer discovery should start after the external servers
             # because we connect to ourself
             async with self._task_group as group:
@@ -1492,6 +1534,12 @@ class ElectrumX(SessionBase):
 
         return electrumx.version, self.protocol_version_string()
 
+    async def watchtower_get_ctn(self, outpoint, addr):
+        return await self.session_mgr.lnwatcher.get_ctn(outpoint, addr)
+
+    async def watchtower_add_sweep_tx(self, *args):
+        return await self.session_mgr.lnwatcher.sweepstore.add_sweep_tx(*args)
+
     async def crash_old_client(self, ptuple, crash_client_ver):
         if crash_client_ver:
             client_ver = util.protocol_tuple(self.client)
@@ -1614,6 +1662,8 @@ class ElectrumX(SessionBase):
             'server.peers.subscribe': self.peers_subscribe,
             'server.ping': self.ping,
             'server.version': self.server_version,
+            'watchtower.get_ctn': self.watchtower_get_ctn,
+            'watchtower.add_sweep_tx': self.watchtower_add_sweep_tx,
         }
 
         if ptuple >= (1, 4, 2):

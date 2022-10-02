@@ -44,6 +44,8 @@ class Env(EnvBase):
         # Core items
 
         self.is_public = self.boolean('PUBLIC', False)
+        self.is_watchtower = self.boolean('WATCHTOWER', False)
+        assert not (self.is_public and self.is_watchtower)
         self.db_dir = self.required('DB_DIRECTORY')
         self.daemon_url = self.required('DAEMON_URL')
         if coin is not None:

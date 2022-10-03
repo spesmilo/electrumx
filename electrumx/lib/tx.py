@@ -370,52 +370,130 @@ class DeserializerEquihashSegWit(DeserializerSegWit, DeserializerEquihash):
     pass
 
 
+# https://zips.z.cash/zip-0202
+# https://zips.z.cash/zip-0225
+
 class DeserializerZcash(DeserializerEquihash):
+
+    OVERWINTER_VERSION_GROUP_ID = 0x03C48270
+    SAPLING_VERSION_GROUP_ID = 0x892F2085
+    ZIP225_VERSION_GROUP_ID = 0x26A7270A
+    OVERWINTER_TX_VERSION = 3
+    SAPLING_TX_VERSION = 4
+    ZIP225_TX_VERSION = 5
+
+    ZFUTURE_VERSION_GROUP_ID = 0xFFFFFFFF
+    ZFUTURE_TX_VERSION = 0x0000FFFF
+
     def read_tx(self):
         header = self._read_le_uint32()
         overwintered = ((header >> 31) == 1)
         if overwintered:
             version = header & 0x7fffffff
-            self.cursor += 4  # versionGroupId
+            nVersionGroupId = self._read_le_uint32()
         else:
             version = header
 
         is_overwinter_v3 = version == 3
         is_sapling_v4 = version == 4
+        is_zip225_v5 = (overwintered and nVersionGroupId == self.ZIP225_VERSION_GROUP_ID and version == self.ZIP225_TX_VERSION)
 
-        base_tx = Tx(
-            version,
-            self._read_inputs(),    # inputs
-            self._read_outputs(),   # outputs
-            self._read_le_uint32()  # locktime
-        )
+        if not(is_zip225_v5):
+            base_tx = Tx(
+                version,
+                self._read_inputs(),    # inputs
+                self._read_outputs(),   # outputs
+                self._read_le_uint32()  # locktime
+            )
 
-        if is_overwinter_v3 or is_sapling_v4:
-            self.cursor += 4  # expiryHeight
+            if is_overwinter_v3 or is_sapling_v4:
+                self.cursor += 4  # expiryHeight
 
-        has_shielded = False
-        if is_sapling_v4:
-            self.cursor += 8  # valueBalance
-            shielded_spend_size = self._read_varint()
-            self.cursor += shielded_spend_size * 384  # vShieldedSpend
-            shielded_output_size = self._read_varint()
-            self.cursor += shielded_output_size * 948  # vShieldedOutput
-            has_shielded = shielded_spend_size > 0 or shielded_output_size > 0
+            has_shielded = False
+            if is_sapling_v4:
+                self.cursor += 8  # valueBalance
+                shielded_spend_size = self._read_varint()
+                self.cursor += shielded_spend_size * 384  # vShieldedSpend
+                shielded_output_size = self._read_varint()
+                self.cursor += shielded_output_size * 948  # vShieldedOutput
+                has_shielded = shielded_spend_size > 0 or shielded_output_size > 0
 
-        if base_tx.version >= 2:
-            joinsplit_size = self._read_varint()
-            if joinsplit_size > 0:
-                joinsplit_desc_len = 1506 + (192 if is_sapling_v4 else 296)
-                # JSDescription
-                self.cursor += joinsplit_size * joinsplit_desc_len
-                self.cursor += 32  # joinSplitPubKey
-                self.cursor += 64  # joinSplitSig
+            if base_tx.version >= 2:
+                joinsplit_size = self._read_varint()
+                if joinsplit_size > 0:
+                    joinsplit_desc_len = 1506 + (192 if is_sapling_v4 else 296)
+                    # JSDescription
+                    self.cursor += joinsplit_size * joinsplit_desc_len
+                    self.cursor += 32  # joinSplitPubKey
+                    self.cursor += 64  # joinSplitSig
 
-        if is_sapling_v4 and has_shielded:
-            self.cursor += 64  # bindingSig
-
+            if is_sapling_v4 and has_shielded:
+                self.cursor += 64  # bindingSig
+        else:
+            nConsensusBranchId = self._read_le_uint32()
+            nLockTime = self._read_le_uint32()
+            self.cursor += 4  # nExpiryHeight
+            base_tx = Tx(
+                version,
+                # Transparent Transaction Fields
+                self._read_inputs(),    # inputs
+                self._read_outputs(),   # outputs
+                nLockTime               # locktime
+            )
+            # Sapling Transaction Fields (SaplingBundle)
+            nSpendsSapling = self._read_varint()
+            self.cursor += 96 * nSpendsSapling    # vSpendsSapling
+            nOutputsSapling = self._read_varint()
+            self.cursor += 756 * nOutputsSapling  # vOutputsSapling
+            hasSapling = not(nSpendsSapling == 0 and nOutputsSapling == 0)
+            if (hasSapling):
+                self.cursor += 8                  # valueBalanceSapling
+            if not(nSpendsSapling == 0):
+                self.cursor += 32                 # anchorSapling
+            self.cursor += 192 * nSpendsSapling   # vSpendProofsSapling
+            self.cursor += 64 * nSpendsSapling    # vSpendAuthSigsSapling
+            self.cursor += 192 * nOutputsSapling  # vOutputProofsSapling
+            if (hasSapling):
+                self.cursor += 64                 # bindingSigSapling
+            # Orchard Transaction Fields (OrchardBundle)
+            # orchard_bundle_serialize (rust)
+            nActionsOrchard = self._read_varint()
+            self.cursor += 820 * nActionsOrchard    # vActionsOrchard
+            if (nActionsOrchard > 0):
+                self.cursor += 1                    # flagsOrchard
+                self.cursor += 8                    # valueBalanceOrchard
+                self.cursor += 32                   # anchorOrchard
+                sizeProofsOrchard = self._read_varint()
+                self.cursor += sizeProofsOrchard    # proofsOrchard
+                self.cursor += 64 * nActionsOrchard # vSpendAuthSigsOrchard
+                self.cursor += 64                   # bindingSigOrchard
         return base_tx
 
+    @staticmethod
+    def zcash_txid_v5(txin):
+
+        from electrumx.lib.zcash.mininode import CTransaction
+        from io import BytesIO
+        from electrumx.lib.zcash.util import hex_str_to_bytes
+        tx = CTransaction()
+        tx.deserialize(BytesIO(txin))
+        tx.rehash()
+        # print(repr(tx))
+        return bytes(reversed(hex_str_to_bytes(tx.hash)))
+
+    def read_tx_and_hash(self):
+        '''Return a (deserialized TX, tx_hash) pair.
+
+        The hash needs to be reversed for human display; for efficiency
+        we process it in the natural serialized order.
+        '''
+        start = self.cursor
+        _tx = self.read_tx()
+        if (_tx.version < 5):
+            _txhash = double_sha256(self.binary[start:self.cursor])
+        else:
+            _txhash = self.zcash_txid_v5(self.binary[start:self.cursor])
+        return _tx, _txhash
 
 @dataclass
 class TxPIVX:

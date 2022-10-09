@@ -178,6 +178,24 @@ class SessionManager:
             self._sslc.load_cert_chain(self.env.ssl_certfile, keyfile=self.env.ssl_keyfile)
         return self._sslc
 
+    def _get_bolt8_server(self):
+        from electrum import ecc
+        from electrum import logging
+        from electrum.lntransport import create_bolt8_server
+        logging._configure_stderr_logging(verbosity='*')
+        path = os.path.join(self.env.bolt8_keyfile)
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                s = f.read()
+            self.bolt8_privkey = bytes.fromhex(s)
+        else:
+            self.bolt8_privkey = os.urandom(32)
+            with open(path, 'w') as f:
+                f.write(self.bolt8_privkey.hex())
+        self.bolt8_pubkey = ecc.ECPrivkey(self.bolt8_privkey).get_public_key_bytes()
+        self.logger.info(f'bolt8 pubkey {self.bolt8_pubkey.hex()}')
+        return partial(create_bolt8_server, b'electrum', self.bolt8_privkey)
+
     async def _start_servers(self, services):
         for service in services:
             kind = service.protocol.upper()
@@ -191,6 +209,8 @@ class SessionManager:
                 session_class = self.env.coin.SESSIONCLS
             if service.protocol in ('ws', 'wss'):
                 serve = serve_ws
+            elif service.protocol in ('bolt8'):
+                serve = self._get_bolt8_server()
             else:
                 serve = serve_rs
             # FIXME: pass the service not the kind

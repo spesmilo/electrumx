@@ -164,9 +164,10 @@ class SessionManager:
         # Event triggered when electrumx is listening for incoming requests.
         self.server_listening = Event()
         self.session_event = Event()
+        self._authorized_users = self._read_users()
 
         # Set up the RPC request handlers
-        cmds = ('add_peer daemon_url disconnect getinfo groups log peers '
+        cmds = ('add_peer add_user rm_user daemon_url disconnect getinfo groups log peers '
                 'query reorg sessions stop debug_memusage_list_all_objects '
                 'debug_memusage_get_random_backref_chain'.split())
         LocalRPC.request_handlers = {cmd: getattr(self, 'rpc_' + cmd)
@@ -193,8 +194,38 @@ class SessionManager:
             with open(path, 'w') as f:
                 f.write(self.bolt8_privkey.hex())
         self.bolt8_pubkey = ecc.ECPrivkey(self.bolt8_privkey).get_public_key_bytes()
+        self.logger.info(f'public server: {self.env.is_public}')
         self.logger.info(f'bolt8 pubkey {self.bolt8_pubkey.hex()}')
-        return partial(create_bolt8_server, b'electrum', self.bolt8_privkey)
+        whitelist = None if self.env.is_public else self._authorized_users
+        return partial(create_bolt8_server, b'electrum', self.bolt8_privkey, whitelist)
+
+    def add_user(self, pubkey):
+        assert len(pubkey) == 33
+        self._authorized_users.add(pubkey)
+        self._save_users()
+
+    def rm_user(self, pubkey):
+        assert len(pubkey) == 33
+        self._authorized_users.remove(pubkey)
+        self._save_users()
+
+    def _save_users(self):
+        import json
+        path = os.path.join(self.env.db_dir, 'authorized_users')
+        s = json.dumps([x.hex() for x in sorted(self._authorized_users)])
+        with open(path, 'w') as f:
+            f.write(s)
+
+    def _read_users(self):
+        import json
+        path = os.path.join(self.env.db_dir, 'authorized_users')
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                _list = json.loads(f.read())
+                _set = set([bytes.fromhex(x) for x in _list])
+        else:
+            _set = set()
+        return _set
 
     async def _start_servers(self, services):
         for service in services:
@@ -453,6 +484,18 @@ class SessionManager:
         '''
         await self.peer_mgr.add_localRPC_peer(real_name)
         return f"peer '{real_name}' added"
+
+    async def rpc_add_user(self, pubkey):
+        '''Add a whitelisted user.
+        '''
+        self.add_user(bytes.fromhex(pubkey))
+        return f"user added"
+
+    async def rpc_rm_user(self, pubkey):
+        '''Remove a whitelisted user.
+        '''
+        self.rm_user(bytes.fromhex(pubkey))
+        return f"user removed"
 
     async def rpc_disconnect(self, session_ids):
         '''Disconnect sesssions.

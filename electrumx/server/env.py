@@ -43,6 +43,7 @@ class Env(EnvBase):
 
         # Core items
 
+        self.is_public = self.boolean('PUBLIC', False)
         self.db_dir = self.required('DB_DIRECTORY')
         self.daemon_url = self.required('DAEMON_URL')
         if coin is not None:
@@ -54,7 +55,6 @@ class Env(EnvBase):
             self.coin = Coin.lookup_coin_class(coin_name, network)
 
         # Peer discovery
-
         self.peer_discovery = self.peer_discovery_enum()
         self.peer_announce = self.boolean('PEER_ANNOUNCE', True)
         self.force_proxy = self.boolean('FORCE_PROXY', False)

@@ -39,10 +39,13 @@ from electrumx.lib.util import (
     unpack_le_uint32_from, unpack_le_uint64_from, pack_le_int32, pack_varint,
     pack_le_uint16, pack_le_uint32, pack_le_int64, pack_varbytes,
 )
-from electrumx.server.mempool import SkipTxDeserialize
 
 ZERO = bytes(32)
 MINUS_1 = 4294967295
+
+
+class SkipTxDeserialize(Exception):
+    '''Exception used to indicate transactions that should be skipped on account of certain deserialization issues.'''
 
 
 @dataclass

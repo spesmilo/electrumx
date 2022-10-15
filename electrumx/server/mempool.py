@@ -19,6 +19,7 @@ import attr
 from aiorpcx import run_in_thread, sleep
 
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
+from electrumx.lib.tx import SkipTxDeserialize
 from electrumx.lib.util import class_logger, chunks, OldTaskGroup
 from electrumx.server.db import UTXO
 
@@ -42,8 +43,6 @@ class MemPoolTxSummary:
     fee = attr.ib()
     has_unconfirmed_inputs = attr.ib()
 
-class SkipTxDeserialize(Exception):
-    '''Exception used to indicate transactions that should be skipped on account of certain deserialization issues.'''
 
 class DBSyncError(Exception):
     pass

@@ -42,6 +42,8 @@ class MemPoolTxSummary:
     fee = attr.ib()
     has_unconfirmed_inputs = attr.ib()
 
+class SkipTxDeserialize(Exception):
+    '''Exception used to indicate transactions that should be skipped on account of certain deserialization issues.'''
 
 class DBSyncError(Exception):
     pass
@@ -330,8 +332,8 @@ class MemPool:
                     continue
                 try:
                     tx, tx_size = deserializer(raw_tx).read_tx_and_vsize()
-                except LitecoinMWTxError:
-                    self.logger.debug(f'litecoin mw tx deserialize error for {hash_to_hex_str(hash)}')
+                except SkipTxDeserialize as ex:
+                    self.logger.debug(f'skipping tx {hash_to_hex_str(hash)}: {ex}')
                     continue
                 # Convert the inputs and outputs into (hashX, value) pairs
                 # Drop generation-like inputs from MemPoolTx.prevouts

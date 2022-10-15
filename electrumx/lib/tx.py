@@ -39,6 +39,7 @@ from electrumx.lib.util import (
     unpack_le_uint32_from, unpack_le_uint64_from, pack_le_int32, pack_varint,
     pack_le_uint16, pack_le_uint32, pack_le_int64, pack_varbytes,
 )
+from electrumx.server.mempool import SkipTxDeserialize
 
 ZERO = bytes(32)
 MINUS_1 = 4294967295
@@ -306,12 +307,25 @@ class DeserializerSegWit(Deserializer):
         return tx, vsize
 
 
-class LitecoinMWTxError(Exception):
-    pass
-
-
 class DeserializerLitecoin(DeserializerSegWit):
-
+    '''Class representing Litecoin transactions, which may have the MW flag set.
+    
+    This handles regular and segwit Litecoin transactions, with special handling
+    for a limited set of MW transactions. All transactions in a block are parsed
+    correctly without error, however certain MW transactions in mempool cannot
+    be parsed and will raise a SkipTxDeserialize exception.
+    
+    When litecoind is run with the latest/default RPC serialization version (2),
+    a SkipTxDeserialize exception will be raised for any transaction that has
+    the MW flag bit set (0x8) AND has a non-null mwtx section.
+    
+    When litecoind is run with -rpcserialversion=1, only pure MW-only
+    transactions that have no regular inputs or outputs will raise this
+    exception. This is a workaround for a bug in v0.21.2.1 that lists these
+    transactions in the getrawmempool result even though when served with the MW
+    data stripped they are invalid. Presently, such transactions are of no
+    interest to electrumx, and they vanish into the MWEB when mined.
+    '''
     def _read_tx_parts(self):
         '''Return a (deserialized TX, tx_hash, vsize) tuple.'''
         start = self.cursor
@@ -334,13 +348,14 @@ class DeserializerLitecoin(DeserializerSegWit):
         marker = self._read_byte()
         flag = self._read_byte()
 
-        # Work around a quirk of litecoind v0.21.2 and -rpcserialversion=1 that
-        # returns invalid stripped MW-only transactions with regular no inputs
+        # Work around a bug in litecoind v0.21.2 with -rpcserialversion=1 that
+        # returns invalid stripped MW-only transactions with no regular inputs
         # or outputs, causing this to look like a segwit transaction, but it
-        # really has zeros for the number of inputs and outputs, which we parsed
-        # as marker and flag. The next bytes are actually from lockTime. Ignore.
+        # really just has zeros for the number of inputs and outputs, which we
+        # incorrectly interpreted as a marker and flag. If what we parsed as
+        # marker and flag are both zero, this is such an invalid transaction.
         if flag == 0:
-            raise LitecoinMWTxError
+            raise SkipTxDeserialize('invalid MW-only transaction with no regular inputs or outputs')
 
         start = self.cursor
         inputs = self._read_inputs()
@@ -353,14 +368,16 @@ class DeserializerLitecoin(DeserializerSegWit):
         if flag & 1: # witness flag
             witness = self._read_witness(len(inputs))
         else:
-            # A MW tx is allowed to not have the witness flag set, indicating no
-            # witness data encoded for the inputs.
+            # A MW tx is allowed to not have the witness bit of the flag byte
+            # set, indicating no witness data encoded for the inputs. Perhaps we
+            # should return a normal Tx here instead, but there is a flag byte
+            # we should probably not just discard.
             witness = []
 
         if flag & 8: # MWEB flag
             # If this transaction is in the main block, not the MW extension
             # block (MWEB), this should be the HogEx/integration transaction,
-            # which has no mweb tx, just a zero byte.
+            # which has no mweb tx, just a single zero byte.
             # https://github.com/litecoin-project/litecoin/blob/bb242e33551157e0db3b70f90f5738f34b82cc51/src/mweb/mweb_node.cpp#L17-L20
             #
             # If this is anything but a zero byte, we cannot (yet) deserialize
@@ -379,7 +396,7 @@ class DeserializerLitecoin(DeserializerSegWit):
             # data will be stripped from transactions and this tx flag will be
             # cleared.
             if self._read_byte() != 0:
-                raise LitecoinMWTxError
+                raise SkipTxDeserialize('non-null mwtx bytes are not parseable')
 
         start = self.cursor
         locktime = self._read_le_uint32()

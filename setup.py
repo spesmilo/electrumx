@@ -1,13 +1,15 @@
 import setuptools
 version = '1.16.0'
 
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
+
 setuptools.setup(
     name='e-x',
     version=version,
     scripts=['electrumx_server', 'electrumx_rpc', 'electrumx_compact_history'],
     python_requires='>=3.8',
-    install_requires=['aiorpcX[ws]>=0.22.0,<0.23', 'attrs',
-                      'plyvel', 'pylru', 'aiohttp>=3.3,<4'],
+    install_requires=requirements,
     extras_require={
         'dev': ['objgraph'],
         'rapidjson': ['python-rapidjson>=0.4.1,<2.0'],

@@ -166,3 +166,12 @@ New methods
 -----------
 
   * :func:`blockchain.scripthash.unsubscribe` to unsubscribe from a script hash.
+
+
+Version 1.4.3
+=============
+
+New methods
+-----------
+
+  * :func:`blockchain.name.get_value_proof` to resolve a name (with proof).  Name index coins (e.g. Namecoin) only.

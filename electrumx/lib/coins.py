@@ -2777,6 +2777,7 @@ class GroestlcoinTestnet(Groestlcoin):
         '75dycxl6lqxujplls3qkhkzffptzdfohv3y5um7s5nhyu6idayqmk7id.onion t',
     ]
 
+
 class GroestlcoinRegtest(GroestlcoinTestnet):
     SHORTNAME = "GRSRT"
     NET = "regtest"
@@ -2784,6 +2785,7 @@ class GroestlcoinRegtest(GroestlcoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+
 
 class GroestlcoinSignet(GroestlcoinTestnet):
     SHORTNAME = "SGRS"
@@ -2794,6 +2796,7 @@ class GroestlcoinSignet(GroestlcoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+
 
 class Pivx(Coin):
     NAME = "PIVX"

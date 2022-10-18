@@ -618,7 +618,8 @@ class SessionManager:
         import random
         import io
         with io.StringIO() as fd:
-            await run_in_thread(lambda:
+            await run_in_thread(
+                lambda:
                 objgraph.show_chain(
                     objgraph.find_backref_chain(
                         random.choice(objgraph.by_type(objtype)),

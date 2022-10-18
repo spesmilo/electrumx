@@ -392,8 +392,9 @@ def _patched_TaskGroup_add_task(self: 'aiorpcx.TaskGroup', task):
     if not hasattr(self, "_retain"):
         self.tasks.clear()
 
+
 aiorpcx.TaskGroup._orig_add_task = staticmethod(aiorpcx.TaskGroup._add_task)
-aiorpcx.TaskGroup._add_task      = _patched_TaskGroup_add_task
+aiorpcx.TaskGroup._add_task = _patched_TaskGroup_add_task
 
 
 # We monkey-patch aiorpcx TimeoutAfter (used by timeout_after and ignore_after API),
@@ -402,11 +403,12 @@ aiorpcx.TaskGroup._add_task      = _patched_TaskGroup_add_task
 #     async def outer_task():
 #         async with timeout_after(0.1):
 #             await inner_task()
-# When the 0.1 sec timeout expires, inner_task will get cancelled by timeout_after (=internal cancellation).
+# When the 0.1 sec timeout expires, inner_task will get cancelled by timeout_after
+# (=internal cancellation).
 # If around the same time (in terms of event loop iterations) another coroutine
 # cancels outer_task (=external cancellation), there will be a race.
 # Both cancellations work by propagating a CancelledError out to timeout_after, which then
-# needs to decide (in TimeoutAfter.__aexit__) whether it's due to an internal or external cancellation.
+# needs to decide (in TimeoutAfter.__aexit__) whether it's due to an internal or external cancel.
 # AFAICT asyncio provides no reliable way of distinguishing between the two.
 # This patch tries to always give priority to external cancellations.
 # see https://github.com/kyuupichan/aiorpcX/issues/44
@@ -416,6 +418,7 @@ def _aiorpcx_monkeypatched_set_new_deadline(task, deadline):
     def timeout_task():
         task._orig_cancel()
         task._timed_out = None if getattr(task, "_externally_cancelled", False) else deadline
+
     def mycancel(*args, **kwargs):
         task._orig_cancel(*args, **kwargs)
         task._externally_cancelled = True
@@ -439,9 +442,9 @@ def _aiorpcx_monkeypatched_unset_task_deadline(task):
     return _aiorpcx_orig_unset_task_deadline(task)
 
 
-_aiorpcx_orig_set_task_deadline    = aiorpcx.curio._set_task_deadline
-_aiorpcx_orig_unset_task_deadline  = aiorpcx.curio._unset_task_deadline
+_aiorpcx_orig_set_task_deadline = aiorpcx.curio._set_task_deadline
+_aiorpcx_orig_unset_task_deadline = aiorpcx.curio._unset_task_deadline
 
-aiorpcx.curio._set_new_deadline    = _aiorpcx_monkeypatched_set_new_deadline
-aiorpcx.curio._set_task_deadline   = _aiorpcx_monkeypatched_set_task_deadline
+aiorpcx.curio._set_new_deadline = _aiorpcx_monkeypatched_set_new_deadline
+aiorpcx.curio._set_task_deadline = _aiorpcx_monkeypatched_set_task_deadline
 aiorpcx.curio._unset_task_deadline = _aiorpcx_monkeypatched_unset_task_deadline

@@ -45,7 +45,9 @@ MINUS_1 = 4294967295
 
 
 class SkipTxDeserialize(Exception):
-    '''Exception used to indicate transactions that should be skipped on account of certain deserialization issues.'''
+    '''Exception used to indicate transactions that should be skipped
+    on account of certain deserialization issues.
+    '''
 
 
 @dataclass
@@ -312,16 +314,16 @@ class DeserializerSegWit(Deserializer):
 
 class DeserializerLitecoin(DeserializerSegWit):
     '''Class representing Litecoin transactions, which may have the MW flag set.
-    
+
     This handles regular and segwit Litecoin transactions, with special handling
     for a limited set of MW transactions. All transactions in a block are parsed
     correctly without error, however certain MW transactions in mempool cannot
     be parsed and will raise a SkipTxDeserialize exception.
-    
+
     When litecoind is run with the latest/default RPC serialization version (2),
     a SkipTxDeserialize exception will be raised for any transaction that has
     the MW flag bit set (0x8) AND has a non-null mwtx section.
-    
+
     When litecoind is run with -rpcserialversion=1, only pure MW-only
     transactions that have no regular inputs or outputs will raise this
     exception. This is a workaround for a bug in v0.21.2.1 that lists these
@@ -366,9 +368,9 @@ class DeserializerLitecoin(DeserializerSegWit):
         orig_ser += self.binary[start:self.cursor]
 
         base_size = self.cursor - start
-        
+
         # https://github.com/litecoin-project/litecoin/blob/948e6257aec15b52ef68b4e1ee9d73f7c740fae3/src/primitives/transaction.h#L299
-        if flag & 1: # witness flag
+        if flag & 1:  # witness flag
             witness = self._read_witness(len(inputs))
         else:
             # A MW tx is allowed to not have the witness bit of the flag byte
@@ -377,7 +379,7 @@ class DeserializerLitecoin(DeserializerSegWit):
             # we should probably not just discard.
             witness = []
 
-        if flag & 8: # MWEB flag
+        if flag & 8:  # MWEB flag
             # If this transaction is in the main block, not the MW extension
             # block (MWEB), this should be the HogEx/integration transaction,
             # which has no mweb tx, just a single zero byte.

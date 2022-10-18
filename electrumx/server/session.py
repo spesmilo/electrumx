@@ -1855,7 +1855,9 @@ class NameIndexElectrumX(ElectrumX):
             txid = update['tx_hash']
             height = update['height']
 
-            if self.coin.NAME_EXPIRATION is not None and prev_height is not None and height < prev_height - self.coin.NAME_EXPIRATION:
+            if (self.coin.NAME_EXPIRATION is not None
+                    and prev_height is not None
+                    and height < prev_height - self.coin.NAME_EXPIRATION):
                 break
 
             tx = await(self.transaction_get(txid))

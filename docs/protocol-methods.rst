@@ -1254,7 +1254,7 @@ Name methods (Namecoin and compatible coins)
 
 
 blockchain.name.get_value_proof
-=============================
+===============================
 
 Returns a name resolution proof, suitable for low-latency (single round-trip) resolution.
 

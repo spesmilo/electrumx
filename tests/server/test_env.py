@@ -324,7 +324,7 @@ def test_LOG_LEVEL():
 
 
 def test_MAX_SESSIONS():
-    too_big = 1000000
+    too_big = 10_000_000_000
     os.environ['MAX_SESSIONS'] = str(too_big)
     e = Env()
     assert e.max_sessions < too_big

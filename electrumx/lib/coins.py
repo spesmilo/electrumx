@@ -49,7 +49,8 @@ import electrumx.lib.tx_axe as lib_tx_axe
 import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
 from electrumx.server.session import (ElectrumX, DashElectrumX,
-                                      SmartCashElectrumX, AuxPoWElectrumX)
+                                      SmartCashElectrumX, AuxPoWElectrumX,
+                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX)
 
 
 @dataclass
@@ -484,6 +485,8 @@ class NameIndexMixin(NameMixin):
     a name index in addition to the index by address / script."""
 
     BLOCK_PROCESSOR = block_proc.NameIndexBlockProcessor
+    SESSIONCLS = NameIndexElectrumX
+    NAME_EXPIRATION = None
 
     @classmethod
     def build_name_index_script(cls, name):
@@ -527,6 +530,10 @@ class NameIndexMixin(NameMixin):
             return None
 
         return super().hashX_from_script(name_index_script)
+
+
+class NameIndexAuxPoWMixin(NameIndexMixin, AuxPowMixin):
+    SESSIONCLS = NameIndexAuxPoWElectrumX
 
 
 class PrimeChainPowMixin:
@@ -1000,7 +1007,7 @@ class Litecoin(Coin):
     WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('12a765e31ffd4059bada1e25190f6e98'
                     'c99d9714d334efa41a195a7e7e04bfe2')
-    DESERIALIZER = lib_tx.DeserializerSegWit
+    DESERIALIZER = lib_tx.DeserializerLitecoin
     TX_COUNT = 8908766
     TX_COUNT_HEIGHT = 1105256
     TX_PER_BLOCK = 10
@@ -1166,7 +1173,7 @@ class Unitus(Coin):
 
 
 # Source: namecoin.org
-class Namecoin(NameIndexMixin, AuxPowMixin, Coin):
+class Namecoin(NameIndexAuxPoWMixin, Coin):
     NAME = "Namecoin"
     SHORTNAME = "NMC"
     NET = "mainnet"
@@ -1194,6 +1201,7 @@ class Namecoin(NameIndexMixin, AuxPowMixin, Coin):
         'ulrichard.ch s50006 t50005',
     ]
     BLOCK_PROCESSOR = block_proc.NameIndexBlockProcessor
+    NAME_EXPIRATION = 36_000
 
     # Name opcodes
     OP_NAME_NEW = OpCodes.OP_1
@@ -1232,6 +1240,7 @@ class NamecoinRegtest(NamecoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+    NAME_EXPIRATION = 30
 
 
 class Dogecoin(AuxPowMixin, Coin):
@@ -2777,6 +2786,7 @@ class GroestlcoinTestnet(Groestlcoin):
         '75dycxl6lqxujplls3qkhkzffptzdfohv3y5um7s5nhyu6idayqmk7id.onion t',
     ]
 
+
 class GroestlcoinRegtest(GroestlcoinTestnet):
     SHORTNAME = "GRSRT"
     NET = "regtest"
@@ -2784,6 +2794,7 @@ class GroestlcoinRegtest(GroestlcoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+
 
 class GroestlcoinSignet(GroestlcoinTestnet):
     SHORTNAME = "SGRS"
@@ -2794,6 +2805,7 @@ class GroestlcoinSignet(GroestlcoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+
 
 class Pivx(Coin):
     NAME = "PIVX"
@@ -3400,7 +3412,7 @@ class CPUchain(Coin):
         return cpupower.getPoWHash(header)
 
 
-class Xaya(NameIndexMixin, AuxPowMixin, Coin):
+class Xaya(NameIndexAuxPoWMixin, Coin):
     NAME = "Xaya"
     SHORTNAME = "CHI"
     NET = "mainnet"

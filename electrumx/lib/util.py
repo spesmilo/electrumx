@@ -425,4 +425,23 @@ def _aiorpcx_monkeypatched_set_new_deadline(task, deadline):
         task.cancel = mycancel
     task._deadline_handle = task._loop.call_at(deadline, timeout_task)
 
-aiorpcx.curio._set_new_deadline = _aiorpcx_monkeypatched_set_new_deadline
+
+def _aiorpcx_monkeypatched_set_task_deadline(task, deadline):
+    ret = _aiorpcx_orig_set_task_deadline(task, deadline)
+    task._externally_cancelled = None
+    return ret
+
+
+def _aiorpcx_monkeypatched_unset_task_deadline(task):
+    if hasattr(task, "_orig_cancel"):
+        task.cancel = task._orig_cancel
+        del task._orig_cancel
+    return _aiorpcx_orig_unset_task_deadline(task)
+
+
+_aiorpcx_orig_set_task_deadline    = aiorpcx.curio._set_task_deadline
+_aiorpcx_orig_unset_task_deadline  = aiorpcx.curio._unset_task_deadline
+
+aiorpcx.curio._set_new_deadline    = _aiorpcx_monkeypatched_set_new_deadline
+aiorpcx.curio._set_task_deadline   = _aiorpcx_monkeypatched_set_task_deadline
+aiorpcx.curio._unset_task_deadline = _aiorpcx_monkeypatched_unset_task_deadline

@@ -3,7 +3,6 @@
 // 2. Update version number, in:
 // - docs/conf.py
 // - electrumx/__init__.py
-// - setup.py
 
 // 3. Tag
 $ git tag -s VERSION -m "VERSION"

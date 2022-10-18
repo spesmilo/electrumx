@@ -1,5 +1,21 @@
+import os
+import re
+
 import setuptools
-version = '1.16.0'
+
+
+def find_version():
+    tld = os.path.abspath(os.path.dirname(__file__))
+    filename = os.path.join(tld, 'electrumx', '__init__.py')
+    with open(filename) as f:
+        text = f.read()
+    match = re.search(r"^__version__ = \"(.*)\"$", text, re.MULTILINE)
+    if not match:
+        raise RuntimeError('cannot find version')
+    return match.group(1)
+
+
+version = find_version()
 
 with open('requirements.txt') as f:
     requirements = f.read().splitlines()

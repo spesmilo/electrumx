@@ -4027,3 +4027,23 @@ class Syscoin(AuxPowMixin, Coin):
     RPC_PORT = 8370
     REORG_LIMIT = 2000
     CHUNK_SIZE = 360
+
+
+class Lbry(Coin):
+    NAME = "Lbry"
+    SHORTNAME = "LBC"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("019C354f")
+    XPRV_VERBYTES = bytes.fromhex("019C3118")
+    P2PKH_VERBYTE = bytes.fromhex("55")
+    P2SH_VERBYTES = (bytes.fromhex("7a"),)
+    WIF_BYTE = bytes.fromhex("1c")
+    GENESIS_HASH = ('9c89283ba0f3227f6c03b70216b9f665'
+                    'f0118d5e0fa729cedf4fb34d6a34f463')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    BASIC_HEADER_SIZE = 112
+    TX_COUNT = 50792939
+    TX_COUNT_HEIGHT = 1178612
+    TX_PER_BLOCK = 43
+    RPC_PORT = 9245
+    REORG_LIMIT = 5000

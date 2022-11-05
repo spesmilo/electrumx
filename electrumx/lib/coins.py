@@ -1851,6 +1851,26 @@ class Vertcoin(Coin):
     TX_PER_BLOCK = 3
     RPC_PORT = 5888
     REORG_LIMIT = 1000
+    PEERS = [
+        'electrumx-vtc.cryptoverted.com t55001 s55002',
+        'electrumx.javerity.com t5885 s5886',
+    ]
+
+
+class VertcoinTestnet(Vertcoin):
+    SHORTNAME = "TVTC"
+    NET = "testnet"
+    XPUB_VERBYTES = bytes.fromhex("043587cf")
+    XPRV_VERBYTES = bytes.fromhex("04358394")
+    P2PKH_VERBYTE = bytes.fromhex("4a")
+    P2SH_VERBYTES = (bytes.fromhex("c4"),)
+    WIF_BYTE = bytes.fromhex("ef")
+    GENESIS_HASH = ('cee8f24feb7a64c8f07916976aa4855d'
+                    'ecac79b6741a8ec2e32e2747497ad2c9')
+    RPC_PORT = 15888
+    PEERS = [
+        'electrumx-tvtc.javerity.com t15885 s15886',
+    ]
 
 
 class Monacoin(Coin):

@@ -643,8 +643,6 @@ class Bitcoin(BitcoinMixin, Coin):
         'electrum.vom-stausee.de s t',
         'electrum.hsmiths.com s t',
         'helicarrier.bauerj.eu s t',
-        'hsmiths4fyqlw5xw.onion s t',
-        'ozahtqwp25chjdjd.onion s t',
         'electrum.hodlister.co s',
         'electrum3.hodlister.co s',
         'btc.usebsv.com s50006',
@@ -909,7 +907,6 @@ class BitcoinTestnet(BitcoinTestnetMixin, Coin):
     CRASH_CLIENT_VER = (3, 2, 3)
     PEERS = [
         'testnet.hsmiths.com t53011 s53012',
-        'hsmithsxurybd7uh.onion t53011 s53012',
         'testnet.qtornado.com s t',
         'testnet1.bauerj.eu t50001 s50002',
         'tn.not.fyi t55001 s55002',
@@ -1020,7 +1017,6 @@ class Litecoin(Coin):
         'electrum-ltc.wilv.in s t',
         'electrum.cryptomachine.com p1000 s t',
         'electrum.ltc.xurious.com s t',
-        'eywr5eubdbbe2laq.onion s50008 t50007',
     ]
 
 
@@ -1195,7 +1191,6 @@ class Namecoin(NameIndexAuxPoWMixin, Coin):
         '82.119.233.36 s50002',
         'electrum-nmc.le-space.de s50002',
         'ex.lug.gs s446',
-        'luggscoqbymhvnkp.onion t82',
         'nmc.bitcoins.sk s50002',
         'nmc2.bitcoins.sk s57002',
         'ulrichard.ch s50006 t50005',
@@ -1294,7 +1289,6 @@ class Dash(Coin):
         'electrum-drk.club s t',
         'dashcrypto.space s t',
         'electrum.dash.siampm.com s t',
-        'wl4sfwq2hwxnodof.onion s t',
     ]
     SESSIONCLS = DashElectrumX
     DAEMON = daemon.DashDaemon
@@ -1897,7 +1891,6 @@ class Monacoin(Coin):
         'electrumx1.monacoin.ninja s t',
         'electrumx2.movsign.info s t',
         'electrum-mona.bitbank.cc s t',
-        'ri7rzlmdaf4eqbza.onion s t',
     ]
 
 

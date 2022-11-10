@@ -653,6 +653,15 @@ class Bitcoin(BitcoinMixin, Coin):
         'electrum.jochen-hoenicke.de s50005 t50003',
         'vps5.hsmiths.com s',
         'electrum.emzy.de s',
+        'electrum1.cipig.net t10000 s20000',
+        'ulrichard.ch s',
+        'hodlers.beer s',
+        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
+        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
+        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
+        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
+        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
     ]
 
     @classmethod
@@ -911,6 +920,11 @@ class BitcoinTestnet(BitcoinTestnetMixin, Coin):
         'testnet1.bauerj.eu t50001 s50002',
         'tn.not.fyi t55001 s55002',
         'bitcoin.cluelessperson.com s t',
+        'blackie.c3-soft.com s57006',
+        'electrum.blockstream.info t60001 s60002',
+        'testnet.aranguren.org s t',
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t143',
+        'electrum1.cipig.net t10068',
     ]
 
     @classmethod

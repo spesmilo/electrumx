@@ -136,7 +136,7 @@ block public key.
 
 .. _status:
 
-Status (protocol 1.5 and later)
+Status (protocol 2.0 and later)
 -------------------------------
 
 To calculate the `status` of a :ref:`script hash <script hashes>` (or
@@ -188,7 +188,7 @@ txid (in network byteorder) is used to arrive at a canonical ordering.
   bytearrays of length 36 or 44.
 
 
-Old Status (before protocol 1.5)
+Old Status (before protocol 2.0)
 --------------------------------
 
 To calculate the `status` of a :ref:`script hash <script hashes>` (or

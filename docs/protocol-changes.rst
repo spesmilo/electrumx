@@ -177,9 +177,9 @@ New methods
   * :func:`blockchain.name.get_value_proof` to resolve a name (with proof).  Name index coins (e.g. Namecoin) only.
 
 
-.. _version 1.5:
+.. _version 2.0:
 
-Version 1.5
+Version 2.0
 ===========
 
 Changes

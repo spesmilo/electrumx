@@ -85,7 +85,7 @@ Return a chunk of block headers from the main chain.
   .. versionchanged:: 1.4
      *cp_height* parameter added
   .. versionchanged:: 1.4.1
-  .. versionchanged:: 1.5
+  .. versionchanged:: 2.0
 
   *start_height*
 
@@ -117,7 +117,7 @@ Return a chunk of block headers from the main chain.
 
     An array containing the binary block headers in-order; each header is a
     hexadecimal string.  AuxPoW data (if present in the original header) is
-    truncated if *cp_height* is nonzero.  Only present in version 1.5 and
+    truncated if *cp_height* is nonzero.  Only present in version 2.0 and
     higher.
 
   * *hex*
@@ -125,7 +125,7 @@ Return a chunk of block headers from the main chain.
     The binary block headers concatenated together in-order as a
     hexadecimal string.  Starting with version 1.4.1, AuxPoW data (if present
     in the original header) is truncated if *cp_height* is nonzero.  Only
-    present in versions lower than 1.5.
+    present in versions lower than 2.0.
 
   * *max*
 
@@ -174,7 +174,7 @@ be confirmed within a certain number of blocks.
 **Signature**
 
   .. function:: blockchain.estimatefee(number, mode=None)
-  .. versionchanged:: 1.5
+  .. versionchanged:: 2.0
      *mode* argument added
 
   *number*
@@ -327,7 +327,7 @@ and initiate further requests for the missing interval.
   .. function:: blockchain.scripthash.get_history(scripthash, from_height=0, to_height=-1,
                                                   client_statushash=None, client_height=None)
   .. versionadded:: 1.1
-  .. versionchanged:: 1.5
+  .. versionchanged:: 2.0
      significant changes to allow pagination of history
      (added from_height, to_height, client_height, client_statushash arguments)
      (return value changed to dict from list)
@@ -435,7 +435,7 @@ hashes>`.
 
   .. function:: blockchain.scripthash.get_mempool(scripthash)
   .. versionadded:: 1.1
-  .. versionchanged:: 1.5
+  .. versionchanged:: 2.0
      results must be sorted (previously undefined order)
 
   *scripthash*
@@ -592,7 +592,7 @@ as an input (spends it).
 **Signature**
 
   .. function:: blockchain.outpoint.subscribe(tx_hash, txout_idx, spk_hint=None)
-  .. versionadded:: 1.5
+  .. versionadded:: 2.0
 
   *tx_hash*
 
@@ -730,7 +730,7 @@ if its `status` changes.
 **Signature**
 
   .. function:: blockchain.outpoint.unsubscribe(tx_hash, txout_idx)
-  .. versionadded:: 1.5
+  .. versionadded:: 2.0
 
   *tx_hash*
 
@@ -875,7 +875,7 @@ and height.
 **Signature**
 
   .. function:: blockchain.transaction.get_merkle(tx_hash, height=None)
-  .. versionchanged:: 1.5
+  .. versionchanged:: 2.0
      *height* argument made optional (previously mandatory)
 
   *tx_hash*

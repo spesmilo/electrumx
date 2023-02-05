@@ -4074,9 +4074,9 @@ class Lbry(Coin):
     TX_PER_BLOCK = 43
     RPC_PORT = 9245
     REORG_LIMIT = 5000
-    
-    
- class LNC(Coin):
+
+
+class LNC(Coin):
     NAME = "LightningCash"
     SHORTNAME = "LNC"
     NET = "mainnet"

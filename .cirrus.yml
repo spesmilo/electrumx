@@ -40,6 +40,7 @@ unittests_task:
     - pip install git+https://github.com/VerusCoin/verushashpy
     - pip install bell-yespower
     - pip install cpupower
+    - pip install bitweb_yespower==1.0.5
   script:
     - pytest --cov=electrumx
   coveralls_script:

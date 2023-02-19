@@ -4074,3 +4074,27 @@ class Lbry(Coin):
     TX_PER_BLOCK = 43
     RPC_PORT = 9245
     REORG_LIMIT = 5000
+
+
+class Bitweb(Coin):
+    NAME = "Bitweb"
+    SHORTNAME = "BTE"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    P2PKH_VERBYTE = bytes.fromhex("21")
+    P2SH_VERBYTES = (bytes.fromhex("1E"),)
+    WIF_BYTE = bytes.fromhex("80")
+    GENESIS_HASH = ('00043e9c6bc54d9bd266c3767a83a7b9'
+                    'da435dd7f84e485a2bf2a869be62f1f3')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 31788
+    TX_COUNT_HEIGHT = 29511
+    TX_PER_BLOCK = 2
+    RPC_PORT = 1605
+
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return the hash.'''
+        import bitweb_yespower
+        return bitweb_yespower.getPoWHash(header)

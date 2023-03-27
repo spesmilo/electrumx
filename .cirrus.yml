@@ -65,11 +65,14 @@ pycodestyle_task:
     - pycodestyle --max-line-length=100 electrumx/server/*.py electrumx/lib/*.py *.py
 
 build_docs_task:
+  # note: this build task is not related to read-the-docs; it is only here to sanity-check the docs can be built.
+  #       For the read-the-docs build, see .readthedocs.yml
+  #       and the webhook set up in https://github.com/spesmilo/electrumx/settings/hooks
   container:
-    image: python:3.8
+    image: python:3.11
     cpu: 1
     memory: 1G
   install_script:
-    - pip install Sphinx
+    - pip install -r docs/requirements-docs.txt
   script:
     - sh -c "cd docs && make html"

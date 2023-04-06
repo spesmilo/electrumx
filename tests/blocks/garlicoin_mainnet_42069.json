@@ -1,0 +1,26 @@
+{
+    "hash": "1c8d7a8b72c448faeb0663a7a07cc1f0f9096c08be44b71d74c359e57ff1421d",
+    "size": 797,
+    "height": 42069,
+    "version": 536870912,
+    "merkleroot": "e544f42e449ecdcda3e6104e4a3141a3c17ac2c16c7458bc3beb898d015ac2bb",
+    "tx": [
+        "f498246bced61abf66154146182f99cc48e46850a633f2087d3e8deab4396161",
+        "3a60feb186cd060e554b71398c3fad6fd4fc531b64cb8af7176b2ff3d7dc8b02",
+        "9371a4dda250fb24235ee37d5fd98acbedb1f0b3ca2016a7862596b15269ffa7"
+    ],
+    "time": 1518135362,
+    "nonce": 3524793088,
+    "bits": "1c03ff79",
+    "difficulty": 64.0319989,
+    "chainwork": "000000000000000000000000000000000000000000000000001656ccaa310788",
+    "confirmations": 3953850,
+    "previousblockhash": "dbfb75b47e24661c353b596a1917c599830becbcf4ee787f762f9e60aac85877",
+    "nextblockhash": "3fd40439236e6af0086d9e7a064a47ae384f8199aa64ce347e39f9de4d11b303",
+    "reward": 50,
+    "isMainChain": true,
+    "poolInfo": {
+        "poolName": "Anonymous Pool",
+        "url": ""
+    }
+}

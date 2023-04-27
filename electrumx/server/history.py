@@ -28,14 +28,19 @@ TXNUM_LEN = 5
 FLUSHID_LEN = 2
 
 
+class HistoryFlushCountOverflowException(Exception):
+    pass
+
+
 class History:
 
     DB_VERSIONS = (0, 1)
 
     db: Optional['Storage']
 
-    def __init__(self):
+    def __init__(self, env):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
+        self.env = env
         # For history compaction
         self.max_hist_row_entries = 12500
         self.unflushed = defaultdict(bytearray)
@@ -157,6 +162,15 @@ class History:
     def flush(self):
         start_time = time.monotonic()
         self.flush_count += 1
+
+        if not self.flush_count % 1000:  # 1000, 2000, 3000, ...
+            self.logger.info(f'History flush_count is at {self.flush_count:d} ' +
+                             f'of {self.env.history_flush_count_max:d}')
+            if self.flush_count >= self.env.history_flush_count_max - 10000:
+                self.logger.warning('History needs to be compacted soon! See HOWTO')
+        if self.flush_count > self.env.history_flush_count_max:
+            raise HistoryFlushCountOverflowException('History needs to be compacted! See HOWTO')
+
         flush_id = pack_be_uint16(self.flush_count)
         unflushed = self.unflushed
 

@@ -92,7 +92,7 @@ class DB:
         os.chdir(env.db_dir)
 
         self.db_class = db_class(self.env.db_engine)
-        self.history = History()
+        self.history = History(self.env)
 
         # Key: b'u' + address_hashX + txout_idx + tx_num
         # Value: the UTXO value as a 64-bit unsigned integer (in satoshis)

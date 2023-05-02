@@ -168,8 +168,6 @@ class History:
                              f'of {self.env.history_flush_count_max:d}')
             if self.flush_count >= self.env.history_flush_count_max - 10000:
                 self.logger.warning('History needs to be compacted soon! See HOWTO')
-        if self.flush_count > self.env.history_flush_count_max:
-            raise HistoryFlushCountOverflowException('History needs to be compacted! See HOWTO')
 
         flush_id = pack_be_uint16(self.flush_count)
         unflushed = self.unflushed
@@ -188,6 +186,9 @@ class History:
             elapsed = time.monotonic() - start_time
             self.logger.info(f'flushed history in {elapsed:.1f}s '
                              f'for {count:,d} addrs')
+
+        if self.flush_count >= min(self.env.history_flush_count_max, 65535):
+            raise HistoryFlushCountOverflowException('History needs to be compacted now! See HOWTO')
 
     def backup(self, hashXs, tx_count):
         # Not certain this is needed, but it doesn't hurt

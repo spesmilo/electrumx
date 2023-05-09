@@ -191,7 +191,7 @@ class History:
         if self.flush_count >= min(history_flush_count_max, 65535):
             raise HistoryFlushCountOverflowException('History needs to be compacted now! See HOWTO')
 
-def backup(self, hashXs, tx_count):
+    def backup(self, hashXs, tx_count):
         # Not certain this is needed, but it doesn't hurt
         self.flush_count += 1
         nremoves = 0

@@ -179,9 +179,6 @@ class History:
             self.logger.info(f'flushed history in {elapsed:.1f}s '
                              f'for {count:,d} addrs')
 
-        if self.flush_count >= min(self.env.history_flush_count_max, 65535):
-            raise HistoryFlushCountOverflowException('History needs to be compacted now! See HOWTO')
-
     def check_flush_counter(self, history_flush_count_max):
         # Warning
         if not self.flush_count % 1000:  # 1000, 2000, 3000, ...

@@ -77,7 +77,7 @@ class Env(EnvBase):
         self.cache_MB = self.integer('CACHE_MB', 1200)
         self.reorg_limit = self.integer('REORG_LIMIT', self.coin.REORG_LIMIT)
         self.history_flush_count_max = self.integer('HISTORY_FLUSH_COUNT_MAX', 60000)  # deactivated if > 65535
-        
+
         # Server limits to help prevent DoS
 
         self.max_send = self.integer('MAX_SEND', self.coin.DEFAULT_MAX_SEND)

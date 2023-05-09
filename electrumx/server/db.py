@@ -92,7 +92,7 @@ class DB:
         os.chdir(env.db_dir)
 
         self.db_class = db_class(self.env.db_engine)
-        self.history = History(self.env)
+        self.history = History()
 
         # Key: b'u' + address_hashX + txout_idx + tx_num
         # Value: the UTXO value as a 64-bit unsigned integer (in satoshis)
@@ -269,6 +269,9 @@ class DB:
             self.logger.info(f'sync time: {formatted_time(self.wall_time)}  '
                              f'ETA: {formatted_time(eta)}')
 
+        # Now that everything is done check if history flush counter is high
+        self.check_history_flush_counter()
+
     def flush_fs(self, flush_data):
         '''Write headers, tx counts and block tx hashes to the filesystem.
 
@@ -311,6 +314,9 @@ class DB:
 
     def flush_history(self):
         self.history.flush()
+
+    def check_history_flush_counter(self):
+        self.history.check_flush_counter(self.env.history_flush_count_max)
 
     def flush_utxo_db(self, batch, flush_data: FlushData):
         '''Flush the cached DB writes and UTXO set to the batch.'''

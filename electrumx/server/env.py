@@ -76,7 +76,7 @@ class Env(EnvBase):
         self.blacklist_url = self.default('BLACKLIST_URL', self.coin.BLACKLIST_URL)
         self.cache_MB = self.integer('CACHE_MB', 1200)
         self.reorg_limit = self.integer('REORG_LIMIT', self.coin.REORG_LIMIT)
-        self.history_flush_count_max = self.integer('HISTORY_FLUSH_COUNT_MAX', 60000)  # deactivated if > 65535
+        self.history_flush_count_max = self.integer('HISTORY_FLUSH_COUNT_MAX', 60000)
 
         # Server limits to help prevent DoS
 

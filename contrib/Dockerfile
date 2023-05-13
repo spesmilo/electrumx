@@ -1,7 +1,7 @@
 # example of Dockerfile that installs spesmilo electrumx 1.16.0
 # ENV variables can be overriden on the `docker run` command
 
-FROM python:3.9.4-buster AS builder
+FROM python:3.9.16-bullseye AS builder
 
 WORKDIR /usr/src/app
 
@@ -15,12 +15,12 @@ RUN python -m venv venv \
     && venv/bin/pip install --no-cache-dir e-x[rapidjson,rocksdb]==1.16.0
 
 
-FROM python:3.9.4-slim-buster
+FROM python:3.9.16-slim-bullseye
 
 # Install the libs needed by rocksdb (no development headers or statics)
 RUN apt-get update \
     && apt-get -y --no-install-recommends install \
-        librocksdb5.17 libsnappy1v5 libbz2-1.0 zlib1g liblz4-1 \
+        librocksdb6.11 libsnappy1v5 libbz2-1.0 zlib1g liblz4-1 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV SERVICES="tcp://:50001"

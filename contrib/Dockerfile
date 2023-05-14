@@ -40,6 +40,8 @@ VOLUME /var/lib/electrumx
 
 RUN mkdir -p "$DB_DIRECTORY" && ulimit -n 1048576
 
+STOPSIGNAL SIGINT
+
 CMD ["/usr/src/app/venv/bin/python", "/usr/src/app/venv/bin/electrumx_server"]
 
 # build it with eg.: `docker build -t electrumx .`

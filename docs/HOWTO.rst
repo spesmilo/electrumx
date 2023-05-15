@@ -248,8 +248,9 @@ With Bitcoin this will happen very roughly every 15 months. Before it happens
 there will be warnings in the log. The database then needs to be compacted
 using the electrumx_compact_history script supplied with your version of
 electrumx. It needs to be run with electrumx stopped and using the same
-environment variables. This can be done like this from an account with access
-to the database folder::
+environment variables. This can be done automatically by starting electrumx
+via ``electrumx_server_autocompact.sh`` or manually like this from an account
+with access to the database folder::
 
   export $(cat /etc/electrumx.conf | grep -v "#" | xargs) && python3 ./electrumx_compact_history
 

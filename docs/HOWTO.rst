@@ -242,7 +242,7 @@ Flush Count Overflow
 
 After some months depending on blocktime electrumx will stop with this Error::
 
-  HistoryFlushCountOverflowException: History needs to be compacted!
+  HistoryFlushCountOverflowException: History needs to be compacted now!
 
 With Bitcoin this will happen very roughly every 15 months. Before it happens
 there will be warnings in the log. The database then needs to be compacted

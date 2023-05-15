@@ -16,6 +16,7 @@ import sys
 from electrumx import Controller, Env
 from electrumx.lib.util import CompactFormatter, make_logger
 
+from electrumx.server.history import HistoryFlushCountOverflowException
 
 def main():
     '''Set up logging and run the server.'''
@@ -33,6 +34,9 @@ def main():
         logger.setLevel(env.log_level)
         controller = Controller(env)
         asyncio.run(controller.run())
+    except HistoryFlushCountOverflowException:
+        logger.exception('ElectrumX server terminated with HistoryFlushCountOverflowException')
+        sys.exit(65)
     except Exception:
         logger.exception('ElectrumX server terminated abnormally')
     else:

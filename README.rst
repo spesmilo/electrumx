@@ -1,3 +1,14 @@
+===============================================
+ElectrumX autocompact
+===============================================
+This little fork adds a shell script and makes some smaller changes to
+allow for automatic history compaction. This means every 15 months or 
+so (Bitcoin) the server will stop for a couple of hours and restart
+automatically. Without these changes you have to run compaction manually.  
+  
+From the contrib files only the systemd service file has been prepared to
+use autocompact.  
+  
 .. image:: https://api.cirrus-ci.com/github/spesmilo/electrumx.svg?branch=master
     :target: https://cirrus-ci.com/github/spesmilo/electrumx
 .. image:: https://coveralls.io/repos/github/spesmilo/electrumx/badge.svg

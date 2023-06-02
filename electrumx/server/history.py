@@ -28,6 +28,10 @@ TXNUM_LEN = 5
 FLUSHID_LEN = 2
 
 
+class HistoryFlushCountOverflowException(Exception):
+    pass
+
+
 class History:
 
     DB_VERSIONS = (0, 1)
@@ -174,6 +178,18 @@ class History:
             elapsed = time.monotonic() - start_time
             self.logger.info(f'flushed history in {elapsed:.1f}s '
                              f'for {count:,d} addrs')
+
+    def check_flush_counter(self, history_flush_count_max):
+        # Warning
+        if not self.flush_count % 1000:  # 1000, 2000, 3000, ...
+            self.logger.info(f'History flush_count is at {self.flush_count:d} ' +
+                             f'of {history_flush_count_max:d}')
+            if self.flush_count >= history_flush_count_max - 10000:
+                self.logger.warning('History needs to be compacted soon! See HOWTO')
+
+        # Meaningful exception
+        if self.flush_count >= min(history_flush_count_max, 65535):
+            raise HistoryFlushCountOverflowException('History needs to be compacted now! See HOWTO')
 
     def backup(self, hashXs, tx_count):
         # Not certain this is needed, but it doesn't hurt

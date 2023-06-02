@@ -269,6 +269,9 @@ class DB:
             self.logger.info(f'sync time: {formatted_time(self.wall_time)}  '
                              f'ETA: {formatted_time(eta)}')
 
+        # Now that everything is done check if history flush counter is high
+        self.check_history_flush_counter()
+
     def flush_fs(self, flush_data):
         '''Write headers, tx counts and block tx hashes to the filesystem.
 
@@ -311,6 +314,9 @@ class DB:
 
     def flush_history(self):
         self.history.flush()
+
+    def check_history_flush_counter(self):
+        self.history.check_flush_counter(self.env.history_flush_count_max)
 
     def flush_utxo_db(self, batch, flush_data: FlushData):
         '''Flush the cached DB writes and UTXO set to the batch.'''

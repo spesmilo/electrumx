@@ -4,11 +4,19 @@ After=network.target
 
 [Service]
 EnvironmentFile=/etc/electrumx.conf
-ExecStart=/usr/local/bin/electrumx_server
-ExecStop=/usr/local/bin/electrumx_rpc -p 8000 stop
+#ExecStart=/usr/local/bin/electrumx_server
+ExecStart=/home/electrumx/electrumx/electrumx_server_autocompact.sh
+#ExecStop=/usr/local/bin/electrumx_rpc -p 8000 stop
 User=electrumx
 LimitNOFILE=8192
 TimeoutStopSec=30min
+#CPUQuota=30%
+
+# CPU and IO depriorisation - default=100
+#CPUAccounting=true
+#CPUWeight=10
+#IOAccounting=true
+#IOWeight=10
 
 [Install]
 WantedBy=multi-user.target

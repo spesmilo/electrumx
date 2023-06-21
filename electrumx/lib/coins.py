@@ -4128,3 +4128,22 @@ class Lbry(Coin):
     TX_PER_BLOCK = 43
     RPC_PORT = 9245
     REORG_LIMIT = 5000
+
+
+class Milevium(Coin):
+    NAME = "Milevium"
+    SHORTNAME = "MIL"
+    NET = "mainnet"
+    P2PKH_VERBYTE = bytes.fromhex("32")
+    P2SH_VERBYTES = (bytes.fromhex("c4"),)
+    WIF_BYTE = bytes.fromhex("ef")
+    GENESIS_HASH = ('b5e4d2c5b166103c2bdb563fd2c804a4'
+                    'ff16d098d20f604af2ee23b21e918b67')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 78861
+    TX_COUNT_HEIGHT = 78789
+    TX_PER_BLOCK = 2
+    RPC_PORT = 41889
+    REORG_LIMIT = 800
+    BASIC_HEADER_SIZE = 120
+

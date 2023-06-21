@@ -19,6 +19,7 @@ import attr
 from aiorpcx import run_in_thread, sleep
 
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
+from electrumx.lib.tx import SkipTxDeserialize
 from electrumx.lib.util import class_logger, chunks, OldTaskGroup
 from electrumx.server.db import UTXO
 
@@ -328,7 +329,11 @@ class MemPool:
                 # mempool or it may have gotten in a block
                 if not raw_tx:
                     continue
-                tx, tx_size = deserializer(raw_tx).read_tx_and_vsize()
+                try:
+                    tx, tx_size = deserializer(raw_tx).read_tx_and_vsize()
+                except SkipTxDeserialize as ex:
+                    self.logger.debug(f'skipping tx {hash_to_hex_str(hash)}: {ex}')
+                    continue
                 # Convert the inputs and outputs into (hashX, value) pairs
                 # Drop generation-like inputs from MemPoolTx.prevouts
                 txin_pairs = tuple((txin.prev_hash, txin.prev_idx)

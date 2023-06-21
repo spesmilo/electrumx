@@ -49,7 +49,8 @@ import electrumx.lib.tx_axe as lib_tx_axe
 import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
 from electrumx.server.session import (ElectrumX, DashElectrumX,
-                                      SmartCashElectrumX, AuxPoWElectrumX)
+                                      SmartCashElectrumX, AuxPoWElectrumX,
+                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX)
 
 
 @dataclass
@@ -484,6 +485,8 @@ class NameIndexMixin(NameMixin):
     a name index in addition to the index by address / script."""
 
     BLOCK_PROCESSOR = block_proc.NameIndexBlockProcessor
+    SESSIONCLS = NameIndexElectrumX
+    NAME_EXPIRATION = None
 
     @classmethod
     def build_name_index_script(cls, name):
@@ -527,6 +530,10 @@ class NameIndexMixin(NameMixin):
             return None
 
         return super().hashX_from_script(name_index_script)
+
+
+class NameIndexAuxPoWMixin(NameIndexMixin, AuxPowMixin):
+    SESSIONCLS = NameIndexAuxPoWElectrumX
 
 
 class PrimeChainPowMixin:
@@ -636,8 +643,6 @@ class Bitcoin(BitcoinMixin, Coin):
         'electrum.vom-stausee.de s t',
         'electrum.hsmiths.com s t',
         'helicarrier.bauerj.eu s t',
-        'hsmiths4fyqlw5xw.onion s t',
-        'ozahtqwp25chjdjd.onion s t',
         'electrum.hodlister.co s',
         'electrum3.hodlister.co s',
         'btc.usebsv.com s50006',
@@ -648,6 +653,15 @@ class Bitcoin(BitcoinMixin, Coin):
         'electrum.jochen-hoenicke.de s50005 t50003',
         'vps5.hsmiths.com s',
         'electrum.emzy.de s',
+        'electrum1.cipig.net t10000 s20000',
+        'ulrichard.ch s',
+        'hodlers.beer s',
+        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
+        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
+        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
+        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
+        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
     ]
 
     @classmethod
@@ -902,11 +916,15 @@ class BitcoinTestnet(BitcoinTestnetMixin, Coin):
     CRASH_CLIENT_VER = (3, 2, 3)
     PEERS = [
         'testnet.hsmiths.com t53011 s53012',
-        'hsmithsxurybd7uh.onion t53011 s53012',
         'testnet.qtornado.com s t',
         'testnet1.bauerj.eu t50001 s50002',
         'tn.not.fyi t55001 s55002',
         'bitcoin.cluelessperson.com s t',
+        'blackie.c3-soft.com s57006',
+        'electrum.blockstream.info t60001 s60002',
+        'testnet.aranguren.org s t',
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t143',
+        'electrum1.cipig.net t10068',
     ]
 
     @classmethod
@@ -1000,7 +1018,7 @@ class Litecoin(Coin):
     WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('12a765e31ffd4059bada1e25190f6e98'
                     'c99d9714d334efa41a195a7e7e04bfe2')
-    DESERIALIZER = lib_tx.DeserializerSegWit
+    DESERIALIZER = lib_tx.DeserializerLitecoin
     TX_COUNT = 8908766
     TX_COUNT_HEIGHT = 1105256
     TX_PER_BLOCK = 10
@@ -1013,7 +1031,6 @@ class Litecoin(Coin):
         'electrum-ltc.wilv.in s t',
         'electrum.cryptomachine.com p1000 s t',
         'electrum.ltc.xurious.com s t',
-        'eywr5eubdbbe2laq.onion s50008 t50007',
     ]
 
 
@@ -1166,7 +1183,7 @@ class Unitus(Coin):
 
 
 # Source: namecoin.org
-class Namecoin(NameIndexMixin, AuxPowMixin, Coin):
+class Namecoin(NameIndexAuxPoWMixin, Coin):
     NAME = "Namecoin"
     SHORTNAME = "NMC"
     NET = "mainnet"
@@ -1188,12 +1205,12 @@ class Namecoin(NameIndexMixin, AuxPowMixin, Coin):
         '82.119.233.36 s50002',
         'electrum-nmc.le-space.de s50002',
         'ex.lug.gs s446',
-        'luggscoqbymhvnkp.onion t82',
         'nmc.bitcoins.sk s50002',
         'nmc2.bitcoins.sk s57002',
         'ulrichard.ch s50006 t50005',
     ]
     BLOCK_PROCESSOR = block_proc.NameIndexBlockProcessor
+    NAME_EXPIRATION = 36_000
 
     # Name opcodes
     OP_NAME_NEW = OpCodes.OP_1
@@ -1232,6 +1249,7 @@ class NamecoinRegtest(NamecoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+    NAME_EXPIRATION = 30
 
 
 class Dogecoin(AuxPowMixin, Coin):
@@ -1285,7 +1303,6 @@ class Dash(Coin):
         'electrum-drk.club s t',
         'dashcrypto.space s t',
         'electrum.dash.siampm.com s t',
-        'wl4sfwq2hwxnodof.onion s t',
     ]
     SESSIONCLS = DashElectrumX
     DAEMON = daemon.DashDaemon
@@ -1842,6 +1859,26 @@ class Vertcoin(Coin):
     TX_PER_BLOCK = 3
     RPC_PORT = 5888
     REORG_LIMIT = 1000
+    PEERS = [
+        'electrumx-vtc.cryptoverted.com t55001 s55002',
+        'electrumx.javerity.com t5885 s5886',
+    ]
+
+
+class VertcoinTestnet(Vertcoin):
+    SHORTNAME = "TVTC"
+    NET = "testnet"
+    XPUB_VERBYTES = bytes.fromhex("043587cf")
+    XPRV_VERBYTES = bytes.fromhex("04358394")
+    P2PKH_VERBYTE = bytes.fromhex("4a")
+    P2SH_VERBYTES = (bytes.fromhex("c4"),)
+    WIF_BYTE = bytes.fromhex("ef")
+    GENESIS_HASH = ('cee8f24feb7a64c8f07916976aa4855d'
+                    'ecac79b6741a8ec2e32e2747497ad2c9')
+    RPC_PORT = 15888
+    PEERS = [
+        'electrumx-tvtc.javerity.com t15885 s15886',
+    ]
 
 
 class Monacoin(Coin):
@@ -1868,7 +1905,6 @@ class Monacoin(Coin):
         'electrumx1.monacoin.ninja s t',
         'electrumx2.movsign.info s t',
         'electrum-mona.bitbank.cc s t',
-        'ri7rzlmdaf4eqbza.onion s t',
     ]
 
 
@@ -2794,6 +2830,7 @@ class GroestlcoinTestnet(Groestlcoin):
         '75dycxl6lqxujplls3qkhkzffptzdfohv3y5um7s5nhyu6idayqmk7id.onion t',
     ]
 
+
 class GroestlcoinRegtest(GroestlcoinTestnet):
     SHORTNAME = "GRSRT"
     NET = "regtest"
@@ -2801,6 +2838,7 @@ class GroestlcoinRegtest(GroestlcoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+
 
 class GroestlcoinSignet(GroestlcoinTestnet):
     SHORTNAME = "SGRS"
@@ -2811,6 +2849,7 @@ class GroestlcoinSignet(GroestlcoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+
 
 class Pivx(Coin):
     NAME = "PIVX"
@@ -3417,7 +3456,7 @@ class CPUchain(Coin):
         return cpupower.getPoWHash(header)
 
 
-class Xaya(NameIndexMixin, AuxPowMixin, Coin):
+class Xaya(NameIndexAuxPoWMixin, Coin):
     NAME = "Xaya"
     SHORTNAME = "CHI"
     NET = "mainnet"

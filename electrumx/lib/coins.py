@@ -546,7 +546,21 @@ class PrimeChainPowMixin:
         deserializer = cls.DESERIALIZER(block)
         return deserializer.read_header(cls.BASIC_HEADER_SIZE)
 
-
+class Mazacoin(Coin):
+    NAME = "Mazacoin"
+    SHORTNAME = "MAZA"
+    NET = "mainnet"
+    P2PKH_VERBYTE = bytes.fromhex("1c")
+    P2SH_VERBYTES = bytes.fromhex("05")
+    WIF_BYTE = bytes.fromhex("b0")
+    GENESIS_HASH = ('00000c7c73d8ce604178dae13f0fc6ec0be3275614366d44b1b4b5c6e238c60c')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+    TX_PER_BLOCK = 1
+    RPC_PORT = 12832
+    REORG_LIMIT = 5000 
+  
 class Verge(Coin):
     NAME = "Verge"
     SHORTNAME = "XVG"

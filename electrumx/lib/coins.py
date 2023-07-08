@@ -560,8 +560,8 @@ class Mazacoin(Coin):
     TX_COUNT_HEIGHT = 1
     TX_PER_BLOCK = 1
     RPC_PORT = 12832
-    REORG_LIMIT = 5000 
-
+    REORG_LIMIT = 5000
+  
 
 class Verge(Coin):
     NAME = "Verge"

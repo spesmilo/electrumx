@@ -1,0 +1,28 @@
+{
+    "bits": "1a028d42",
+    "chainwork": "000000000000000000000000000000000000000000000b075065e398af20b7e1",
+    "confirmations": 705855,
+    "difficulty": 6574589.201717354,
+    "hash": "00000000000000d16ed3139efea523237156543b7e24e97c7ae2b830440ca95e",
+    "height": 2100000,
+    "hivedifficulty": 1,
+    "mediantime": 1643172763,
+    "merkleroot": "8040681758c5b12d628dcbd3010c9f760451f6217e4d755443895ccf4827e51e",
+    "nextblockhash": "000000000000023a40d41162e584a00f2ddd718d1b1da4e76e629a860a32776a",
+    "nonce": 3933155685,
+    "previousblockhash": "000000000000018f97be64b6f61eb88b4a30aac4687b95a1944a43b5994a98c2",
+    "size": 1331,
+    "strippedsize": 1331,
+    "time": 1643174337,
+    "tx": [
+    "3e92a01a1c3ea2bb525bf00819cfba68ab984d4158395721fbbbe3f9b80c8fff",
+    "6fc2486917f575c8f6a92a03e832af3cb30b3b4269ead7d48a5c8e0c75ba5499",
+    "5183544bdb1564b3d64b6c1bb5a5ae7c43ac307075b77a00a0597a01a9dc036e"
+    ],
+    "type": "pow",
+    "version": 1,
+    "versionHex": "00000001",
+    "weight": 5324,
+    "block": "00000000000000d16ed3139efea523237156543b7e24e97c7ae2b830440ca95e"
+  }
+  

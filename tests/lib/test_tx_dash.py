@@ -67,6 +67,24 @@ PRO_REG_TX = (
     '97400d3196109c8cd31b94732caf6937d63de81d9a5be4db5beb83f9aa')
 
 
+PRO_REG_TX_V2 = (
+    '03000100013d7f654493ff3c9e7ea26c326f435e72cf1ba88d687dd7532d686760221e'
+    '0b27010000006a473044022076fbc6187b0e966faa4ebc6b06414317e1c1af11ca0a57'
+    '4dace4b03abec1bec00220466d7d2d1adf396b8df5a8cc6afd064bd984e3676bd93f55'
+    '4d1c7bfeeb67591f0121026d1a91dea1a6d6fcd9d998212c0914a903197bc3f39d4065'
+    'c01857b6d379a8dcfeffffff010adff505000000001976a914beedf8a3a2f385046e11'
+    'ac4606f42bec505d4e6888ac00000000fd2a010200010000003d7f654493ff3c9e7ea2'
+    '6c326f435e72cf1ba88d687dd7532d686760221e0b2702000000000000000000000000'
+    '00ffff7f0000012afd6cfacb0f86aa7f86200512b346504952b2ecdca2b3c39049cc46'
+    'a565e8f2e91c9ec68b58379b99c506f6701e7bd5c8864d8954480abaa2c4ea53af9f31'
+    'd60155e3df936a69e6f2b2014e943402adfdc16d8785971bd4ef4bf4011976a914d4bd'
+    '717bc0ff02c9aa34cd72fcd73989f68d941288acdcc55e86aaad9f59533a5cca568bad'
+    'bc04aa68e81ac61d5e2fa5ac732714c4b70319c63d1bf01d6893b01d1bef62f08f79d9'
+    '6816622b632b411f8f268e41905bab8ad36115f1fdff74ce05bc53688a529fd93b797f'
+    '4850c8250d73315814b8973b35d8633326269564b2ffb1469c806c8110ac9e0810aa52'
+    '2f14')
+
+
 PRO_UP_SERV_TX = (
     '03000200010931c6b0ad7ce07f3c8aefeeb78e246a4fe6872bbf08ab6e4eb6a7b69acd'
     '64a6010000006b483045022100a2feb698c43c752738fabea281b7e9e5a3aa648a4c54'
@@ -80,6 +98,22 @@ PRO_UP_SERV_TX = (
     '97cf7b546a67723d4a8ec5353a82f962a96ec3cea328343b647aace2897d6eddd0b8c8'
     'ee0f2e56f6733aed2e9f0006caafa6fc21c18a013c619d6e37af8d2f0985e3b769abc3'
     '8ffa60e46c365a38d9fa0d44fd62')
+
+
+PRO_UP_SERV_TX_V2 = (
+    '0300020001e3afeff168a2977a303f87d9a42ec7fc6f1e8fa814b11ea1088eadaea500'
+    '51fd010000006a4730440220349326adf8f022189798cbe4eddfcff06405c3fe9fe28d'
+    '701e0e1ef6cba8d100022018e64ce0bf5cca3b61a69909f54159ef3e87ca3b5103e587'
+    '289f1f6150e1c3ed01210321a9da59a58b786f41ad7e012f52d229f125afcc25636e62'
+    '00cc7d848129fe56feffffff014edff505000000001976a914633bb62fc65f43091ae6'
+    'c319b7e4a85f10586b4588ac00000000e802000100d299fbe08bae8863e482ed70c4c0'
+    '78ff0cbf05204f934ecf0fc114c6bdbd03d200000000000000000000ffff7f0000012a'
+    'fd1976a914b7f5148c7f8b29370255b655be5ae9c7404b18c188ac4d3c4a39662eff4c'
+    'b7bb00531b9048a81a9500cee046693a893ac928a46fb210af1bf741032fdf87ac1153'
+    'dea88c0039a390fdf21f622062a4b4d6df357b3331924cb20e290979d3586b7a2c26b7'
+    '95f9bd347374bb9d1cdb392ef265fa9255d7b2b5cb66251ce2ed01ce6a80ddb1d63a10'
+    '982212a3b3ff35e6b682bbb32c889e88369a489447177867b8a1de78efa75cf9cf93ea'
+    'd3113650')
 
 
 PRO_UP_REG_TX = (
@@ -272,6 +306,51 @@ def test_dash_tx_pro_reg_tx():
     ser = tx.serialize()
     assert ser == test
 
+def test_dash_tx_pro_reg_tx_v2():
+    test = bfh(PRO_REG_TX_V2)
+    deser = lib_tx_dash.DeserializerDash(test)
+    tx = deser.read_tx()
+    assert tx.version == 3
+    assert tx.tx_type == 1
+    extra = tx.extra_payload
+    assert extra.version == 2
+    assert extra.type == 1
+    assert extra.mode == 0
+    assert len(extra.collateralOutpoint.hash) == 32
+    assert extra.collateralOutpoint.hash == bfh(
+        '3d7f654493ff3c9e7ea26c326f435e72cf1ba88d687dd7532d686760221e0b27')
+    assert extra.collateralOutpoint.index == 2
+    assert len(extra.ipAddress) == 16
+    assert extra.ipAddress == bfh('00000000000000000000ffff7f000001')
+    assert extra.port == 11005
+    assert len(extra.KeyIdOwner) == 20
+    assert extra.KeyIdOwner == bfh(
+        '6cfacb0f86aa7f86200512b346504952b2ecdca2')
+    assert len(extra.PubKeyOperator) == 48
+    assert extra.PubKeyOperator == bfh(
+        'b3c39049cc46a565e8f2e91c9ec68b58379b99c506f6701e7bd5c8864d895448'
+        '0abaa2c4ea53af9f31d60155e3df936a')
+    assert len(extra.KeyIdVoting) == 20
+    assert extra.KeyIdVoting == bfh(
+        '69e6f2b2014e943402adfdc16d8785971bd4ef4b')
+    assert extra.operatorReward == 500
+    assert extra.scriptPayout == bfh(
+        '76a914d4bd717bc0ff02c9aa34cd72fcd73989f68d941288ac')
+    assert len(extra.inputsHash) == 32
+    assert extra.inputsHash == bfh(
+        'dcc55e86aaad9f59533a5cca568badbc04aa68e81ac61d5e2fa5ac732714c4b7')
+    assert len(extra.platformNodeID) == 20
+    assert extra.platformNodeID == bfh(
+        '0319c63d1bf01d6893b01d1bef62f08f79d96816')
+    assert extra.platformP2PPort == 11106
+    assert extra.platformHTTPPort == 11107
+    assert extra.payloadSig == bfh(
+        '1f8f268e41905bab8ad36115f1fdff74ce05bc53688a529fd93b797f4850'
+        'c8250d73315814b8973b35d8633326269564b2ffb1469c806c8110ac9e08'
+        '10aa522f14')
+    ser = tx.serialize()
+    assert ser == test
+
 
 def test_dash_tx_pro_up_serv_tx():
     test = bfh(PRO_UP_SERV_TX)
@@ -299,6 +378,41 @@ def test_dash_tx_pro_up_serv_tx():
         'c3cea328343b647aace2897d6eddd0b8c8ee0f2e56f6733aed2e9f0006ca'
         'afa6fc21c18a013c619d6e37af8d2f0985e3b769abc38ffa60e46c365a38'
         'd9fa0d44fd62')
+    ser = tx.serialize()
+    assert ser == test
+
+
+def test_dash_tx_pro_up_serv_tx_v2():
+    test = bfh(PRO_UP_SERV_TX_V2)
+    deser = lib_tx_dash.DeserializerDash(test)
+    tx = deser.read_tx()
+    assert tx.version == 3
+    assert tx.tx_type == 2
+    extra = tx.extra_payload
+    assert extra.version == 2
+    assert len(extra.proTxHash) == 32
+    assert extra.proTxHash == bfh(
+        'd299fbe08bae8863e482ed70c4c078ff0cbf05204f934ecf0fc114c6bdbd03d2')
+    assert len(extra.ipAddress) == 16
+    assert extra.ipAddress == bfh('00000000000000000000ffff7f000001')
+    assert extra.port == 11005
+    assert extra.scriptOperatorPayout == bfh(
+        '76a914b7f5148c7f8b29370255b655be5ae9c7404b18c188ac')
+    assert len(extra.inputsHash) == 32
+    assert extra.inputsHash == bfh(
+        '4d3c4a39662eff4cb7bb00531b9048a81a9500cee046693a89'
+        '3ac928a46fb210')
+    assert len(extra.platformNodeID) == 20
+    assert extra.platformNodeID == bfh(
+        'af1bf741032fdf87ac1153dea88c0039a390fdf2')
+    assert extra.platformP2PPort == 25119
+    assert extra.platformHTTPPort == 25120
+    assert len(extra.payloadSig) == 96
+    assert extra.payloadSig == bfh(
+        'a4b4d6df357b3331924cb20e290979d3586b7a2c26b795f9bd347374bb9d'
+        '1cdb392ef265fa9255d7b2b5cb66251ce2ed01ce6a80ddb1d63a10982212'
+        'a3b3ff35e6b682bbb32c889e88369a489447177867b8a1de78efa75cf9cf'
+        '93ead3113650')
     ser = tx.serialize()
     assert ser == test
 

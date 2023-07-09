@@ -38,7 +38,7 @@ setuptools.setup(
         'groestl': ['groestlcoin-hash>=1.0.1'],
         'tribushashm': ['tribushashm>=1.0.5'],
         'xevan-hash': ['xevan-hash'],
-        'x11-hash': ['x11-hash>=1.4'],
+        'dash_hash': ['dash_hash>=1.4'],
         'zny-yespower-0-5': ['zny-yespower-0-5'],
         'bell-yespower': ['bell-yespower'],
         'cpupower': ['cpupower'],

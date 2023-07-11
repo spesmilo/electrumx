@@ -1311,8 +1311,8 @@ class Dash(Coin):
     @classmethod
     def header_hash(cls, header):
         '''Given a header return the hash.'''
-        import x11_hash
-        return x11_hash.getPoWHash(header)
+        import dash_hash
+        return dash_hash.getPoWHash(header)
 
 
 class DashTestnet(Dash):
@@ -2402,8 +2402,8 @@ class Axe(Dash):
         Need to download `axe_hash` module
         Source code: https://github.com/AXErunners/axe_hash
         '''
-        import x11_hash
-        return x11_hash.getPoWHash(header)
+        import dash_hash
+        return dash_hash.getPoWHash(header)
 
 
 class AxeTestnet(Axe):
@@ -2544,8 +2544,8 @@ class Pac(Coin):
     @classmethod
     def header_hash(cls, header):
         '''Given a header return the hash.'''
-        import x11_hash
-        return x11_hash.getPoWHash(header)
+        import dash_hash
+        return dash_hash.getPoWHash(header)
 
 
 class PacTestnet(Pac):
@@ -2656,8 +2656,8 @@ class Polis(Coin):
     @classmethod
     def header_hash(cls, header):
         '''Given a header return the hash.'''
-        import x11_hash
-        return x11_hash.getPoWHash(header)
+        import dash_hash
+        return dash_hash.getPoWHash(header)
 
 
 class MNPCoin(Coin):
@@ -3156,8 +3156,8 @@ class Bitsend(Coin):
             import xevan_hash
             return xevan_hash.getPoWHash(header)
         else:
-            import x11_hash
-            return x11_hash.getPoWHash(header)
+            import dash_hash
+            return dash_hash.getPoWHash(header)
 
     @classmethod
     def genesis_block(cls, block):
@@ -3303,8 +3303,8 @@ class Bolivarcoin(Coin):
     @classmethod
     def header_hash(cls, header):
         '''Given a header return the hash.'''
-        import x11_hash
-        return x11_hash.getPoWHash(header)
+        import dash_hash
+        return dash_hash.getPoWHash(header)
 
 
 class Onixcoin(Coin):
@@ -3328,8 +3328,8 @@ class Onixcoin(Coin):
     @classmethod
     def header_hash(cls, header):
         '''Given a header return the hash.'''
-        import x11_hash
-        return x11_hash.getPoWHash(header)
+        import dash_hash
+        return dash_hash.getPoWHash(header)
 
 
 class Electra(Coin):

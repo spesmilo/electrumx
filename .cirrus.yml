@@ -28,7 +28,7 @@ unittests_task:
     # hashes and other altcoin-specific stuff
     - pip install tribushashm
     - pip install blake256
-    - pip install x11_hash
+    - pip install dash_hash
     - pip install git+https://github.com/bitcoinplusorg/x13-hash
     - pip install xevan_hash
     - pip install quark_hash

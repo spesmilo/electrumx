@@ -1,0 +1,42 @@
+{
+  "hash": "c2506ad0054b701723b1b39261e88d9869d1502f57562f67b6738ffd04d2fe91",
+  "confirmations": 39,
+  "strippedsize": 2526,
+  "size": 7230,
+  "weight": 14636,
+  "height": 150213,
+  "version": 536870912,
+  "versionHex": "20000000",
+  "merkleroot": "c09ba83fdc00974cbd5931a9df67ea2801fa0ae7e593a0e0c05660f49058c3bc",
+  "tx": [
+    "980d0ac4f83ce23d4909534d97b9f0b3bbe6718c838073fc81515809dfd5d9ba",
+    "746ed7265ef42d3b65879f20786a9dc44e3d993d2cf5a980082a524184b5a906",
+    "2fc5bcd23f4604a2c16c7bb7c83c3af0b20e3fc85853d5b33292927322109373"
+  ],
+  "time": 1688783922,
+  "mediantime": 1688757171,
+  "nonce": 3595541510,
+  "bits": "1b0650b1",
+  "difficulty": 10377.34222817144,
+  "chainwork": "000000000000000000000000000000000000000000000000054590a7a5ff5a20",
+  "nTx": 3,
+  "mweb": {
+    "hash": "f000c7caa510cc97689a4374b181998a205bfeecc5546de2f8ff73e907eaea7d",
+    "height": 150213,
+    "kernel_offset": "0b3b067dc24e11784e6460cafa78c308e70ba2680123b0fbdf64aad021fc0a32",
+    "stealth_offset": "0000000000000000000000000000000000000000000000000000000000000000",
+    "num_kernels": 0,
+    "num_txos": 6,
+    "kernel_root": "0000000000000000000000000000000000000000000000000000000000000000",
+    "output_root": "8d77d1390bcf2a96d9d86e244cdceef168b71ffc31e21faee0860912b34c1284",
+    "leaf_root": "fcde460ea778a115ddfe9c25c37975b118d967cc52ccfd1b1e2a5c3926bf0bf2",
+    "inputs": [
+    ],
+    "outputs": [
+    ],
+    "kernels": [
+    ]
+  },
+  "previousblockhash": "b8eca992e37836e9245ea093cc954b0606697dac67c24dd10d7cd64e18c41dc4",
+  "nextblockhash": "51d85100c783480db43049f0e99a20551ded418aac9d25163136aab58ba984ed"
+}

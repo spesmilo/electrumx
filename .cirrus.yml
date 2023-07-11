@@ -74,5 +74,7 @@ build_docs_task:
     memory: 1G
   install_script:
     - pip install -r docs/requirements-docs.txt
+  env:
+    LC_ALL: "C"
   script:
     - sh -c "cd docs && make html"

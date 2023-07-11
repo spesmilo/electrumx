@@ -73,7 +73,8 @@ class DashProRegTx(namedtuple("DashProRegTx",
                               "version type mode collateralOutpoint "
                               "ipAddress port KeyIdOwner PubKeyOperator "
                               "KeyIdVoting operatorReward scriptPayout "
-                              "inputsHash payloadSig")):
+                              "inputsHash platformNodeID platformP2PPort "
+                              "platformHTTPPort payloadSig")):
     '''Class representing DIP3 ProRegTx'''
     def serialize(self):
         assert (len(self.ipAddress) == 16
@@ -81,71 +82,108 @@ class DashProRegTx(namedtuple("DashProRegTx",
                 and len(self.PubKeyOperator) == 48
                 and len(self.KeyIdVoting) == 20
                 and len(self.inputsHash) == 32)
-        return (
-            pack_le_uint16(self.version) +              # version
-            pack_le_uint16(self.type) +                 # type
-            pack_le_uint16(self.mode) +                 # mode
-            self.collateralOutpoint.serialize() +       # collateralOutpoint
-            self.ipAddress +                            # ipAddress
-            pack_be_uint16(self.port) +                 # port
-            self.KeyIdOwner +                           # KeyIdOwner
-            self.PubKeyOperator +                       # PubKeyOperator
-            self.KeyIdVoting +                          # KeyIdVoting
-            pack_le_uint16(self.operatorReward) +       # operatorReward
-            pack_varbytes(self.scriptPayout) +          # scriptPayout
-            self.inputsHash +                           # inputsHash
-            pack_varbytes(self.payloadSig)              # payloadSig
-        )
+        res = (
+            pack_le_uint16(self.version) +                  # version
+            pack_le_uint16(self.type) +                     # type
+            pack_le_uint16(self.mode) +                     # mode
+            self.collateralOutpoint.serialize() +           # collateralOutpoint
+            self.ipAddress +                                # ipAddress
+            pack_be_uint16(self.port) +                     # port
+            self.KeyIdOwner +                               # KeyIdOwner
+            self.PubKeyOperator +                           # PubKeyOperator
+            self.KeyIdVoting +                              # KeyIdVoting
+            pack_le_uint16(self.operatorReward) +           # operatorReward
+            pack_varbytes(self.scriptPayout) +              # scriptPayout
+            self.inputsHash)                                # inputsHash
+        if self.version >= 2:
+            res += (self.platformNodeID +                   # platformNodeID
+                    pack_le_uint16(self.platformP2PPort) +  # platformP2PPort
+                    pack_le_uint16(self.platformHTTPPort))  # platformHTTPPort
+        res += pack_varbytes(self.payloadSig)               # payloadSig
+        return res
 
     @classmethod
     def read_tx_extra(cls, deser):
+        version = deser._read_le_uint16()               # version
+        ntype = deser._read_le_uint16()                 # type
+        mode = deser._read_le_uint16()                  # mode
+        collateralOutpoint = deser._read_outpoint()     # collateralOutpoint
+        ipAddress = deser._read_nbytes(16)              # ipAddress
+        port = deser._read_be_uint16()                  # port
+        KeyIdOwner = deser._read_nbytes(20)             # KeyIdOwner
+        PubKeyOperator = deser._read_nbytes(48)         # PubKeyOperator
+        KeyIdVoting = deser._read_nbytes(20)            # KeyIdVoting
+        operatorReward = deser._read_le_uint16()        # operatorReward
+        scriptPayout = deser._read_varbytes()           # scriptPayout
+        inputsHash = deser._read_nbytes(32)             # inputsHash
+        platformNodeID = b''
+        platformP2PPort = 0
+        platformHTTPPort = 0
+        if version >= 2 and ntype == 1:
+            platformNodeID = deser._read_nbytes(20)     # platformNodeID
+            platformP2PPort = deser._read_le_uint16()   # platformP2PPort
+            platformHTTPPort = deser._read_le_uint16()  # platformHTTPPort
+        payloadSig = deser._read_varbytes()             # payloadSig
         return DashProRegTx(
-            deser._read_le_uint16(),                    # version
-            deser._read_le_uint16(),                    # type
-            deser._read_le_uint16(),                    # mode
-            deser._read_outpoint(),                     # collateralOutpoint
-            deser._read_nbytes(16),                     # ipAddress
-            deser._read_be_uint16(),                    # port
-            deser._read_nbytes(20),                     # KeyIdOwner
-            deser._read_nbytes(48),                     # PubKeyOperator
-            deser._read_nbytes(20),                     # KeyIdVoting
-            deser._read_le_uint16(),                    # operatorReward
-            deser._read_varbytes(),                     # scriptPayout
-            deser._read_nbytes(32),                     # inputsHash
-            deser._read_varbytes()                      # payloadSig
+            version, ntype, mode, collateralOutpoint,
+            ipAddress, port, KeyIdOwner, PubKeyOperator,
+            KeyIdVoting, operatorReward, scriptPayout,
+            inputsHash, platformNodeID, platformP2PPort,
+            platformHTTPPort, payloadSig
         )
 
 
 class DashProUpServTx(namedtuple("DashProUpServTx",
-                                 "version proTxHash ipAddress port "
+                                 "version type proTxHash ipAddress port "
                                  "scriptOperatorPayout inputsHash "
-                                 "payloadSig")):
+                                 "platformNodeID platformP2PPort "
+                                 "platformHTTPPort payloadSig")):
     '''Class representing DIP3 ProUpServTx'''
     def serialize(self):
         assert (len(self.proTxHash) == 32
                 and len(self.ipAddress) == 16
                 and len(self.inputsHash) == 32
                 and len(self.payloadSig) == 96)
-        return (
-            pack_le_uint16(self.version) +              # version
-            self.proTxHash +                            # proTxHash
-            self.ipAddress +                            # ipAddress
-            pack_be_uint16(self.port) +                 # port
-            pack_varbytes(self.scriptOperatorPayout) +  # scriptOperatorPayout
-            self.inputsHash +                           # inputsHash
-            self.payloadSig                             # payloadSig
-        )
+        res = pack_le_uint16(self.version)                  # version
+        if self.version >= 2:
+            res += pack_le_uint16(self.type)                # type
+        res += (
+            self.proTxHash +                                # proTxHash
+            self.ipAddress +                                # ipAddress
+            pack_be_uint16(self.port) +                     # port
+            pack_varbytes(self.scriptOperatorPayout) +      # scriptOperatorPayout
+            self.inputsHash)                                # inputsHash
+        if self.version >= 2:
+            res += (self.platformNodeID +                   # platformNodeID
+                    pack_le_uint16(self.platformP2PPort) +  # platformP2PPort
+                    pack_le_uint16(self.platformHTTPPort))  # platformHTTPPort
+        res += self.payloadSig                              # payloadSig
+        return res
 
     @classmethod
     def read_tx_extra(cls, deser):
+        version = deser._read_le_uint16()                   # version
+        ntype = 0
+        if version >= 2:
+            ntype = deser._read_le_uint16()                 # type
+        proTxHash = deser._read_nbytes(32)                  # proTxHash
+        ipAddress = deser._read_nbytes(16)                  # ipAddress
+        port = deser._read_be_uint16()                      # port
+        scriptOperatorPayout = deser._read_varbytes()       # scriptOperatorPayout
+        inputsHash = deser._read_nbytes(32)                 # inputsHash
+        platformNodeID = b''
+        platformP2PPort = 0
+        platformHTTPPort = 0
+        if version >= 2 and ntype == 1:
+            platformNodeID = deser._read_nbytes(20)         # platformNodeID
+            platformP2PPort = deser._read_le_uint16()       # platformP2PPort
+            platformHTTPPort = deser._read_le_uint16()      # platformHTTPPort
+        payloadSig = deser._read_nbytes(96)                 # payloadSig
         return DashProUpServTx(
-            deser._read_le_uint16(),                    # version
-            deser._read_nbytes(32),                     # proTxHash
-            deser._read_nbytes(16),                     # ipAddress
-            deser._read_be_uint16(),                    # port
-            deser._read_varbytes(),                     # scriptOperatorPayout
-            deser._read_nbytes(32),                     # inputsHash
-            deser._read_nbytes(96)                      # payloadSig
+            version, ntype, proTxHash, ipAddress, port,
+            scriptOperatorPayout, inputsHash,
+            platformNodeID, platformP2PPort,
+            platformHTTPPort, payloadSig
         )
 
 

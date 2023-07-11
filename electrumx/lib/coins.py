@@ -4168,6 +4168,7 @@ class Garlicoin(Coin):
         'electrum.maxpuig.com s t'
     ]
 
+
 class Ferrite(Coin):
     NAME = "Ferrite"
     SHORTNAME = "FEC"

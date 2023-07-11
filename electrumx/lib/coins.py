@@ -4167,3 +4167,48 @@ class Garlicoin(Coin):
         'electrum.hotgrlc.com s t',
         'electrum.maxpuig.com s t'
     ]
+
+class Ferrite(Coin):
+    NAME = "Ferrite"
+    SHORTNAME = "FEC"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    P2PKH_VERBYTE = bytes.fromhex("24")
+    P2SH_VERBYTES = (bytes.fromhex("23"), bytes.fromhex("05"))
+    WIF_BYTE = bytes.fromhex("a3")
+    GENESIS_HASH = ('46ca17415c18e43f5292034ebf9bbd10'
+                    'de80a61fc6dc17180e6609f33d3b48f3')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 164010
+    TX_COUNT_HEIGHT = 150251
+    TX_PER_BLOCK = 2
+    RPC_PORT = 9573
+    REORG_LIMIT = 800
+    PEERS = [
+        'enode1.ferritecoin.org s t',
+        'enode2.ferritecoin.org s t',
+        'enode3.ferritecoin.org s t',
+    ]
+
+
+class FerriteTestnet(Ferrite):
+    SHORTNAME = "TFE"
+    NET = "testnet"
+    XPUB_VERBYTES = bytes.fromhex("043587cf")
+    XPRV_VERBYTES = bytes.fromhex("04358394")
+    P2PKH_VERBYTE = bytes.fromhex("6f")
+    P2SH_VERBYTES = (bytes.fromhex("23"), bytes.fromhex("c4"))
+    WIF_BYTE = bytes.fromhex("ef")
+    GENESIS_HASH = ('7a9f43d6e86eefa66e2b79918b2235c9'
+                    '362106f3d9f11f37f7a33450ceae73c1')
+    TX_COUNT = 12445
+    TX_COUNT_HEIGHT = 6290
+    TX_PER_BLOCK = 2
+    RPC_PORT = 19573
+    REORG_LIMIT = 4000
+    PEERS = [
+        'enode1.ferritecoin.org s t',
+        'enode2.ferritecoin.org s t',
+        'enode3.ferritecoin.org s t',
+    ]

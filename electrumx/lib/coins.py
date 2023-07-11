@@ -1659,17 +1659,54 @@ class Blackcoin(ScryptMixin, Coin):
     NAME = "Blackcoin"
     SHORTNAME = "BLK"
     NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488B21E")
+    XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("19")
     P2SH_VERBYTES = (bytes.fromhex("55"),)
     WIF_BYTE = bytes.fromhex("99")
     GENESIS_HASH = ('000001faef25dec4fbcf906e6242621d'
                     'f2c183bf232f263d0ba5b101911e4563')
-    DAEMON = daemon.LegacyRPCDaemon
-    TX_COUNT = 4594999
-    TX_COUNT_HEIGHT = 1667070
+    DESERIALIZER = lib_tx.DeserializerBlackcoin
+    DAEMON = daemon.FakeEstimateFeeDaemon
+    TX_COUNT = 10802426
+    TX_COUNT_HEIGHT = 3431329
     TX_PER_BLOCK = 3
     RPC_PORT = 15715
-    REORG_LIMIT = 5000
+    REORG_LIMIT = 500
+    ESTIMATE_FEE = 0.0001
+    RELAY_FEE = 0.0001
+    PEERS = [
+        'electrum1.blackcoin.nl t10001 s10002',
+        'electrum2.blackcoin.nl t20001 s20002',
+        'electrum3.blackcoin.nl t30001 s30002'
+    ]
+
+
+class BlackcoinTestnet(Blackcoin):
+    NAME = "BlackcoinTestnet"
+    SHORTNAME = "tBLK"
+    NET = "testnet"
+    XPUB_VERBYTES = bytes.fromhex("043587CF")
+    XPRV_VERBYTES = bytes.fromhex("04358394")
+    P2PKH_VERBYTE = bytes.fromhex("6F")
+    P2SH_VERBYTES = (bytes.fromhex("C4"),)
+    WIF_BYTE = bytes.fromhex("EF")
+    GENESIS_HASH = ('0000724595fb3b9609d441cbfb957761'
+                    '5c292abf07d996d3edabc48de843642d')
+    DESERIALIZER = lib_tx.DeserializerBlackcoin
+    DAEMON = daemon.FakeEstimateFeeDaemon
+    TX_COUNT = 1401229
+    TX_COUNT_HEIGHT = 698611
+    TX_PER_BLOCK = 2
+    RPC_PORT = 25715
+    REORG_LIMIT = 500
+    ESTIMATE_FEE = 0.001
+    RELAY_FEE = 0.001
+    PEERS = [
+        'electrum1.blackcoin.nl t10011 s10012',
+        'electrum2.blackcoin.nl t20011 s20012',
+        'electrum3.blackcoin.nl t30011 s30012'
+    ]
 
 
 class Bitbay(ScryptMixin, Coin):

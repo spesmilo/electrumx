@@ -4185,6 +4185,8 @@ class Ferrite(Coin):
     TX_PER_BLOCK = 2
     RPC_PORT = 9573
     REORG_LIMIT = 800
+    ESTIMATE_FEE = 0.00001
+    RELAY_FEE = 0.00001
     PEERS = [
         'enode1.ferritecoin.org s t',
         'enode2.ferritecoin.org s t',
@@ -4207,6 +4209,8 @@ class FerriteTestnet(Ferrite):
     TX_PER_BLOCK = 2
     RPC_PORT = 19573
     REORG_LIMIT = 4000
+    ESTIMATE_FEE = 0.00001
+    RELAY_FEE = 0.00001
     PEERS = [
         'enode1.ferritecoin.org s t',
         'enode2.ferritecoin.org s t',

@@ -1,18 +1,19 @@
 unittests_task:
   container:
-    image: python:3.8
+    image: debian:bullseye
     cpu: 1
     memory: 1G
+  before_install_script:
+    - apt-get -qq update
+    - apt-get install -yq git python3 python3-pip python3-setuptools python3-venv
+    - apt-get install -yq libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev liblz4-dev librocksdb-dev libleveldb-dev libboost-all-dev libsodium-dev
   version_script:
     - python3 --version
   tag_script:
     - git tag
-  before_install_script:
-    - apt-get -qq update
-    - apt-get install -yq libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev liblz4-dev librocksdb-dev libleveldb-dev libboost-all-dev libsodium-dev
   pip_cache:
     folder: ~/.cache/pip
-    fingerprint_script: echo $PYTHON_VERSION && cat requirements.txt
+    fingerprint_script: echo $(python3 --version) && cat requirements.txt
     populate_script: mkdir -p ~/.cache/pip
   install_script:
     # test framework -related deps

@@ -4135,3 +4135,35 @@ class Bitweb(Coin):
         '''Given a header return the hash.'''
         import bitweb_yespower
         return bitweb_yespower.getPoWHash(header)
+
+
+class Garlicoin(Coin):
+    NAME = "Garlicoin"
+    SHORTNAME = "GRLC"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    P2PKH_VERBYTE = bytes.fromhex("26")
+    P2SH_VERBYTES = [bytes.fromhex("32"), bytes.fromhex("05")]
+    WIF_BYTE = bytes.fromhex("b0")
+    GENESIS_HASH = ('2ada80bf415a89358d697569c96eb98c'
+                    'dbf4c3b8878ac5722c01284492e27228')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    TX_COUNT = 1031869
+    TX_COUNT_HEIGHT = 2343659
+    TX_PER_BLOCK = 2
+    RPC_PORT = 42068
+    REORG_LIMIT = 800
+    PEERS = [
+        'us.node.garlico.in s',
+        'ca.node.garlico.in s t',
+        'sg.node.garlico.in s',
+        'de.node.garlico.in s',
+        'fr.garlium.crapules.org s',
+        'uk.garlium.crapules.org s',
+        'pl.garlium.crapules.org s',
+        'ca.garlium.crapules.org s',
+        'au.garlium.crapules.org s',
+        'electrum.hotgrlc.com s t',
+        'electrum.maxpuig.com s t'
+    ]

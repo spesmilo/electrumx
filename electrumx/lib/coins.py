@@ -4180,7 +4180,7 @@ class Ferrite(Coin):
     WIF_BYTE = bytes.fromhex("a3")
     GENESIS_HASH = ('46ca17415c18e43f5292034ebf9bbd10'
                     'de80a61fc6dc17180e6609f33d3b48f3')
-    DESERIALIZER = lib_tx.DeserializerSegWit
+    DESERIALIZER = lib_tx.DeserializerLitecoin
     TX_COUNT = 164010
     TX_COUNT_HEIGHT = 150251
     TX_PER_BLOCK = 2
@@ -4189,9 +4189,9 @@ class Ferrite(Coin):
     ESTIMATE_FEE = 0.00001
     RELAY_FEE = 0.00001
     PEERS = [
-        'enode1.ferritecoin.org s t',
-        'enode2.ferritecoin.org s t',
-        'enode3.ferritecoin.org s t',
+        'enode1.ferritecoin.org t',
+        'enode2.ferritecoin.org t',
+        'enode3.ferritecoin.org t',
     ]
 
 
@@ -4213,7 +4213,7 @@ class FerriteTestnet(Ferrite):
     ESTIMATE_FEE = 0.00001
     RELAY_FEE = 0.00001
     PEERS = [
-        'enode1.ferritecoin.org s t',
-        'enode2.ferritecoin.org s t',
-        'enode3.ferritecoin.org s t',
+        'enode1.ferritecoin.org t',
+        'enode2.ferritecoin.org t',
+        'enode3.ferritecoin.org t',
     ]

@@ -4189,9 +4189,12 @@ class Ferrite(Coin):
     ESTIMATE_FEE = 0.00001
     RELAY_FEE = 0.00001
     PEERS = [
-        'enode1.ferritecoin.org s t',
-        'enode2.ferritecoin.org s t',
-        'enode3.ferritecoin.org s t',
+        '118.189.201.104 t50001',
+        '118.189.201.104 t50002',
+        '118.189.201.104 t50003',
+        'enode1.ferritecoin.org t80',
+        'enode2.ferritecoin.org t80',
+        'enode3.ferritecoin.org t80'
     ]
 
 
@@ -4213,7 +4216,10 @@ class FerriteTestnet(Ferrite):
     ESTIMATE_FEE = 0.00001
     RELAY_FEE = 0.00001
     PEERS = [
-        'enode1.ferritecoin.org s t',
-        'enode2.ferritecoin.org s t',
-        'enode3.ferritecoin.org s t',
+        '118.189.201.104 t50001',
+        '118.189.201.104 t50002',
+        '118.189.201.104 t50003',
+        'enode1.ferritecoin.org t80',
+        'enode2.ferritecoin.org t80',
+        'enode3.ferritecoin.org t80'
     ]

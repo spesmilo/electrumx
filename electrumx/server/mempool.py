@@ -107,7 +107,14 @@ class MemPool:
        hashXs: hashX   -> set of all hashes of txs touching the hashX
     '''
 
-    def __init__(self, coin: Type['Coin'], api: MemPoolAPI, refresh_secs=5.0, log_status_secs=60.0):
+    def __init__(
+            self,
+            coin: Type['Coin'],
+            api: MemPoolAPI,
+            *,
+            refresh_secs=5.0,
+            log_status_secs=60.0,
+    ):
         assert isinstance(api, MemPoolAPI)
         self.coin = coin
         self.api = api

@@ -35,7 +35,14 @@ if TYPE_CHECKING:
 class Prefetcher:
     '''Prefetches blocks (in the forward direction only).'''
 
-    def __init__(self, daemon: 'Daemon', coin: Type['Coin'], blocks_event: asyncio.Event):
+    def __init__(
+            self,
+            daemon: 'Daemon',
+            coin: Type['Coin'],
+            blocks_event: asyncio.Event,
+            *,
+            polling_delay_secs,
+    ):
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.daemon = daemon
         self.coin = coin
@@ -52,7 +59,7 @@ class Prefetcher:
         self.min_cache_size = 10 * 1024 * 1024
         # This makes the first fetch be 10 blocks
         self.ave_size = self.min_cache_size // 10
-        self.polling_delay = 5
+        self.polling_delay = polling_delay_secs
 
     async def main_loop(self, bp_height):
         '''Loop forever polling for more blocks.'''
@@ -171,7 +178,10 @@ class BlockProcessor:
         self.coin = env.coin
         # blocks_event: set when new blocks are put on the queue by the Prefetcher, to be processed
         self.blocks_event = asyncio.Event()
-        self.prefetcher = Prefetcher(daemon, env.coin, self.blocks_event)
+        self.prefetcher = Prefetcher(
+            daemon, env.coin, self.blocks_event,
+            polling_delay_secs=env.daemon_poll_interval_blocks_msec/1000,
+        )
         self.logger = class_logger(__name__, self.__class__.__name__)
 
         # Meta

@@ -908,6 +908,10 @@ class DeserializerBitcoinAtom(DeserializerSegWit):
         return self._read_nbytes(header_len)
 
 
+class DeserializerBitcoinAtomTestnet(DeserializerBitcoinAtom):
+    FORK_BLOCK_HEIGHT = 1260000
+
+
 class DeserializerGroestlcoin(DeserializerSegWit):
     TX_HASH_FN = staticmethod(sha256)
 

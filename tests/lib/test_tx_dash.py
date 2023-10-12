@@ -41,6 +41,17 @@ CB_TX_V2 = (
     '88f65889fd3ac0201be87aa227462b5643e8bb2ec1d7a82a76629a6e42fb519188f658'
     '89fd3ac0201be87aa227462b5643e8bb2ec1d7a82a')
 
+CB_TX_V3 = (
+    '0300050001000000000000000000000000000000000000000000000000000000000000'
+    '0000ffffffff06035cbe0d0101ffffffff0397f4e127000000001976a914c69a0bda7d'
+    'aaae481be8def95e5f347a1d00a4b488ac94196f1600000000016a4dd5632500000000'
+    '1976a914c69a0bda7daaae481be8def95e5f347a1d00a4b488ac00000000af03005cbe'
+    '0d003c7a25cd3258d4141c1aca784232f28b92f94221c1d6add1c7221ebecffd201297'
+    '52cf4e10c95caefd2972782eb6ab4bc64170c148c9f32191be3f09d546a5e500b097da'
+    'dbd9741dabd85bec96ed8421499ec37aeb0ec48ff25c2a994a47e030ef1c5758bf1918'
+    'e4fd04c9f7b149df160800a9fdbf08311b93484e545a876e81e3408a4c8358f11ce2c9'
+    'c01206c39122875f9dbfea67e8953da4e63a1cd8551dfc94196f1600000000')
+
 
 PRO_REG_TX = (
     '030001000335f1c2ca44a1eb72e59f589df2852caacba39b7c0a5e61967f6b71d7a763'
@@ -262,6 +273,32 @@ def test_dash_tx_cb_tx_v2():
     assert len(extra.merkleRootQuorums) == 32
     assert extra.merkleRootQuorums == bfh(
         '76629a6e42fb519188f65889fd3ac0201be87aa227462b5643e8bb2ec1d7a82a')
+    ser = tx.serialize()
+    assert ser == test
+
+
+def test_dash_tx_cb_tx_v3():
+    test = bfh(CB_TX_V3)
+    deser = lib_tx_dash.DeserializerDash(test)
+    tx = deser.read_tx()
+    assert tx.version == 3
+    assert tx.tx_type == 5
+    extra = tx.extra_payload
+    assert extra.version == 3
+    assert extra.height == 900700
+    assert len(extra.merkleRootMNList) == 32
+    assert extra.merkleRootMNList == bfh(
+        '1220fdcfbe1e22c7d1add6c12142f9928bf2324278ca1a1c14d45832cd257a3c')
+    assert len(extra.merkleRootQuorums) == 32
+    assert extra.merkleRootQuorums == bfh(
+        'e5a546d5093fbe9121f3c948c17041c64babb62e787229fdae5cc9104ecf5297')
+    assert extra.bestCLHeight == 0
+    assert len(extra.bestCLSignature) == 96
+    assert extra.bestCLSignature == bfh(
+        'b097dadbd9741dabd85bec96ed8421499ec37aeb0ec48ff25c2a994a47e030ef'
+        '1c5758bf1918e4fd04c9f7b149df160800a9fdbf08311b93484e545a876e81e3'
+        '408a4c8358f11ce2c9c01206c39122875f9dbfea67e8953da4e63a1cd8551dfc')
+    assert extra.assetLockedAmount == 376379796
     ser = tx.serialize()
     assert ser == test
 

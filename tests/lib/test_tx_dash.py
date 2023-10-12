@@ -240,7 +240,7 @@ def test_dash_tx_cb_tx_v3():
     assert len(extra.merkleRootQuorums) == 32
     assert extra.merkleRootQuorums == bfh(
         '9752cf4e10c95caefd2972782eb6ab4bc64170c148c9f32191be3f09d546a5e5')
-    assert extra.bestCLHeight == 0
+    assert extra.bestCLHeightDiff == 0
     assert len(extra.bestCLSignature) == 96
     assert extra.bestCLSignature == bfh(
         'b097dadbd9741dabd85bec96ed8421499ec37aeb0ec48ff25c2a994a47e030ef'

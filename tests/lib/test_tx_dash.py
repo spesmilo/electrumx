@@ -236,10 +236,10 @@ def test_dash_tx_cb_tx_v3():
     assert extra.height == 900700
     assert len(extra.merkleRootMNList) == 32
     assert extra.merkleRootMNList == bfh(
-        '1220fdcfbe1e22c7d1add6c12142f9928bf2324278ca1a1c14d45832cd257a3c')
+        '3c7a25cd3258d4141c1aca784232f28b92f94221c1d6add1c7221ebecffd2012')
     assert len(extra.merkleRootQuorums) == 32
     assert extra.merkleRootQuorums == bfh(
-        'e5a546d5093fbe9121f3c948c17041c64babb62e787229fdae5cc9104ecf5297')
+        '9752cf4e10c95caefd2972782eb6ab4bc64170c148c9f32191be3f09d546a5e5')
     assert extra.bestCLHeight == 0
     assert len(extra.bestCLSignature) == 96
     assert extra.bestCLSignature == bfh(

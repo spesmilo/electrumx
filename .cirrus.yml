@@ -22,9 +22,9 @@ unittests_task:
     - pip install pytest-cov
     - pip install coveralls
     - pip install Sphinx
-    # deps for e-x itself
-    - pip install -r requirements.txt
-    - pip install "python-rocksdb>=0.6.9"
+    # e-x itself
+    - pip install 'Cython<3.0'  # for rocksdb
+    - pip install ".[rocksdb]"
     # hashes and other altcoin-specific stuff
     - pip install tribushashm
     - pip install blake256

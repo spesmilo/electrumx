@@ -658,9 +658,12 @@ class DeserializerTxTimeSegWit(DeserializerTxTime):
         orig_ser += self.binary[start:self.cursor]
         vsize = (3 * base_size + self.binary_length) // 4
 
-        return TxTimeSegWit(
-            version, time, marker, flag, inputs, outputs, witness, locktime),\
-            self.TX_HASH_FN(orig_ser), vsize
+        return (
+            TxTimeSegWit(
+                version, time, marker, flag, inputs, outputs, witness, locktime),
+            self.TX_HASH_FN(orig_ser),
+            vsize,
+        )
 
     def read_tx(self):
         return self._read_tx_parts()[0]
@@ -734,9 +737,12 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
         vsize = (3 * base_size + self.binary_length) // 4
         orig_ser += self.binary[start:self.cursor]
 
-        return TxTimeSegWit(
-            version, time, marker, flag, inputs, outputs, witness, locktime),\
-            self.TX_HASH_FN(orig_ser), vsize
+        return (
+            TxTimeSegWit(
+                version, time, marker, flag, inputs, outputs, witness, locktime),
+            self.TX_HASH_FN(orig_ser),
+            vsize,
+        )
 
     def read_tx(self):
         return self._read_tx_parts()[0]

@@ -397,7 +397,7 @@ class NameMixin:
                     # Script structure: https://git.io/fjuRu
                     added, template = cls._add_data_placeholders_to_template(ops[i:], template)
                     offset += added - 1  # subtract the "DATA_PUSH_MULTIPLE" opcode
-                elif type(op) == str:
+                elif isinstance(op, str):
                     template.append(-1)
                     named_index[op] = i + offset
                 else:
@@ -439,7 +439,7 @@ class NameMixin:
         data_placeholders = 0
 
         for opcode in opcodes:
-            if type(opcode) == tuple:
+            if isinstance(opcode, tuple):
                 data_placeholders += 1
             else:
                 break

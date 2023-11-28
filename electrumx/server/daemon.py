@@ -44,7 +44,8 @@ class ServiceRefusedError(Exception):
 class Daemon:
     '''Handles connections to a daemon at the given URL.'''
 
-    WARMING_UP = -28
+    RPC_IN_WARMUP = -28
+
     id_counter = itertools.count()
 
     def __init__(
@@ -181,7 +182,7 @@ class Daemon:
             err = result['error']
             if not err:
                 return result['result']
-            if err.get('code') == self.WARMING_UP:
+            if err.get('code') == self.RPC_IN_WARMUP:
                 raise WarmingUpError
             raise DaemonError(err)
 
@@ -198,7 +199,7 @@ class Daemon:
         otherwise an exception is raised.'''
         def processor(result):
             errs = [item['error'] for item in result if item['error']]
-            if any(err.get('code') == self.WARMING_UP for err in errs):
+            if any(err.get('code') == self.RPC_IN_WARMUP for err in errs):
                 raise WarmingUpError
             if not errs or replace_errs:
                 return [item['result'] for item in result]

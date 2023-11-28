@@ -41,10 +41,15 @@ class ServiceRefusedError(Exception):
     some reason.'''
 
 
+class DaemonParseError(Exception):
+    '''Internal - when the daemon returns an RPC_PARSE_ERROR.'''
+
+
 class Daemon:
     '''Handles connections to a daemon at the given URL.'''
 
     RPC_IN_WARMUP = -28
+    RPC_PARSE_ERROR = -32700
 
     id_counter = itertools.count()
 
@@ -172,6 +177,9 @@ class Daemon:
             except WarmingUpError:
                 log_error('starting up checking blocks')
                 on_good_message = 'running normally'
+            except DaemonParseError as e:
+                log_error(f"received RPC_PARSE_ERROR ({e=!r}). request was: {data=!r}")
+                on_good_message = 'running normally'
 
             await asyncio.sleep(retry)
             retry = max(min(self.max_retry, retry * 2), self.init_retry)
@@ -184,6 +192,8 @@ class Daemon:
                 return result['result']
             if err.get('code') == self.RPC_IN_WARMUP:
                 raise WarmingUpError
+            if err.get('code') == self.RPC_PARSE_ERROR:
+                raise DaemonParseError(err)
             raise DaemonError(err)
 
         payload = {'method': method, 'id': next(self.id_counter)}
@@ -201,6 +211,8 @@ class Daemon:
             errs = [item['error'] for item in result if item['error']]
             if any(err.get('code') == self.RPC_IN_WARMUP for err in errs):
                 raise WarmingUpError
+            if any(err.get('code') == self.RPC_PARSE_ERROR for err in errs):
+                raise DaemonParseError
             if not errs or replace_errs:
                 return [item['result'] for item in result]
             raise DaemonError(errs)

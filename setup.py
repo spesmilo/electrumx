@@ -31,6 +31,7 @@ setuptools.setup(
         'rapidjson': ['python-rapidjson>=0.4.1,<2.0'],
         'rocksdb': ['python-rocksdb>=0.6.9', 'Cython<3.0'],
         'ujson': ['ujson>=2.0.0,<4.0.0'],
+        'orjson': ['orjson>=3.2.2'],
         'uvloop': ['uvloop>=0.14'],
         # For various coins
         'blake256': ['blake256>=0.1.1'],

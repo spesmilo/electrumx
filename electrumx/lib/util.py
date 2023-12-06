@@ -44,9 +44,14 @@ try:
     import rapidjson as json
 except ImportError:
     try:
-        import ujson as json
+        import orjson as json
     except ImportError:
-        import json
+        try:
+            import ujson as json
+        except ImportError:
+            import json
+
+print("using", json.__name__)
 
 json_deserialize = json.loads
 json_serialize = json.dumps

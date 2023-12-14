@@ -736,9 +736,12 @@ class DeserializerTxTimeSegWit(DeserializerTxTime):
         orig_ser += self.binary[start:self.cursor]
         vsize = (3 * base_size + self.binary_length) // 4
 
-        return TxTimeSegWit(
-            version, time, marker, flag, inputs, outputs, witness, locktime),\
-            self.TX_HASH_FN(orig_ser), vsize
+        return (
+            TxTimeSegWit(
+                version, time, marker, flag, inputs, outputs, witness, locktime),
+            self.TX_HASH_FN(orig_ser),
+            vsize,
+        )
 
     def read_tx(self):
         return self._read_tx_parts()[0]
@@ -812,9 +815,12 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
         vsize = (3 * base_size + self.binary_length) // 4
         orig_ser += self.binary[start:self.cursor]
 
-        return TxTimeSegWit(
-            version, time, marker, flag, inputs, outputs, witness, locktime),\
-            self.TX_HASH_FN(orig_ser), vsize
+        return (
+            TxTimeSegWit(
+                version, time, marker, flag, inputs, outputs, witness, locktime),
+            self.TX_HASH_FN(orig_ser),
+            vsize,
+        )
 
     def read_tx(self):
         return self._read_tx_parts()[0]
@@ -886,6 +892,32 @@ class DeserializerTrezarcoin(Deserializer):
         blake2s_hash = blake2s(_input112, digest_size=32, key=_key)
         # TrezarFlips
         return blake2s_hash.digest()
+
+
+class DeserializerBlackcoin(Deserializer):
+    BLACKCOIN_TX_VERSION = 2
+
+    def _get_version(self):
+        result, = unpack_le_int32_from(self.binary, self.cursor)
+        return result
+
+    def read_tx(self):
+        version = self._get_version()
+        if version < self.BLACKCOIN_TX_VERSION:
+            return TxTime(
+                self._read_le_int32(),   # version
+                self._read_le_uint32(),  # time
+                self._read_inputs(),     # inputs
+                self._read_outputs(),    # outputs
+                self._read_le_uint32(),  # locktime
+            )
+        else:
+            return Tx(
+                self._read_le_int32(),  # version
+                self._read_inputs(),    # inputs
+                self._read_outputs(),   # outputs
+                self._read_le_uint32()  # locktime
+            )
 
 
 class DeserializerReddcoin(Deserializer):

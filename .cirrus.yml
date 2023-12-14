@@ -1,18 +1,19 @@
 unittests_task:
   container:
-    image: python:3.8
+    image: debian:bullseye
     cpu: 1
     memory: 1G
+  before_install_script:
+    - apt-get -qq update
+    - apt-get install -yq git python3 python3-pip python3-setuptools python3-venv
+    - apt-get install -yq libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev liblz4-dev librocksdb-dev libleveldb-dev libboost-all-dev libsodium-dev
   version_script:
     - python3 --version
   tag_script:
     - git tag
-  before_install_script:
-    - apt-get -qq update
-    - apt-get install -yq libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev liblz4-dev librocksdb-dev libleveldb-dev libboost-all-dev libsodium-dev
   pip_cache:
     folder: ~/.cache/pip
-    fingerprint_script: echo $PYTHON_VERSION && cat requirements.txt
+    fingerprint_script: echo $(python3 --version) && cat requirements.txt
     populate_script: mkdir -p ~/.cache/pip
   install_script:
     # test framework -related deps
@@ -21,13 +22,13 @@ unittests_task:
     - pip install pytest-cov
     - pip install coveralls
     - pip install Sphinx
-    # deps for e-x itself
-    - pip install -r requirements.txt
-    - pip install "python-rocksdb>=0.6.9"
+    # e-x itself
+    - pip install 'Cython<3.0'  # for rocksdb
+    - pip install ".[rocksdb]"
     # hashes and other altcoin-specific stuff
     - pip install tribushashm
     - pip install blake256
-    - pip install x11_hash
+    - pip install dash_hash
     - pip install git+https://github.com/bitcoinplusorg/x13-hash
     - pip install xevan_hash
     - pip install quark_hash
@@ -40,6 +41,7 @@ unittests_task:
     - pip install git+https://github.com/VerusCoin/verushashpy
     - pip install bell-yespower
     - pip install cpupower
+    - pip install bitweb_yespower==1.0.5
   script:
     - pytest --cov=electrumx
   coveralls_script:
@@ -74,5 +76,7 @@ build_docs_task:
     memory: 1G
   install_script:
     - pip install -r docs/requirements-docs.txt
+  env:
+    LC_ALL: "C"
   script:
     - sh -c "cd docs && make html"

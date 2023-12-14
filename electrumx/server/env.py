@@ -76,6 +76,8 @@ class Env(EnvBase):
         self.blacklist_url = self.default('BLACKLIST_URL', self.coin.BLACKLIST_URL)
         self.cache_MB = self.integer('CACHE_MB', 1200)
         self.reorg_limit = self.integer('REORG_LIMIT', self.coin.REORG_LIMIT)
+        self.daemon_poll_interval_blocks_msec = self.integer('DAEMON_POLL_INTERVAL_BLOCKS', 5000)
+        self.daemon_poll_interval_mempool_msec = self.integer('DAEMON_POLL_INTERVAL_MEMPOOL', 5000)
 
         # Server limits to help prevent DoS
 

@@ -1861,7 +1861,7 @@ class NameIndexElectrumX(ElectrumX):
                     and height < prev_height - self.coin.NAME_EXPIRATION):
                 break
 
-            tx = await(self.transaction_get(txid))
+            tx = await self.transaction_get(txid)
             update['tx'] = tx
             del update['tx_hash']
 

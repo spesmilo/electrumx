@@ -29,7 +29,7 @@ setuptools.setup(
     extras_require={
         'dev': ['objgraph'],
         'rapidjson': ['python-rapidjson>=0.4.1,<2.0'],
-        'rocksdb': ['python-rocksdb>=0.6.9'],
+        'rocksdb': ['python-rocksdb>=0.6.9', 'Cython<3.0'],
         'ujson': ['ujson>=2.0.0,<4.0.0'],
         'uvloop': ['uvloop>=0.14'],
         # For various coins
@@ -38,7 +38,7 @@ setuptools.setup(
         'groestl': ['groestlcoin-hash>=1.0.1'],
         'tribushashm': ['tribushashm>=1.0.5'],
         'xevan-hash': ['xevan-hash'],
-        'x11-hash': ['x11-hash>=1.4'],
+        'dash_hash': ['dash_hash>=1.4'],
         'zny-yespower-0-5': ['zny-yespower-0-5'],
         'bell-yespower': ['bell-yespower'],
         'cpupower': ['cpupower'],

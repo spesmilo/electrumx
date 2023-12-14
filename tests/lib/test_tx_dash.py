@@ -41,6 +41,17 @@ CB_TX_V2 = (
     '88f65889fd3ac0201be87aa227462b5643e8bb2ec1d7a82a76629a6e42fb519188f658'
     '89fd3ac0201be87aa227462b5643e8bb2ec1d7a82a')
 
+CB_TX_V3 = (
+    '0300050001000000000000000000000000000000000000000000000000000000000000'
+    '0000ffffffff06035cbe0d0101ffffffff0397f4e127000000001976a914c69a0bda7d'
+    'aaae481be8def95e5f347a1d00a4b488ac94196f1600000000016a4dd5632500000000'
+    '1976a914c69a0bda7daaae481be8def95e5f347a1d00a4b488ac00000000af03005cbe'
+    '0d003c7a25cd3258d4141c1aca784232f28b92f94221c1d6add1c7221ebecffd201297'
+    '52cf4e10c95caefd2972782eb6ab4bc64170c148c9f32191be3f09d546a5e500b097da'
+    'dbd9741dabd85bec96ed8421499ec37aeb0ec48ff25c2a994a47e030ef1c5758bf1918'
+    'e4fd04c9f7b149df160800a9fdbf08311b93484e545a876e81e3408a4c8358f11ce2c9'
+    'c01206c39122875f9dbfea67e8953da4e63a1cd8551dfc94196f1600000000')
+
 
 PRO_REG_TX = (
     '030001000335f1c2ca44a1eb72e59f589df2852caacba39b7c0a5e61967f6b71d7a763'
@@ -145,58 +156,6 @@ PRO_UP_REV_TX = (
     '371b9b8d89ba')
 
 
-SUB_TX_REGISTER = (
-    '03000800010931c6b0ad7ce07f3c8aefeeb78e246a4fe6872bbf08ab6e4eb6a7b69acd'
-    '64a6010000006b483045022100a2feb698c43c752738fabea281b7e9e5a3aa648a4c54'
-    '1171e06d7c372db92c65022061c1ec3c92f2e76bb7fb1b548d854f19a41e6421267231'
-    '74150412caf3e98e9601210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a667b'
-    '3d0103f761cc69a211feffffff0189fa433e000000001976a914551ab8ca96a9142217'
-    '4d22769c3a4f90b2dcd0de88ac00000000960100036162638e7042ec88acefcfe3d578'
-    '914bb48c6bd71b3459d384e42374e8abfeffffff01570b0000000000001976a91490c5'
-    'ce9d8bc992a88ac00000000a40100b67ffbbd095de31ea38446754e8abfeffffff0157'
-    '0b0000000000001976a91490c5ce9d8bc992a88ac00000000a40100b67ffbbd095de31'
-    'ea38446754e8abfeffffff01570b0000000000001976a91490c5ce9d')
-
-
-SUB_TX_TOPUP = (
-    '03000900010931c6b0ad7ce07f3c8aefeeb78e246a4fe6872bbf08ab6e4eb6a7b69acd'
-    '64a6010000006b483045022100a2feb698c43c752738fabea281b7e9e5a3aa648a4c54'
-    '1171e06d7c372db92c65022061c1ec3c92f2e76bb7fb1b548d854f19a41e6421267231'
-    '74150412caf3e98e9601210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a667b'
-    '3d0103f761cc69a211feffffff0189fa433e000000001976a914551ab8ca96a9142217'
-    '4d22769c3a4f90b2dcd0de88ac00000000220100d384e42374e8abfeffffff01570b00'
-    '0000a40100b67ffbbd095de31ea3844675')
-
-
-SUB_TX_RESET_KEY = (
-    '03000a00010931c6b0ad7ce07f3c8aefeeb78e246a4fe6872bbf08ab6e4eb6a7b69acd'
-    '64a6010000006b483045022100a2feb698c43c752738fabea281b7e9e5a3aa648a4c54'
-    '1171e06d7c372db92c65022061c1ec3c92f2e76bb7fb1b548d854f19a41e6421267231'
-    '74150412caf3e98e9601210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a667b'
-    '3d0103f761cc69a211feffffff0189fa433e000000001976a914551ab8ca96a9142217'
-    '4d22769c3a4f90b2dcd0de88ac00000000da0100d384e42374e8abfeffffff01570b00'
-    '0000a40100b67ffbbd095de31ea3844675af3e98e9601210293360bf2a2e810673412b'
-    'c6e8e0e358f3fb7bdbe9a667b3d0e803000000000000601210293360bf2a2e81067341'
-    '2bc6e8e0e358f3fb7bdbe9a667b3d0103f761caf3e98e9601210293360bf2a2e810673'
-    '412bc6e8e0e358f3fb7bdbe9a667b3d0103f761caf3e98e9601210293360bf2a2e8106'
-    '73412bc6e8e0e358f3fb7bdbe9a667b3d0103f761caf3e98e9601210293360bf2a2e81'
-    '0673412bc6e8e0e358f3fb7bdbe9a667b3d0103f761cabcdefab')
-
-
-SUB_TX_CLOSE_ACCOUNT = (
-    '03000b00010931c6b0ad7ce07f3c8aefeeb78e246a4fe6872bbf08ab6e4eb6a7b69acd'
-    '64a6010000006b483045022100a2feb698c43c752738fabea281b7e9e5a3aa648a4c54'
-    '1171e06d7c372db92c65022061c1ec3c92f2e76bb7fb1b548d854f19a41e6421267231'
-    '74150412caf3e98e9601210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a667b'
-    '3d0103f761cc69a211feffffff0189fa433e000000001976a914551ab8ca96a9142217'
-    '4d22769c3a4f90b2dcd0de88ac00000000aa0100d384e42374e8abfeffffff01570b00'
-    '0000a40100b67ffbbd095de31ea3844675af3e98e9601210293360bf2a2e810673412b'
-    'c6e8e0e358f3fb7bdbe9a12bc6e8e803000000000000a62bc6e8e0e358f3fb7bdbe9a6'
-    '67b3d0103f761caf3e98e9601210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9'
-    'a667b3d0103f761caf3e98e9601210293360bf2a2e810673412bc6e8e0e358f3fb7bdb'
-    'e9a667b3d0103f761cabcdefab')
-
-
 UNKNOWN_SPEC_TX = (
     '0300bb00010931c6b0ad7ce07f3c8aefeeb78e246a4fe6872bbf08ab6e4eb6a7b69acd'
     '64a6010000006b483045022100a2feb698c43c752738fabea281b7e9e5a3aa648a4c54'
@@ -262,6 +221,32 @@ def test_dash_tx_cb_tx_v2():
     assert len(extra.merkleRootQuorums) == 32
     assert extra.merkleRootQuorums == bfh(
         '76629a6e42fb519188f65889fd3ac0201be87aa227462b5643e8bb2ec1d7a82a')
+    ser = tx.serialize()
+    assert ser == test
+
+
+def test_dash_tx_cb_tx_v3():
+    test = bfh(CB_TX_V3)
+    deser = lib_tx_dash.DeserializerDash(test)
+    tx = deser.read_tx()
+    assert tx.version == 3
+    assert tx.tx_type == 5
+    extra = tx.extra_payload
+    assert extra.version == 3
+    assert extra.height == 900700
+    assert len(extra.merkleRootMNList) == 32
+    assert extra.merkleRootMNList == bfh(
+        '3c7a25cd3258d4141c1aca784232f28b92f94221c1d6add1c7221ebecffd2012')
+    assert len(extra.merkleRootQuorums) == 32
+    assert extra.merkleRootQuorums == bfh(
+        '9752cf4e10c95caefd2972782eb6ab4bc64170c148c9f32191be3f09d546a5e5')
+    assert extra.bestCLHeightDiff == 0
+    assert len(extra.bestCLSignature) == 96
+    assert extra.bestCLSignature == bfh(
+        'b097dadbd9741dabd85bec96ed8421499ec37aeb0ec48ff25c2a994a47e030ef'
+        '1c5758bf1918e4fd04c9f7b149df160800a9fdbf08311b93484e545a876e81e3'
+        '408a4c8358f11ce2c9c01206c39122875f9dbfea67e8953da4e63a1cd8551dfc')
+    assert extra.assetLockedAmount == 376379796
     ser = tx.serialize()
     assert ser == test
 
@@ -470,98 +455,6 @@ def test_dash_tx_pro_up_rev_tx():
         'e8c3954856c4da7e5fd242f2e4f5546f08d90849245bc593d1605654e1a9'
         '9cd0a79e9729799742c48d4920044666ad25a85fd093559c43e4900e634c'
         '371b9b8d89ba')
-    ser = tx.serialize()
-    assert ser == test
-
-
-def test_dash_tx_sub_tx_register_tx():
-    test = bfh(SUB_TX_REGISTER)
-    deser = lib_tx_dash.DeserializerDash(test)
-    tx = deser.read_tx()
-    assert tx.version == 3
-    assert tx.tx_type == 8
-    extra = tx.extra_payload
-    assert extra.version == 1
-    assert extra.userName == b'abc'
-    assert len(extra.pubKey) == 48
-    assert extra.pubKey == bfh(
-        '8e7042ec88acefcfe3d578914bb48c6bd71b3459d384e42374e8abfeffff'
-        'ff01570b0000000000001976a91490c5ce9d')
-    assert len(extra.payloadSig) == 96
-    assert extra.payloadSig == bfh(
-        '8bc992a88ac00000000a40100b67ffbbd095de31ea38446754e8abfeffff'
-        'ff01570b0000000000001976a91490c5ce9d8bc992a88ac00000000a4010'
-        '0b67ffbbd095de31ea38446754e8abfeffffff01570b0000000000001976'
-        'a91490c5ce9d')
-    ser = tx.serialize()
-    assert ser == test
-
-
-def test_dash_tx_sub_tx_topup_tx():
-    test = bfh(SUB_TX_TOPUP)
-    deser = lib_tx_dash.DeserializerDash(test)
-    tx = deser.read_tx()
-    assert tx.version == 3
-    assert tx.tx_type == 9
-    extra = tx.extra_payload
-    assert extra.version == 1
-    assert len(extra.regTxHash) == 32
-    assert extra.regTxHash == bfh(
-        'd384e42374e8abfeffffff01570b000000a40100b67ffbbd095de31ea3844675')
-    ser = tx.serialize()
-    assert ser == test
-
-
-def test_dash_tx_sub_tx_reset_key_tx():
-    test = bfh(SUB_TX_RESET_KEY)
-    deser = lib_tx_dash.DeserializerDash(test)
-    tx = deser.read_tx()
-    assert tx.version == 3
-    assert tx.tx_type == 10
-    extra = tx.extra_payload
-    assert extra.version == 1
-    assert len(extra.regTxHash) == 32
-    assert extra.regTxHash == bfh(
-        'd384e42374e8abfeffffff01570b000000a40100b67ffbbd095de31ea3844675')
-    assert len(extra.hashPrevSubTx) == 32
-    assert extra.hashPrevSubTx == bfh(
-        'af3e98e9601210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a667b3d0')
-    assert extra.creditFee == 1000
-    assert len(extra.newPubKey) == 48
-    assert extra.newPubKey == bfh(
-        '601210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a667b3d0103f7'
-        '61caf3e98e9601210293360bf2a2e810673')
-    assert len(extra.payloadSig) == 96
-    assert extra.payloadSig == bfh(
-        '412bc6e8e0e358f3fb7bdbe9a667b3d0103f761caf3e98e9601210293360b'
-        'f2a2e810673412bc6e8e0e358f3fb7bdbe9a667b3d0103f761caf3e98e960'
-        '1210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a667b3d0103f761'
-        'cabcdefab')
-    ser = tx.serialize()
-    assert ser == test
-
-
-def test_dash_tx_sub_tx_close_account_tx():
-    test = bfh(SUB_TX_CLOSE_ACCOUNT)
-    deser = lib_tx_dash.DeserializerDash(test)
-    tx = deser.read_tx()
-    assert tx.version == 3
-    assert tx.tx_type == 11
-    extra = tx.extra_payload
-    assert extra.version == 1
-    assert len(extra.regTxHash) == 32
-    assert extra.regTxHash == bfh(
-        'd384e42374e8abfeffffff01570b000000a40100b67ffbbd095de31ea3844675')
-    assert len(extra.hashPrevSubTx) == 32
-    assert extra.hashPrevSubTx == bfh(
-        'af3e98e9601210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a12bc6e8')
-    assert extra.creditFee == 1000
-    assert len(extra.payloadSig) == 96
-    assert extra.payloadSig == bfh(
-        'a62bc6e8e0e358f3fb7bdbe9a667b3d0103f761caf3e98e9601210293360b'
-        'f2a2e810673412bc6e8e0e358f3fb7bdbe9a667b3d0103f761caf3e98e960'
-        '1210293360bf2a2e810673412bc6e8e0e358f3fb7bdbe9a667b3d0103f761'
-        'cabcdefab')
     ser = tx.serialize()
     assert ser == test
 

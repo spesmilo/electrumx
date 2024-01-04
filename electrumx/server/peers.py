@@ -431,7 +431,7 @@ class PeerManager:
         message = 'server.features'
         features = await session.send_request(message)
         assert_good(message, features, dict)
-        hosts = [host.lower() for host in features.get('hosts', {})]
+        hosts = [host.lower() for host in (features.get('hosts') or [])]
         if self.env.coin.GENESIS_HASH != features.get('genesis_hash'):
             raise BadPeerError('incorrect genesis hash')
         if peer.host.lower() in hosts:

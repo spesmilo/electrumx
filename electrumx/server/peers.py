@@ -431,7 +431,9 @@ class PeerManager:
         message = 'server.features'
         features = await session.send_request(message)
         assert_good(message, features, dict)
-        hosts = [host.lower() for host in features.get('hosts', {})]
+        features_hosts = features.get('hosts', {})
+        assert_good(message, features_hosts, dict)
+        hosts = [host.lower() for host in features_hosts]
         if self.env.coin.GENESIS_HASH != features.get('genesis_hash'):
             raise BadPeerError('incorrect genesis hash')
         if peer.host.lower() in hosts:
@@ -474,10 +476,21 @@ class PeerManager:
         self.logger.info(f'my clearnet self: {self._my_clearnet_peer()}')
         self.logger.info(f'force use of proxy: {self.env.force_proxy}')
         self.logger.info(f'beginning peer discovery...')
-        async with self.group as group:
-            await group.spawn(self._refresh_blacklist())
-            await group.spawn(self._detect_proxy())
-            await group.spawn(self._import_peers())
+        try:
+            async with self.group as group:
+                await group.spawn(self._refresh_blacklist())
+                await group.spawn(self._detect_proxy())
+                await group.spawn(self._import_peers())
+        except Exception:
+            self.logger.exception(
+                "PeerManager.group died! Please open a bug report about this, "
+                "and include at least this traceback and maybe a bit more of "
+                "the log (if it looks relevant).")
+            while True:
+                await sleep(3600)
+                self.logger.warning(
+                    "Peer discovery is not working as PeerManager.group died. "
+                    "This is not normal. You should inspect the log.")
 
     def info(self):
         '''The number of peers.'''

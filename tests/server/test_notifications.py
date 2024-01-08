@@ -28,7 +28,7 @@ async def test_enter_mempool_quick_blocks_2():
     await n.start(5, notify)
 
     # Suppose a gets in block 6 and blocks 7,8 found right after and
-    # the block processer processes them together.
+    # the block processor processes them together.
     await n.on_mempool({'a'}, 5)
     assert notified == [(5, set()), (5, {'a'})]
     # Mempool refreshes with daemon on block 6

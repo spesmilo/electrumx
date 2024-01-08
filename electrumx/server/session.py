@@ -500,7 +500,7 @@ class SessionManager:
         try:
             self.daemon.set_url(daemon_url)
         except Exception as e:
-            raise RPCError(BAD_REQUEST, f'an error occured: {e!r}')
+            raise RPCError(BAD_REQUEST, f'an error occurred: {e!r}')
         return f'now using daemon at {self.daemon.logged_url()}'
 
     async def rpc_stop(self):

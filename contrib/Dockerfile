@@ -1,5 +1,5 @@
 # example of Dockerfile that installs spesmilo electrumx 1.16.0
-# ENV variables can be overriden on the `docker run` command
+# ENV variables can be overridden on the `docker run` command
 
 FROM python:3.9.16-bullseye AS builder
 

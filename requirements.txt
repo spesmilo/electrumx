@@ -1,5 +1,4 @@
 aiorpcX[ws]>=0.22.0,<0.23
 attrs
 plyvel
-pylru
 aiohttp>=3.3,<4

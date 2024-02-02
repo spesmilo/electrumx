@@ -19,7 +19,6 @@ Python3          ElectrumX uses asyncio.  Python version >= 3.8 is
                  **required**.
 `aiohttp`_       Python library for asynchronous HTTP.  Version >=
                  2.0 required.
-`pylru`_         Python LRU cache package.
 DB Engine        A database engine package is required; two are
                  supported (see `Database Engine`_ below).
 ================ ========================
@@ -443,7 +442,6 @@ You can then set the port as follows and advertise the service externally on the
 .. _`daemontools`: http://cr.yp.to/daemontools.html
 .. _`runit`: http://smarden.org/runit/index.html
 .. _`aiohttp`: https://pypi.python.org/pypi/aiohttp
-.. _`pylru`: https://pypi.python.org/pypi/pylru
 .. _`dash_hash`: https://pypi.python.org/pypi/dash_hash
 .. _`contrib/raspberrypi3/install_electrumx.sh`: https://github.com/spesmilo/electrumx/blob/master/contrib/raspberrypi3/install_electrumx.sh
 .. _`contrib/raspberrypi3/run_electrumx.sh`: https://github.com/spesmilo/electrumx/blob/master/contrib/raspberrypi3/run_electrumx.sh

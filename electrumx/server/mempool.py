@@ -12,7 +12,7 @@ import time
 from abc import ABC, abstractmethod
 from asyncio import Lock
 from collections import defaultdict
-from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict
+from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict, Optional, Set
 import math
 
 import attr
@@ -31,10 +31,10 @@ if TYPE_CHECKING:
 class MemPoolTx:
     prevouts = attr.ib()  # type: Sequence[Tuple[bytes, int]]
     # A pair is a (hashX, value) tuple
-    in_pairs = attr.ib()
-    out_pairs = attr.ib()
-    fee = attr.ib()
-    size = attr.ib()
+    in_pairs = attr.ib()  # type: Optional[Sequence[Tuple[bytes, int]]]
+    out_pairs = attr.ib()  # type: Sequence[Tuple[bytes, int]]
+    fee = attr.ib()  # type: int
+    size = attr.ib()  # type: int
 
 
 @attr.s(slots=True)
@@ -119,7 +119,7 @@ class MemPool:
         self.coin = coin
         self.api = api
         self.logger = class_logger(__name__, self.__class__.__name__)
-        self.txs = {}
+        self.txs = {}  # type: Dict[bytes, MemPoolTx]
         self.hashXs = defaultdict(set)  # None can be a key
         self.cached_compact_histogram = []
         self.refresh_secs = refresh_secs
@@ -205,7 +205,7 @@ class MemPool:
             prev_fee_rate = fee_rate
         return compact
 
-    def _accept_transactions(self, tx_map, utxo_map, touched):
+    def _accept_transactions(self, tx_map: Dict[bytes, MemPoolTx], utxo_map, touched):
         '''Accept transactions in tx_map to the mempool if all their inputs
         can be found in the existing mempool or a utxo_map from the
         DB.
@@ -223,7 +223,7 @@ class MemPool:
             try:
                 for prevout in tx.prevouts:
                     utxo = utxo_map.get(prevout)
-                    if not utxo:
+                    if not utxo:  # i.e. parent also unconfirmed
                         prev_hash, prev_index = prevout
                         # Raises KeyError if prev_hash is not in txs
                         utxo = txs[prev_hash].out_pairs[prev_index]
@@ -274,7 +274,7 @@ class MemPool:
                 touched = set()
             await sleep(self.refresh_secs)
 
-    async def _process_mempool(self, all_hashes, touched, mempool_height):
+    async def _process_mempool(self, all_hashes: Set[bytes], touched, mempool_height):
         # Re-sync with the new set of hashes
         txs = self.txs
         hashXs = self.hashXs
@@ -321,16 +321,17 @@ class MemPool:
 
         return touched
 
-    async def _fetch_and_accept(self, hashes, all_hashes, touched):
+    async def _fetch_and_accept(self, hashes: Sequence[bytes], all_hashes: Set[bytes], touched):
         '''Fetch a list of mempool transactions.'''
         hex_hashes_iter = (hash_to_hex_str(hash) for hash in hashes)
         raw_txs = await self.api.raw_transactions(hex_hashes_iter)
 
-        def deserialize_txs():    # This function is pure
+        def deserialize_txs() -> Dict[bytes, MemPoolTx]:
+            """This function is pure"""
             to_hashX = self.coin.hashX_from_script
             deserializer = self.coin.DESERIALIZER
 
-            txs = {}
+            txs = {}  # type: Dict[bytes, MemPoolTx]
             for hash, raw_tx in zip(hashes, raw_txs):
                 # The daemon may have evicted the tx from its
                 # mempool or it may have gotten in a block
@@ -348,12 +349,17 @@ class MemPool:
                                    if not txin.is_generation())
                 txout_pairs = tuple((to_hashX(txout.pk_script), txout.value)
                                     for txout in tx.outputs)
-                txs[hash] = MemPoolTx(txin_pairs, None, txout_pairs,
-                                      0, tx_size)
+                txs[hash] = MemPoolTx(
+                    prevouts=txin_pairs,
+                    in_pairs=None,
+                    out_pairs=txout_pairs,
+                    fee=0,
+                    size=tx_size,
+                )
             return txs
 
         # Thread this potentially slow operation so as not to block
-        tx_map = await run_in_thread(deserialize_txs)
+        tx_map = await run_in_thread(deserialize_txs)  # type: Dict[bytes, MemPoolTx]
 
         # Determine all prevouts not in the mempool, and fetch the
         # UTXO information from the database.  Failed prevout lookups

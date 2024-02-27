@@ -22,7 +22,6 @@ from typing import Optional, TYPE_CHECKING
 import asyncio
 
 import attr
-import pylru
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
                      handler_invocation, serve_rs, serve_ws, sleep,
@@ -30,6 +29,7 @@ from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
 
 import electrumx
 import electrumx.lib.util as util
+from electrumx.lib.lrucache import LRUCache
 from electrumx.lib.util import OldTaskGroup
 from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
                                 hex_str_to_hash, sha256)
@@ -146,17 +146,17 @@ class SessionManager:
         self.start_time = time.time()
         self._method_counts = defaultdict(int)
         self._reorg_count = 0
-        self._history_cache = pylru.lrucache(1000)
+        self._history_cache = LRUCache(maxsize=1000)
         self._history_lookups = 0
         self._history_hits = 0
-        self._tx_hashes_cache = pylru.lrucache(1000)
+        self._tx_hashes_cache = LRUCache(maxsize=1000)
         self._tx_hashes_lookups = 0
         self._tx_hashes_hits = 0
         # Really a MerkleCache cache
-        self._merkle_cache = pylru.lrucache(1000)
+        self._merkle_cache = LRUCache(maxsize=1000)
         self._merkle_lookups = 0
         self._merkle_hits = 0
-        self.estimatefee_cache = pylru.lrucache(1000)
+        self.estimatefee_cache = LRUCache(maxsize=1000)
         self.notified_height = None
         self.hsub_results = None
         self._task_group = OldTaskGroup()
@@ -500,7 +500,7 @@ class SessionManager:
         try:
             self.daemon.set_url(daemon_url)
         except Exception as e:
-            raise RPCError(BAD_REQUEST, f'an error occured: {e!r}')
+            raise RPCError(BAD_REQUEST, f'an error occurred: {e!r}')
         return f'now using daemon at {self.daemon.logged_url()}'
 
     async def rpc_stop(self):

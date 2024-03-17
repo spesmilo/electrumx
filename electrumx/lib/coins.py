@@ -4241,6 +4241,42 @@ class Garlicoin(Coin):
     ]
 
 
+class Diabase(Dash):
+    NAME = "Diabase"
+    SHORTNAME = "DIAC"
+    NET = "mainnet"
+    GENESIS_HASH = ('0000057be3e5420fcefa43eda26de60a'
+                    '3802bfc55a967443b07a41c133e0008f')
+    TX_COUNT = 25640
+    TX_COUNT_HEIGHT = 181237
+    TX_PER_BLOCK = 2
+    RPC_PORT = 7675
+
+
+class Riecoin(Coin):
+    NAME = "Riecoin"
+    SHORTNAME = "RIC"
+    NET = "mainnet"
+    P2PKH_VERBYTE = bytes.fromhex("3c")
+    P2SH_VERBYTES = (bytes.fromhex("41"),)
+    WIF_BYTE = bytes.fromhex("bc")
+    GENESIS_HASH = ('e1ea18d0676ef9899fbc78ef428d1d26'
+                    'a2416d0f0441d46668d33bcb41275740')
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    BASIC_HEADER_SIZE = 112
+    TX_COUNT = 920177
+    TX_COUNT_HEIGHT = 2108109
+    TX_PER_BLOCK = 2
+    RPC_PORT = 28332
+    REORG_LIMIT = 5000
+
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return the hash.'''
+        import riecoin_module as riecoin
+        return hex_str_to_hash(riecoin.riecoin_hash(hash_to_hex_str(header[::-1])))
+
+
 class Ferrite(Coin):
     NAME = "Ferrite"
     SHORTNAME = "FEC"

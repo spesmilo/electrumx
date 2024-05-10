@@ -83,7 +83,8 @@ class Controller(ServerBase):
         start serving external clients.
         '''
         if not (0, 23, 0) <= aiorpcx_version < (0, 24):
-            raise RuntimeError(f'aiorpcX version {aiorpcx_version!r} does not match required: 0.23.0<=ver<0.24')
+            raise RuntimeError(
+                f'aiorpcX version {aiorpcx_version!r} does not match required: 0.23.0<=ver<0.24')
 
         env = self.env
         min_str, max_str = env.coin.SESSIONCLS.protocol_min_max_strings()

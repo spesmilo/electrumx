@@ -1,4 +1,4 @@
-aiorpcX[ws]>=0.22.0,<0.23
+aiorpcX[ws]>=0.23.0,<0.24
 attrs
 plyvel
 aiohttp>=3.3,<4

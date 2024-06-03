@@ -183,6 +183,7 @@ class SessionManager:
 
     async def _start_servers(self, services):
         for service in services:
+            print('service=',service)
             kind = service.protocol.upper()
             if service.protocol == 'http':
                 host = None if service.host == 'all_interfaces' else str(service.host)

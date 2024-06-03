@@ -781,6 +781,8 @@ class DB:
             iterator = self.utxo_db.iterator(start=lastkey) if lastkey else self.utxo_db.iterator()
 
             for db_key, db_value in iterator:
+                print('db_key=',db_key)
+                print('db_value=',db_value)
                 txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN - 4:-TXNUM_LEN])
                 tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + txnum_padding)
                 value, = unpack_le_uint64(db_value)

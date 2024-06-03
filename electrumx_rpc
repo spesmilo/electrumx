@@ -92,7 +92,7 @@ other_commands = {
             'help': 'e.g. "_asyncio.Task"',
         },
     ),
-    'all_utxos':(
+    'allutxos':(
         'Return all utxos pageable',
         ['--limit'], {
             'type': int,

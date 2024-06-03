@@ -512,7 +512,7 @@ class SessionManager:
         '''Return summary information about the server process.'''
         return self._get_info()
 
-    async def rpc_all_utxos(self, lastkey):
+    async def rpc_allutxos(self, lastkey):
         '''Return summary information about the server process.'''
         lines = []
         utxos = await self.db.pageable_utxos(lastkey, 10)

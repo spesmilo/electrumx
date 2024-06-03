@@ -28,5 +28,5 @@ class HttpHandler(object):
                     'value': utxo.value}
             data_list.append(data)
 
-        res = {'last_db_key': last_db_key, 'utxos': data_list}
+        res = {'last_key': last_db_key, 'utxos': data_list}
         return web.json_response(res)

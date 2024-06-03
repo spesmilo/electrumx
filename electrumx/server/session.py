@@ -183,7 +183,6 @@ class SessionManager:
 
     async def _start_servers(self, services):
         for service in services:
-            print('service=',service)
             kind = service.protocol.upper()
             if service.protocol == 'http':
                 host = None if service.host == 'all_interfaces' else str(service.host)
@@ -534,12 +533,9 @@ class SessionManager:
 
     async def rpc_allutxos(self, startkey, limit):
         '''Return all utxos pageable.'''
-        print("startkey=",startkey)
-        print("limit=",limit)
         lines = []
         last_db_key,utxos = await self.db.pageable_utxos(startkey, limit)
         lines.append(f'lastkey {last_db_key}')
-        print('utxos=',utxos)
         for utxo in utxos:
             lines.append(f'height {utxo.height:,d} '
                          f'txhash {hash_to_hex_str(utxo.tx_hash)} '

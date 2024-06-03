@@ -793,7 +793,7 @@ class DB:
                     if len(utxos) == limit:
                         break
                 except Exception as e:
-                        #         err
+                        ea = str(e)
 
             return last_db_key,utxos
 

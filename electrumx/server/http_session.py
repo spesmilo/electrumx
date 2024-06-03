@@ -15,8 +15,8 @@ class HttpHandler(object):
         self.db = db
 
     async def all_utxos(self, request):
-        startkey = request.match_info.get('startkey', '')
-        limit = request.match_info.get('limit', '10')
+        startkey = request.match_info.get('startkey', None)
+        limit = request.match_info.get('limit', 10)
         print('startkey=',startkey)
         print('limit=',limit)
         last_db_key, utxos = await self.db.pageable_utxos(startkey, limit)

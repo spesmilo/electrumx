@@ -778,7 +778,7 @@ class DB:
             utxos_append = utxos.append
             txnum_padding = bytes(8 - TXNUM_LEN)
 
-            iterator = self.utxo_db.iterator(start=lastkey) if lastkey else self.utxo_db.iterator()
+            iterator = self.utxo_db.iterator(start=bytes.fromhex(lastkey)) if lastkey else self.utxo_db.iterator()
 
             last_db_key = None
             for db_key, db_value in iterator:
@@ -790,7 +790,7 @@ class DB:
                     value, = unpack_le_uint64(db_value)
                     tx_hash, height = self.fs_tx_hash(tx_num)
                     utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
-                    last_db_key = db_key
+                    last_db_key = db_key.hex()
                     if len(utxos) == limit:
                         break
                 except Exception as e:

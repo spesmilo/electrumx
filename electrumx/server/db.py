@@ -772,6 +772,34 @@ class DB:
                                 f'found (reorg?), retrying...')
             await sleep(0.25)
 
+    async def pageable_utxos(self,lastkey,limit):
+        def read_utxos():
+            utxos = []
+            utxos_append = utxos.append
+            txnum_padding = bytes(8 - TXNUM_LEN)
+
+            iterator = self.utxo_db.iterator(start=lastkey) if lastkey else self.utxo_db.iterator()
+
+            for db_key, db_value in iterator:
+                txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN - 4:-TXNUM_LEN])
+                tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + txnum_padding)
+                value, = unpack_le_uint64(db_value)
+                tx_hash, height = self.fs_tx_hash(tx_num)
+                utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
+                if len(utxos) == limit:
+                    break
+
+            return utxos
+
+        while True:
+            utxos = await run_in_thread(read_utxos)
+            if all(utxo.tx_hash is not None for utxo in utxos):
+                return utxos
+            self.logger.warning(f'all_utxos: tx hash not '
+                                f'found (reorg?), retrying...')
+            await sleep(0.25)
+
+
     async def lookup_utxos(self, prevouts):
         '''For each prevout, lookup it up in the DB and return a (hashX,
         value) pair or None if not found.

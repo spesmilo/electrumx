@@ -512,6 +512,19 @@ class SessionManager:
         '''Return summary information about the server process.'''
         return self._get_info()
 
+    async def rpc_all_utxos(self, lastkey):
+        '''Return summary information about the server process.'''
+        lines = []
+        utxos = await self.db.pageable_utxos(lastkey, 10)
+        for utxo in utxos:
+            lines.append(f'height {utxo.height:,d} '
+                         f'txhash {hash_to_hex_str(utxo.tx_hash)} '
+                         f'tx_pos {utxo.tx_pos}'
+                         f'value {utxo.value:,d}'
+                         )
+
+        return lines
+
     async def rpc_groups(self):
         '''Return statistics about the session groups.'''
         return self._group_data()
@@ -579,6 +592,9 @@ class SessionManager:
                          f'{coin.SHORTNAME}')
 
         return lines
+
+    async def rpc_all_utxos(self, startkey):
+        self.db.pageable_utxos(startkey,100)
 
     async def rpc_sessions(self):
         '''Return statistics about connected sessions.'''
@@ -1169,6 +1185,12 @@ class ElectrumX(SessionBase):
                  'height': utxo.height, 'value': utxo.value}
                 for utxo in utxos
                 if (utxo.tx_hash, utxo.tx_pos) not in spends]
+    async def listunspent(self,lastkey):
+        utxos = await self.db.pageable_utxos(lastkey,10)
+        return [{'tx_hash': hash_to_hex_str(utxo.tx_hash),
+                 'tx_pos': utxo.tx_pos,
+                 'height': utxo.height, 'value': utxo.value}
+                for utxo in utxos]
 
     async def hashX_subscribe(self, hashX, alias):
         # Store the subscription only after address_status succeeds
@@ -1220,6 +1242,11 @@ class ElectrumX(SessionBase):
         '''Return the list of UTXOs of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.hashX_listunspent(hashX)
+
+    async def list_all_unspent(self, lastkey):
+        '''To paginate and retrieve all UTXOs.'''
+        return await self.listunspent(lastkey)
+
 
     async def scripthash_subscribe(self, scripthash):
         '''Subscribe to a script hash.
@@ -1538,6 +1565,7 @@ class ElectrumX(SessionBase):
             'blockchain.scripthash.get_history': self.scripthash_get_history,
             'blockchain.scripthash.get_mempool': self.scripthash_get_mempool,
             'blockchain.scripthash.listunspent': self.scripthash_listunspent,
+            'blockchain.scripthash.listallunspent': self.list_all_unspent,
             'blockchain.scripthash.subscribe': self.scripthash_subscribe,
             'blockchain.transaction.broadcast': self.transaction_broadcast,
             'blockchain.transaction.get': self.transaction_get,

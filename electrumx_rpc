@@ -92,6 +92,18 @@ other_commands = {
             'help': 'e.g. "_asyncio.Task"',
         },
     ),
+    'all_utxos':(
+        'Return all utxos pageable',
+        ['--limit'], {
+            'type': int,
+            'default': 50,
+            'help': 'max number of types to return',
+        }, ['startkey'], {
+            'nargs': '?',
+            'type': str,
+            'help': 'last return key',
+        },
+    )
 }
 
 

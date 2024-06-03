@@ -58,7 +58,7 @@ class Storage:
         '''
         raise NotImplementedError
 
-    def iterator(self, prefix=b'', reverse=False):
+    def iterator(self, prefix=b'', reverse=False, start=None):
         '''Return an iterator that yields (key, value) pairs from the
         database sorted by key.
 

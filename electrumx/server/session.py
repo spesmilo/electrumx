@@ -168,7 +168,7 @@ class SessionManager:
         # Set up the RPC request handlers
         cmds = ('add_peer daemon_url disconnect getinfo groups log peers '
                 'query reorg sessions stop debug_memusage_list_all_objects '
-                'debug_memusage_get_random_backref_chain'.split())
+                'debug_memusage_get_random_backref_chain allutxos'.split())
         LocalRPC.request_handlers = {cmd: getattr(self, 'rpc_' + cmd)
                                      for cmd in cmds}
 

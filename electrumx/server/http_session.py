@@ -6,7 +6,7 @@ from electrumx.lib.hash import hash_to_hex_str
 import json
 
 
-async def format_params(self, request: web.Request):
+async def format_params(request: web.Request):
     params: list
     if request.method == "GET":
         params = json.loads(request.query.get("params", "[]"))

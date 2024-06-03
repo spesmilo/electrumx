@@ -20,7 +20,7 @@ class HttpHandler(object):
         last_db_key, utxos = await self.db.pageable_utxos(startkey, limit)
         data_list = []
         for utxo in utxos:
-            data = {'height': utxos.height,
+            data = {'height': utxo.height,
                     'txid': hash_to_hex_str(utxo.tx_hash),
                     'vout': utxo.tx_pos,
                     'value': utxo.value}

@@ -15,7 +15,8 @@ import sys
 
 from electrumx import Controller, Env
 from electrumx.lib.util import CompactFormatter, make_logger
-
+from dotenv import load_dotenv
+load_dotenv()
 
 def main():
     '''Set up logging and run the server.'''

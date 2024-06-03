@@ -18,6 +18,8 @@ from os import environ
 
 from aiorpcx import timeout_after, connect_rs
 import electrumx.lib.text as text
+from dotenv import load_dotenv
+load_dotenv()
 
 
 simple_commands = {

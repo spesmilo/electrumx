@@ -3,7 +3,6 @@
 from aiohttp import web
 import electrumx.lib.util as util
 from electrumx.lib.hash import hash_to_hex_str
-import json
 
 
 class HttpHandler(object):
@@ -11,7 +10,6 @@ class HttpHandler(object):
     PROTOCOL_MAX = (1, 4, 3)
 
     def __init__(self, db):
-        # self.transport = transport
         self.logger = util.class_logger(__name__, self.__class__.__name__)
         self.db = db
 

@@ -152,6 +152,9 @@ def main():
                     session.transport._framer.max_size = 0
                     session.sent_request_timeout = timeout
                     result = await session.send_request(method, args)
+                    print('method=',method)
+                    print('args=',args)
+                    print('result=',result)
                     if method in ('query', ):
                         for line in result:
                             print(line)

@@ -799,9 +799,9 @@ class DB:
             return last_db_key,utxos
 
         while True:
-            utxos = await run_in_thread(read_utxos)
+            last_db_key,utxos = await run_in_thread(read_utxos)
             if all(utxo.tx_hash is not None for utxo in utxos):
-                return utxos
+                return last_db_key,utxos
             self.logger.warning(f'all_utxos: tx hash not '
                                 f'found (reorg?), retrying...')
             await sleep(0.25)

@@ -778,6 +778,7 @@ class DB:
             utxos_append = utxos.append
             txnum_padding = bytes(8 - TXNUM_LEN)
 
+            print('lastkey=',lastkey)
             iterator = self.utxo_db.iterator(start=bytes.fromhex(lastkey)) if lastkey else self.utxo_db.iterator()
 
             last_db_key = None

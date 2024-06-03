@@ -513,9 +513,12 @@ class SessionManager:
         return self._get_info()
 
     async def rpc_allutxos(self, startkey, limit):
-        '''Return summary information about the server process.'''
+        '''Return all utxos pageable.'''
+        print("startkey=",startkey)
+        print("limit=",limit)
         lines = []
         utxos = await self.db.pageable_utxos(startkey, limit)
+        print('utxos=',utxos)
         for utxo in utxos:
             lines.append(f'height {utxo.height:,d} '
                          f'txhash {hash_to_hex_str(utxo.tx_hash)} '

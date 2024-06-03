@@ -27,7 +27,9 @@ class HttpHandler(object):
         self.db = db
 
     async def all_utxos(self, request):
+        print('request=',request)
         params = await format_params(request)
+        print('params=',params)
         startkey = params.get(0, None)
         limit = params.get(1, None)
         print('startkey=',startkey)

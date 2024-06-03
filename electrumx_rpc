@@ -143,6 +143,8 @@ def main():
         port = int(environ.get('RPC_PORT', 8000))
     method = args.pop('command')
     timeout = args.pop('timeout')
+    print('method=',method)
+    print('timeout=',timeout)
 
     # aiorpcX makes this so easy...
     async def send_request():

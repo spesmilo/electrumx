@@ -517,7 +517,8 @@ class SessionManager:
         print("startkey=",startkey)
         print("limit=",limit)
         lines = []
-        utxos = await self.db.pageable_utxos(startkey, limit)
+        last_db_key,utxos = await self.db.pageable_utxos(startkey, limit)
+        lines.append(f'lastkey {last_db_key}')
         print('utxos=',utxos)
         for utxo in utxos:
             lines.append(f'height {utxo.height:,d} '

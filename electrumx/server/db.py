@@ -780,6 +780,7 @@ class DB:
 
             iterator = self.utxo_db.iterator(start=lastkey) if lastkey else self.utxo_db.iterator()
 
+            last_db_key = None
             for db_key, db_value in iterator:
                 print('db_key=',db_key)
                 print('db_value=',db_value)
@@ -789,12 +790,13 @@ class DB:
                     value, = unpack_le_uint64(db_value)
                     tx_hash, height = self.fs_tx_hash(tx_num)
                     utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
+                    last_db_key = db_key
                     if len(utxos) == limit:
                         break
                 except Exception as e:
                     print(e)
 
-            return utxos
+            return last_db_key,utxos
 
         while True:
             utxos = await run_in_thread(read_utxos)

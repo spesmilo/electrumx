@@ -6,17 +6,6 @@ from electrumx.lib.hash import hash_to_hex_str
 import json
 
 
-async def format_params(request: web.Request):
-    params: list
-    if request.method == "GET":
-        params = json.loads(request.query.get("params", "[]"))
-    elif request.content_length:
-        json_data = await request.json()
-        params = json_data.get("params", [])
-    else:
-        params = []
-    return dict(zip(range(len(params)), params))
-
 class HttpHandler(object):
     PROTOCOL_MIN = (1, 4)
     PROTOCOL_MAX = (1, 4, 3)
@@ -27,13 +16,10 @@ class HttpHandler(object):
         self.db = db
 
     async def all_utxos(self, request):
-        print('request=',request)
-        params = await format_params(request)
-        print('params=',params)
-        startkey = params.get(0, None)
-        limit = params.get(1, None)
-        print('startkey=',startkey)
-        print('limit=',limit)
+        startkey = request.query.get("startkey", None)
+        limit = request.query.get("limit", 10)
+        print('startkey=', startkey)
+        print('limit=', limit)
         last_db_key, utxos = await self.db.pageable_utxos(startkey, limit)
         data_list = []
         for utxo in utxos:

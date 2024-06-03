@@ -20,6 +20,8 @@ from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from typing import Optional, TYPE_CHECKING
 import asyncio
+from aiohttp import web
+
 
 import attr
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
@@ -36,6 +38,7 @@ from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
 from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
 from electrumx.server.daemon import DaemonError
+from electrumx.server.http_session import HttpHandler
 from electrumx.server.peers import PeerManager
 
 if TYPE_CHECKING:
@@ -181,29 +184,45 @@ class SessionManager:
     async def _start_servers(self, services):
         for service in services:
             kind = service.protocol.upper()
-            if service.protocol in self.env.SSL_PROTOCOLS:
-                sslc = self._ssl_context()
+            if service.protocol == 'http':
+                host = None if service.host == 'all_interfaces' else str(service.host)
+                try:
+                    app = web.Application()
+                    handler = HttpHandler(self.db)
+                    # GET
+                    app.router.add_get('/proxy/all_utxos', handler.all_utxos)
+                    runner = web.AppRunner(app)
+                    await runner.setup()
+                    site = web.TCPSite(runner, host, service.port)
+                    await site.start()
+                except Exception as e:
+                    self.logger.error(f'{kind} server failed to listen on {service.address}: {e}')
+                else:
+                    self.logger.info(f'{kind} server listening on {service.address}')
             else:
-                sslc = None
-            if service.protocol == 'rpc':
-                session_class = LocalRPC
-            else:
-                session_class = self.env.coin.SESSIONCLS
-            if service.protocol in ('ws', 'wss'):
-                serve = serve_ws
-            else:
-                serve = serve_rs
-            # FIXME: pass the service not the kind
-            session_factory = partial(session_class, self, self.db, self.mempool,
-                                      self.peer_mgr, kind)
-            host = None if service.host == 'all_interfaces' else str(service.host)
-            try:
-                self.servers[service] = await serve(session_factory, host,
-                                                    service.port, ssl=sslc)
-            except OSError as e:    # don't suppress CancelledError
-                self.logger.error(f'{kind} server failed to listen on {service.address}: {e}')
-            else:
-                self.logger.info(f'{kind} server listening on {service.address}')
+                if service.protocol in self.env.SSL_PROTOCOLS:
+                    sslc = self._ssl_context()
+                else:
+                    sslc = None
+                if service.protocol == 'rpc':
+                    session_class = LocalRPC
+                else:
+                    session_class = self.env.coin.SESSIONCLS
+                if service.protocol in ('ws', 'wss'):
+                    serve = serve_ws
+                else:
+                    serve = serve_rs
+                # FIXME: pass the service not the kind
+                session_factory = partial(session_class, self, self.db, self.mempool,
+                                          self.peer_mgr, kind)
+                host = None if service.host == 'all_interfaces' else str(service.host)
+                try:
+                    self.servers[service] = await serve(session_factory, host,
+                                                        service.port, ssl=sslc)
+                except OSError as e:    # don't suppress CancelledError
+                    self.logger.error(f'{kind} server failed to listen on {service.address}: {e}')
+                else:
+                    self.logger.info(f'{kind} server listening on {service.address}')
 
     async def _start_external_servers(self):
         '''Start listening on TCP and SSL ports, but only if the respective

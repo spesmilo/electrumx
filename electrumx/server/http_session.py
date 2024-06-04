@@ -24,14 +24,20 @@ class HttpHandler(object):
         data_list = []
         txids = {hash_to_hex_str(utxo.tx_hash) for utxo in utxos}
 
+        output_addr = {}
         for txid in txids:
             tx = await self.daemon.getrawtransaction(txid,True)
-            print(tx)
+            for idx in range(len(tx.vout)):
+                output = "%s:%d" % (txid, idx)
+                output_addr[output] = tx.vout[idx].address
 
         for utxo in utxos:
-            print(utxo)
+            txid = hash_to_hex_str(utxo.tx_hash)
+            output = "%s:%d" % (txid,utxo.tx_pos)
+            address = output_addr[output]
             data = {'height': utxo.height,
-                    'txid': hash_to_hex_str(utxo.tx_hash),
+                    'address': address,
+                    'txid': txid,
                     'vout': utxo.tx_pos,
                     'value': utxo.value}
             data_list.append(data)

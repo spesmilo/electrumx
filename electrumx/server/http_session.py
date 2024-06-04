@@ -28,10 +28,8 @@ class HttpHandler(object):
         for txid in txids:
             tx = await self.daemon.getrawtransaction(txid, True)
             vout = tx['vout']
-            print('vout=', vout)
             for idx in range(len(vout)):
                 output = "%s:%d" % (txid, idx)
-                print('output=', output)
                 output_addr[output] = vout[idx]['scriptPubKey']
 
         for utxo in utxos:

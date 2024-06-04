@@ -32,7 +32,7 @@ class HttpHandler(object):
             for idx in range(len(vout)):
                 output = "%s:%d" % (txid, idx)
                 print('output=', output)
-                output_addr[output] = vout[idx]['address']
+                output_addr[output] = vout[idx]['scriptPubKey']['address']
 
         for utxo in utxos:
             txid = hash_to_hex_str(utxo.tx_hash)

@@ -27,9 +27,10 @@ class HttpHandler(object):
         output_addr = {}
         for txid in txids:
             tx = await self.daemon.getrawtransaction(txid,True)
-            for idx in range(len(tx.vout)):
+            vout = tx['vout']
+            for idx in range(len(vout)):
                 output = "%s:%d" % (txid, idx)
-                output_addr[output] = tx.vout[idx].address
+                output_addr[output] = vout[idx].address
 
         for utxo in utxos:
             txid = hash_to_hex_str(utxo.tx_hash)

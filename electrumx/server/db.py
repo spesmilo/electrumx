@@ -799,7 +799,7 @@ class DB:
                     if len(utxos) == limit:
                         break
                 except Exception as e:
-                    print(e)
+                    str(e)
             return last_db_key, utxos
 
         while True:

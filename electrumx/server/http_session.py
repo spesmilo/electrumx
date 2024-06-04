@@ -9,7 +9,7 @@ class HttpHandler(object):
     PROTOCOL_MIN = (1, 4)
     PROTOCOL_MAX = (1, 4, 3)
 
-    def __init__(self, db,daemon):
+    def __init__(self, db, daemon):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
         self.db = db
         self.daemon = daemon
@@ -26,15 +26,17 @@ class HttpHandler(object):
 
         output_addr = {}
         for txid in txids:
-            tx = await self.daemon.getrawtransaction(txid,True)
+            tx = await self.daemon.getrawtransaction(txid, True)
             vout = tx['vout']
+            print('vout=', vout)
             for idx in range(len(vout)):
                 output = "%s:%d" % (txid, idx)
+                print('output=', output)
                 output_addr[output] = vout[idx]['address']
 
         for utxo in utxos:
             txid = hash_to_hex_str(utxo.tx_hash)
-            output = "%s:%d" % (txid,utxo.tx_pos)
+            output = "%s:%d" % (txid, utxo.tx_pos)
             address = output_addr[output]
             data = {'height': utxo.height,
                     'address': address,

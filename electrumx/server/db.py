@@ -787,20 +787,22 @@ class DB:
             utxos_append = utxos.append
             txnum_padding = bytes(8 - TXNUM_LEN)
             prefix = b'u'
-            iterator = self.utxo_db.iterator(prefix=prefix,
-                                             start=bytes.fromhex(lastkey)) if lastkey else self.utxo_db.iterator(prefix=prefix)
+            iterator = self.utxo_db.iterator(start=bytes.fromhex(lastkey)) if lastkey else self.utxo_db.iterator()
 
             last_db_key = None
             for db_key, db_value in iterator:
-                hashX = db_key[0:-TXNUM_LEN - 4]
-                txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN - 4:-TXNUM_LEN])
-                tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + txnum_padding)
-                value, = unpack_le_uint64(db_value)
-                tx_hash, height = self.fs_tx_hash(tx_num)
-                utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value, hashX))
-                last_db_key = db_key.hex()
-                if len(utxos) == limit:
-                    break
+                try:
+                    hashX = db_key[0:-TXNUM_LEN - 4]
+                    txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN - 4:-TXNUM_LEN])
+                    tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + txnum_padding)
+                    value, = unpack_le_uint64(db_value)
+                    tx_hash, height = self.fs_tx_hash(tx_num)
+                    utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value, hashX))
+                    last_db_key = db_key.hex()
+                    if len(utxos) == limit:
+                        break
+                except Exception as e:
+                    str(e)
             return last_db_key, utxos
 
         while True:

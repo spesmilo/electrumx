@@ -31,3 +31,8 @@ class HttpHandler(object):
 
         res = {'last_key': last_db_key, 'utxos': data_list}
         return web.json_response(res)
+
+    async def count_utxos(self, request):
+        count = await self.db.count_utxos()
+        res = {'utxo_count': count}
+        return web.json_response(res)

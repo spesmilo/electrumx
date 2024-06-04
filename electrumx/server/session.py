@@ -191,6 +191,7 @@ class SessionManager:
                     handler = HttpHandler(self.db)
                     # GET
                     app.router.add_get('/proxy/all_utxos', handler.all_utxos)
+                    app.router.add_get('/proxy/count_utxos', handler.count_utxos)
                     runner = web.AppRunner(app)
                     await runner.setup()
                     site = web.TCPSite(runner, host, service.port)

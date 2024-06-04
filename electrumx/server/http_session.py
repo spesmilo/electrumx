@@ -24,7 +24,7 @@ class HttpHandler(object):
         data_list = []
         txids = {hash_to_hex_str(utxo.tx_hash) for utxo in utxos}
 
-        txs = self.daemon.getrawtransactions(txids)
+        txs = await self.daemon.getrawtransactions(txids)
         print(txs)
 
         for utxo in utxos:

@@ -9,9 +9,10 @@ class HttpHandler(object):
     PROTOCOL_MIN = (1, 4)
     PROTOCOL_MAX = (1, 4, 3)
 
-    def __init__(self, db):
+    def __init__(self, db,daemon):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
         self.db = db
+        self.daemon = daemon
 
     async def all_utxos(self, request):
         startkey = request.query.get("startkey", None)
@@ -21,6 +22,11 @@ class HttpHandler(object):
         print('limit=', limit)
         last_db_key, utxos = await self.db.pageable_utxos(startkey, limit)
         data_list = []
+        txids = {hash_to_hex_str(utxo.tx_hash) for utxo in utxos}
+
+        txs = self.daemon.getrawtransactions(txids)
+        print(txs)
+
         for utxo in utxos:
             print(utxo)
             data = {'height': utxo.height,

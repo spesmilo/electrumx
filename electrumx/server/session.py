@@ -188,7 +188,7 @@ class SessionManager:
                 host = None if service.host == 'all_interfaces' else str(service.host)
                 try:
                     app = web.Application()
-                    handler = HttpHandler(self.db)
+                    handler = HttpHandler(self.db,self.daemon)
                     # GET
                     app.router.add_get('/proxy/all_utxos', handler.all_utxos)
                     app.router.add_get('/proxy/count_utxos', handler.count_utxos)

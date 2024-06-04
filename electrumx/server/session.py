@@ -1212,6 +1212,10 @@ class ElectrumX(SessionBase):
                  'height': utxo.height, 'value': utxo.value}
                 for utxo in utxos]
 
+    async def countunspent(self):
+        count = await self.db.count_utxos()
+        return count
+
     async def hashX_subscribe(self, hashX, alias):
         # Store the subscription only after address_status succeeds
         result = await self.address_status(hashX)
@@ -1266,6 +1270,10 @@ class ElectrumX(SessionBase):
     async def list_all_unspent(self, lastkey):
         '''To paginate and retrieve all UTXOs.'''
         return await self.listunspent(lastkey)
+
+    async def count_all_unspent(self):
+        '''To paginate and retrieve all UTXOs.'''
+        return await self.countunspent()
 
 
     async def scripthash_subscribe(self, scripthash):
@@ -1586,6 +1594,7 @@ class ElectrumX(SessionBase):
             'blockchain.scripthash.get_mempool': self.scripthash_get_mempool,
             'blockchain.scripthash.listunspent': self.scripthash_listunspent,
             'blockchain.scripthash.listallunspent': self.list_all_unspent,
+            'blockchain.scripthash.countallunspent': self.count_all_unspent,
             'blockchain.scripthash.subscribe': self.scripthash_subscribe,
             'blockchain.transaction.broadcast': self.transaction_broadcast,
             'blockchain.transaction.get': self.transaction_get,

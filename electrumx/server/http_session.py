@@ -18,8 +18,6 @@ class HttpHandler(object):
         startkey = request.query.get("startkey", None)
         limit = request.query.get("limit", 10)
         limit = int(limit)
-        print('startkey=', startkey)
-        print('limit=', limit)
         last_db_key, utxos = await self.db.pageable_utxos(startkey, limit)
         data_list = []
         txids = {hash_to_hex_str(utxo.tx_hash) for utxo in utxos}

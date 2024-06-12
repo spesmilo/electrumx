@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 @dataclass(order=True)
 class UTXO:
-    __slots__ = 'tx_num', 'tx_pos', 'tx_hash', 'height', 'value', 'hashX'
+    __slots__ = 'tx_num', 'tx_pos', 'tx_hash', 'height', 'value'
     tx_num: int      # index of tx in chain order
     tx_pos: int      # tx output idx
     tx_hash: bytes   # txid

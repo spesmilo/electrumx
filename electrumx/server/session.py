@@ -670,12 +670,9 @@ class SessionManager:
         '''Start the RPC server if enabled.  When the event is triggered,
         start TCP and SSL servers.'''
         try:
-            print('_start_servers start')
             await self._start_servers(service for service in self.env.services
                                       if service.protocol == 'rpc')
-            print('_start_servers end')
             await event.wait()
-            print('event.wait() end')
 
             session_class = self.env.coin.SESSIONCLS
             session_class.cost_soft_limit = self.env.cost_soft_limit
@@ -703,7 +700,6 @@ class SessionManager:
             for service in self.env.report_services:
                 self.logger.info(f'advertising service {service}')
             # Start notifications; initialize hsub_results
-            print('Start notifications; initialize hsub_results')
             await notifications.start(self.db.db_height, self._notify_sessions)
             await self._start_external_servers()
             # Peer discovery should start after the external servers

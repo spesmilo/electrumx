@@ -132,6 +132,8 @@ class Controller(ServerBase):
                 await group.spawn(db.populate_header_merkle_cache())
                 if env.end_block == 0:
                     await group.spawn(mempool.keep_synchronized(mempool_event))
+                else:
+                    mempool_event.set()
 
             async with OldTaskGroup() as group:
                 await group.spawn(session_mgr.serve(notifications, mempool_event))

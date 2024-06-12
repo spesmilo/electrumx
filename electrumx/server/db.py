@@ -785,7 +785,8 @@ class DB:
             utxos = []
             utxos_append = utxos.append
             txnum_padding = bytes(8 - TXNUM_LEN)
-            iterator = self.utxo_db.iterator(start=bytes.fromhex(lastkey)) if lastkey else self.utxo_db.iterator()
+            iterator = self.utxo_db.iterator(start=bytes.fromhex(lastkey)) if lastkey \
+                else self.utxo_db.iterator()
 
             last_db_key = None
             for db_key, db_value in iterator:
@@ -809,7 +810,6 @@ class DB:
             self.logger.warning(f'all_utxos: tx hash not '
                                 f'found (reorg?), retrying...')
             await sleep(0.25)
-
 
     async def lookup_utxos(self, prevouts):
         '''For each prevout, lookup it up in the DB and return a (hashX,

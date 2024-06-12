@@ -117,7 +117,8 @@ class Prefetcher:
         Repeats until the queue is full or caught up.
         '''
         if 0 < self.end_block <= self.fetched_height:
-            self.logger.info(f'Arrive at the end block, stop synchronization end_block: {self.end_block} '
+            self.logger.info(f'Arrive at the end block, stop synchronization '
+                             f'end_block: {self.end_block} '
                              f'fetched_height: {self.fetched_height}')
             return
         daemon = self.daemon
@@ -668,7 +669,8 @@ class BlockProcessor:
         while True:
             # add by exsat, stop fetch blocks
             if 0 < self.env.end_block <= self.height:
-                self.logger.info(f'Arrive at the end block, stop synchronization end_block: {self.env.end_block} '
+                self.logger.info(f'Arrive at the end block, stop synchronization '
+                                 f'end_block: {self.env.end_block} '
                                  f'current_block: {self.height}')
                 self._caught_up_event.set()
                 break

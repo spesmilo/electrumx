@@ -22,7 +22,6 @@ from typing import Optional, TYPE_CHECKING
 import asyncio
 from aiohttp import web
 
-
 import attr
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession,
@@ -47,7 +46,6 @@ if TYPE_CHECKING:
     from electrumx.server.block_processor import BlockProcessor
     from electrumx.server.daemon import Daemon
     from electrumx.server.mempool import MemPool
-
 
 BAD_REQUEST = 1
 DAEMON_ERROR = 2
@@ -116,8 +114,8 @@ class SessionReferences:
     # All attributes are sets but groups is a list
     sessions = attr.ib()
     groups = attr.ib()
-    specials = attr.ib()    # Lower-case strings
-    unknown = attr.ib()     # Strings
+    specials = attr.ib()  # Lower-case strings
+    unknown = attr.ib()  # Strings
 
 
 class SessionManager:
@@ -141,9 +139,9 @@ class SessionManager:
         self.peer_mgr = PeerManager(env, db)
         self.shutdown_event = shutdown_event
         self.logger = util.class_logger(__name__, self.__class__.__name__)
-        self.servers = {}           # service->server
-        self.sessions = {}          # session->iterable of its SessionGroups
-        self.session_groups = {}    # group name->SessionGroup instance
+        self.servers = {}  # service->server
+        self.sessions = {}  # session->iterable of its SessionGroups
+        self.session_groups = {}  # group name->SessionGroup instance
         self.txs_sent = 0
         # Would use monotonic time, but aiorpcx sessions use Unix time:
         self.start_time = time.time()
@@ -188,7 +186,7 @@ class SessionManager:
                 host = None if service.host == 'all_interfaces' else str(service.host)
                 try:
                     app = web.Application()
-                    handler = HttpHandler(self.db,self.daemon)
+                    handler = HttpHandler(self.db, self.daemon)
                     # GET
                     app.router.add_get('/proxy/all_utxos', handler.all_utxos)
                     app.router.add_get('/proxy/count_utxos', handler.count_utxos)
@@ -220,7 +218,7 @@ class SessionManager:
                 try:
                     self.servers[service] = await serve(session_factory, host,
                                                         service.port, ssl=sslc)
-                except OSError as e:    # don't suppress CancelledError
+                except OSError as e:  # don't suppress CancelledError
                     self.logger.error(f'{kind} server failed to listen on {service.address}: {e}')
                 else:
                     self.logger.info(f'{kind} server listening on {service.address}')
@@ -420,7 +418,7 @@ class SessionManager:
         groups_by_name = self.session_groups
 
         sessions = set()
-        groups = set()     # Names as groups are not hashable
+        groups = set()  # Names as groups are not hashable
         specials = set()
         unknown = set()
 
@@ -535,7 +533,7 @@ class SessionManager:
     async def rpc_allutxos(self, startkey, limit):
         '''Return all utxos pageable.'''
         lines = []
-        last_db_key,utxos = await self.db.pageable_utxos(startkey, limit)
+        last_db_key, utxos = await self.db.pageable_utxos(startkey, limit)
         lines.append(f'lastkey {last_db_key}')
         for utxo in utxos:
             lines.append(f'height {utxo.height:,d} '
@@ -615,7 +613,7 @@ class SessionManager:
         return lines
 
     async def rpc_all_utxos(self, startkey):
-        self.db.pageable_utxos(startkey,100)
+        self.db.pageable_utxos(startkey, 100)
 
     async def rpc_sessions(self):
         '''Return statistics about connected sessions.'''
@@ -816,7 +814,7 @@ class SessionManager:
             return await self.db.raw_header(height)
         except IndexError:
             raise RPCError(BAD_REQUEST, f'height {height:,d} '
-                           'out of range') from None
+                                        'out of range') from None
 
     async def broadcast_transaction(self, raw_tx):
         hex_hash = await self.daemon.broadcast_transaction(raw_tx)
@@ -1026,7 +1024,7 @@ class ElectrumX(SessionBase):
         self.mempool_statuses = {}
         self.set_request_handlers(self.PROTOCOL_MIN)
         self.is_peer = False
-        self.cost = 5.0   # Connection cost
+        self.cost = 5.0  # Connection cost
 
     @classmethod
     def protocol_min_max_strings(cls):
@@ -1099,7 +1097,7 @@ class ElectrumX(SessionBase):
         updates or new blocks) and height.
         '''
         if height_changed and self.subscribe_headers:
-            args = (await self.subscribe_headers_result(), )
+            args = (await self.subscribe_headers_result(),)
             await self.send_notification('blockchain.headers.subscribe', args)
 
         touched = touched.intersection(self.hashX_subs)
@@ -1206,8 +1204,9 @@ class ElectrumX(SessionBase):
                  'height': utxo.height, 'value': utxo.value}
                 for utxo in utxos
                 if (utxo.tx_hash, utxo.tx_pos) not in spends]
-    async def listunspent(self,lastkey):
-        utxos = await self.db.pageable_utxos(lastkey,10)
+
+    async def listunspent(self, lastkey):
+        utxos = await self.db.pageable_utxos(lastkey, 10)
         return [{'tx_hash': hash_to_hex_str(utxo.tx_hash),
                  'tx_pos': utxo.tx_pos,
                  'height': utxo.height, 'value': utxo.value}
@@ -1275,7 +1274,6 @@ class ElectrumX(SessionBase):
     async def count_all_unspent(self):
         '''To paginate and retrieve all UTXOs.'''
         return await self.countunspent()
-
 
     async def scripthash_subscribe(self, scripthash):
         '''Subscribe to a script hash.
@@ -1359,11 +1357,11 @@ class ElectrumX(SessionBase):
         revision //= 100
         daemon_version = f'{major:d}.{minor:d}.{revision:d}'
         for pair in [
-                ('$SERVER_VERSION', electrumx.version_short),
-                ('$SERVER_SUBVERSION', electrumx.version),
-                ('$DAEMON_VERSION', daemon_version),
-                ('$DAEMON_SUBVERSION', network_info['subversion']),
-                ('$DONATION_ADDRESS', self.env.donation_address),
+            ('$SERVER_VERSION', electrumx.version_short),
+            ('$SERVER_SUBVERSION', electrumx.version),
+            ('$DAEMON_VERSION', daemon_version),
+            ('$DAEMON_SUBVERSION', network_info['subversion']),
+            ('$DONATION_ADDRESS', self.env.donation_address),
         ]:
             banner = banner.replace(*pair)
         return banner
@@ -1510,11 +1508,11 @@ class ElectrumX(SessionBase):
             message = error['message']
             self.logger.info(f'error sending transaction: {message}')
             raise RPCError(BAD_REQUEST, 'the transaction was rejected by '
-                           f'network rules.\n\n{message}\n[{raw_tx}]')
+                                        f'network rules.\n\n{message}\n[{raw_tx}]')
         else:
             self.txs_sent += 1
             client_ver = util.protocol_tuple(self.client)
-            if client_ver != (0, ):
+            if client_ver != (0,):
                 msg = self.coin.warn_old_client_on_tx_broadcast(client_ver)
                 if msg:
                     self.logger.info(f'sent tx: {hex_hash}. and warned user to upgrade their '
@@ -1620,7 +1618,7 @@ class ElectrumX(SessionBase):
 class LocalRPC(SessionBase):
     '''A local TCP RPC server session.'''
 
-    processing_timeout = 10**9  # disable timeouts
+    processing_timeout = 10 ** 9  # disable timeouts
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1644,7 +1642,7 @@ class DashElectrumX(ElectrumX):
         super().set_request_handlers(ptuple)
         self.request_handlers.update({
             'masternode.announce.broadcast':
-            self.masternode_announce_broadcast,
+                self.masternode_announce_broadcast,
             'masternode.subscribe': self.masternode_subscribe,
             'masternode.list': self.masternode_list,
             'protx.diff': self.protx_diff,
@@ -1674,7 +1672,7 @@ class DashElectrumX(ElectrumX):
             message = error['message']
             self.logger.info(f'masternode_broadcast: {message}')
             raise RPCError(BAD_REQUEST, 'the masternode broadcast was '
-                           f'rejected.\n\n{message}\n[{signmnb}]')
+                                        f'rejected.\n\n{message}\n[{signmnb}]')
 
     async def masternode_subscribe(self, collateral):
         '''Returns the status of masternode.
@@ -1768,7 +1766,7 @@ class DashElectrumX(ElectrumX):
                     mn_payment_queue, mn_info['payee']
                 )
                 mn_info['inselection'] = (
-                    mn_info['paymentposition'] < mn_payment_count // 10
+                        mn_info['paymentposition'] < mn_payment_count // 10
                 )
                 hashX = self.coin.address_to_hashX(mn_info['payee'])
                 balance = await self.get_balance(hashX)
@@ -1889,7 +1887,7 @@ class AuxPoWElectrumX(ElectrumX):
         headers = bytearray()
 
         while cursor < len(headers_full):
-            headers += headers_full[cursor:cursor+self.coin.TRUNCATED_HEADER_SIZE]
+            headers += headers_full[cursor:cursor + self.coin.TRUNCATED_HEADER_SIZE]
             cursor += self.db.dynamic_header_len(height)
             height += 1
 

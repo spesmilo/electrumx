@@ -42,6 +42,7 @@ class Prefetcher:
             blocks_event: asyncio.Event,
             *,
             polling_delay_secs,
+            end_block,
     ):
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.daemon = daemon
@@ -60,6 +61,7 @@ class Prefetcher:
         # This makes the first fetch be 10 blocks
         self.ave_size = self.min_cache_size // 10
         self.polling_delay = polling_delay_secs
+        self.end_block = end_block
 
     async def main_loop(self, bp_height):
         '''Loop forever polling for more blocks.'''
@@ -114,7 +116,10 @@ class Prefetcher:
 
         Repeats until the queue is full or caught up.
         '''
-        print(f'_prefetch_blocks {self.fetched_height}')
+        if 0 < self.end_block <= self.fetched_height:
+            self.logger.info(f'Arrive at the end block, stop synchronization end_block: {self.end_block} '
+                             f'fetched_height: {self.fetched_height}')
+            return
         daemon = self.daemon
         daemon_height = await daemon.height()
         async with self.semaphore:

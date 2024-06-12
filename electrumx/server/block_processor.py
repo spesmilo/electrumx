@@ -660,8 +660,10 @@ class BlockProcessor:
         '''Loop forever processing blocks as they arrive.'''
         while True:
             # add by exsat, stop height
+            print(f'end_block: {self.env.end_block} current_block: {self.height}')
             if 0 < self.env.end_block <= self.height:
-                self.logger.info(f'Arrive at the end block, stop synchronization {self.height}')
+                self.logger.info(f'Arrive at the end block, stop synchronization end_block: {self.env.end_block} '
+                                 f'current_block: {self.height}')
                 break
 
             if self.height == self.daemon.cached_height():

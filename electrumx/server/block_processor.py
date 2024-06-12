@@ -187,6 +187,7 @@ class BlockProcessor:
         self.prefetcher = Prefetcher(
             daemon, env.coin, self.blocks_event,
             polling_delay_secs=env.daemon_poll_interval_blocks_msec/1000,
+            end_block=self.env.end_block
         )
         self.logger = class_logger(__name__, self.__class__.__name__)
 

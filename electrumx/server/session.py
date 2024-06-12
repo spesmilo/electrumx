@@ -675,6 +675,7 @@ class SessionManager:
                                       if service.protocol == 'rpc')
             print('_start_servers end')
             await event.wait()
+            print('event.wait() end')
 
             session_class = self.env.coin.SESSIONCLS
             session_class.cost_soft_limit = self.env.cost_soft_limit

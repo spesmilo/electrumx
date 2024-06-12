@@ -130,7 +130,8 @@ class Controller(ServerBase):
             async def wait_for_catchup():
                 await caught_up_event.wait()
                 await group.spawn(db.populate_header_merkle_cache())
-                await group.spawn(mempool.keep_synchronized(mempool_event))
+                if env.end_block == 0:
+                    await group.spawn(mempool.keep_synchronized(mempool_event))
 
             async with OldTaskGroup() as group:
                 await group.spawn(session_mgr.serve(notifications, mempool_event))

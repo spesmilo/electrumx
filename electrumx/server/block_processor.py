@@ -114,6 +114,7 @@ class Prefetcher:
 
         Repeats until the queue is full or caught up.
         '''
+        print(f'_prefetch_blocks {self.fetched_height}')
         daemon = self.daemon
         daemon_height = await daemon.height()
         async with self.semaphore:

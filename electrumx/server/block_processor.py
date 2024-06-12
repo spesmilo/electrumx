@@ -666,11 +666,12 @@ class BlockProcessor:
     async def _process_prefetched_blocks(self):
         '''Loop forever processing blocks as they arrive.'''
         while True:
-            # add by exsat, stop height
+            # add by exsat, stop fetch blocks
             print(f'end_block: {self.env.end_block} current_block: {self.height}')
             if 0 < self.env.end_block <= self.height:
                 self.logger.info(f'Arrive at the end block, stop synchronization end_block: {self.env.end_block} '
                                  f'current_block: {self.height}')
+                self._caught_up_event.set()
                 break
 
             if self.height == self.daemon.cached_height():

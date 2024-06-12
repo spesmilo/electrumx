@@ -661,7 +661,7 @@ class BlockProcessor:
         while True:
             # add by exsat, stop height
             print(f'self.env.end_block {self.env.end_block}')
-            if self.env.end_block and self.env.end_block == self.height:
+            if self.env.end_block and self.env.end_block >= self.height:
                 self.logger.info(f'Arrive at the end block, stop synchronization {self.height}')
                 break
 

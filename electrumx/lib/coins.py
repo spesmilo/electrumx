@@ -1705,8 +1705,8 @@ class BlackcoinTestnet(Blackcoin):
     TX_PER_BLOCK = 2
     RPC_PORT = 25715
     REORG_LIMIT = 500
-    ESTIMATE_FEE = 0.001
-    RELAY_FEE = 0.001
+    ESTIMATE_FEE = 0.0001
+    RELAY_FEE = 0.0001
     PEERS = [
         'electrum1.blackcoin.nl t10011 s10012',
         'electrum2.blackcoin.nl t20011 s20012',

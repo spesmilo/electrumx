@@ -970,6 +970,7 @@ class BitcoinSignet(BitcoinTestnet):
 class BitcoinSegwitSignet(BitcoinSignet):
     NAME = "BitcoinSegwit"  # support legacy name
 
+
 class BitcoinTestnet4(BitcoinTestnet):
     NAME = "Bitcoin"
     NET = "testnet4"

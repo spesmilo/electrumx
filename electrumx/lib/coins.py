@@ -970,6 +970,22 @@ class BitcoinSignet(BitcoinTestnet):
 class BitcoinSegwitSignet(BitcoinSignet):
     NAME = "BitcoinSegwit"  # support legacy name
 
+class BitcoinTestnet4(BitcoinTestnet):
+    NAME = "Bitcoin"
+    NET = "testnet4"
+    GENESIS_HASH = ('00000000da84f2bafbbc53dee25a72ae'
+                    '507ff4914b867c565be350b0da8bf043')
+    PEERS = [
+        'blackie.c3-soft.com s57010 t57009',
+        'testnet4-electrumx.wakiyamap.dev',
+    ]
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+
+
+class BitcoinSegwitTestnet4(BitcoinTestnet4):
+    NAME = "BitcoinSegwit"  # support legacy name
+
 
 class BitcoinNolnet(BitcoinCash):
     '''Bitcoin Unlimited nolimit testnet.'''

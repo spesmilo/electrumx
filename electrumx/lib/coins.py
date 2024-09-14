@@ -4239,6 +4239,8 @@ class FerriteTestnet(Ferrite):
         'enode2.ferritecoin.org s t',
         'enode3.ferritecoin.org s t',
     ]
+
+
 class Hemis(Coin):
     NAME = "Hemis"
     SHORTNAME = "HMS"
@@ -4284,6 +4286,7 @@ class Hemis(Coin):
         else:
             return super().header_hash(header)
 
+
 class HemisTestnet(Hemis):
     SHORTNAME = "tHMS"
     NET = "testnet"
@@ -4314,3 +4317,4 @@ class HemisTestnet(Hemis):
             return cls.BASIC_HEADER_SIZE
         else:
             return cls.EXPANDED_HEADER
+            

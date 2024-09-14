@@ -1885,6 +1885,7 @@ class NameIndexElectrumX(ElectrumX):
 class NameIndexAuxPoWElectrumX(NameIndexElectrumX, AuxPoWElectrumX):
     pass
 
+
 class HemisElectrumX(ElectrumX):
     async def block_headers(self, start_height, count, cp_height=0):
         '''Return count concatenated block headers as hex for the main chain;
@@ -1909,3 +1910,4 @@ class HemisElectrumX(ElectrumX):
             result.updaate(await self._merkle_proof(cp_height, last_height))
         self.bump_cost(cost)
         return result
+        

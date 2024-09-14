@@ -1910,4 +1910,3 @@ class HemisElectrumX(ElectrumX):
             result.updaate(await self._merkle_proof(cp_height, last_height))
         self.bump_cost(cost)
         return result
-

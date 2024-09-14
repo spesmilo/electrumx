@@ -50,7 +50,7 @@ import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
 from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX,
-                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX)
+                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX, HemisElectrumX)
 
 
 @dataclass
@@ -4239,3 +4239,78 @@ class FerriteTestnet(Ferrite):
         'enode2.ferritecoin.org s t',
         'enode3.ferritecoin.org s t',
     ]
+class Hemis(Coin):
+    NAME = "Hemis"
+    SHORTNAME = "HMS"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("A0F2F5F3")
+    XPRV_VERBYTES = bytes.fromhex("A0F3F1FB")
+    GENESIS_HASH = '000000956c582b70df5d2c9b4b83d05b5331978e40d639739bdc96c29e156ce7'
+    P2PKH_VERBYTE = bytes.fromhex("28")
+    P2SH_VERBYTE = bytes.fromhex("0D")
+    WIF_BYTE = bytes.fromhex("D4")
+    DESERIALIZER = lib_tx.DeserializerPIVX
+    TX_COUNT_HEIGHT = 569399
+    TX_COUNT = 2157510
+    TX_PER_BLOCK = 1
+    STATIC_BLOCK_HEADERS = False
+    RPC_PORT = 49165
+    REORG_LIMIT = 100
+    EXPANDED_HEADER = 112
+    SAPLING_START_HEIGHT = 502
+    BLOCK_VERSION = 11
+    SESSIONCLS = HemisElectrumX
+
+    @classmethod
+    def static_header_len(cls, height):
+        '''Given a header height return its length.'''
+        print("Debugging - Processing block height:", height)
+        if height <= 499:
+            return cls.BASIC_HEADER_SIZE
+        elif height == 500:
+            return cls.EXPANDED_HEADER
+        elif height == 501:
+            return cls.BASIC_HEADER_SIZE
+        else:
+            return cls.EXPANDED_HEADER
+
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return the hash.'''
+        version, = struct.unpack('<I', header[:4])
+        if version < 5:
+            import algomodule
+            return algomodule._quark_hash(header)
+        else:
+            return super().header_hash(header)
+
+class HemisTestnet(Hemis):
+    SHORTNAME = "tHMS"
+    NET = "testnet"
+    XPUB_VERBYTES = bytes.fromhex("3A8061A0")
+    XPRV_VERBYTES = bytes.fromhex("3A805837")
+    GENESIS_HASH = '000000798b274f80ef80da249806ed8d86dec9338a58b34073b7014096e3d0c5'
+    P2PKH_VERBYTE = bytes.fromhex("8B")
+    P2SH_VERBYTE = bytes.fromhex("13")
+    WIF_BYTE = bytes.fromhex("EF")
+    DESERIALIZER = lib_tx.DeserializerPIVX
+    TX_COUNT_HEIGHT = 8000
+    TX_COUNT = 10000
+    TX_PER_BLOCK = 1
+    RPC_PORT = 51475
+    REORG_LIMIT = 1000
+    STATIC_BLOCK_HEADERS = False
+    EXPANDED_HEADER = 112
+
+    @classmethod
+    def static_header_len(cls, height):
+        '''Given a header height return its length.'''
+        print("Debugging - Processing block height:", height)
+        if height <= 499:
+            return cls.BASIC_HEADER_SIZE
+        elif height == 500:
+            return cls.EXPANDED_HEADER
+        elif height == 501:
+            return cls.BASIC_HEADER_SIZE
+        else:
+            return cls.EXPANDED_HEADER

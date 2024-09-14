@@ -2,4 +2,3 @@ aiorpcX[ws]>=0.23.0,<0.24
 attrs
 plyvel
 aiohttp>=3.3,<4
-algomodule

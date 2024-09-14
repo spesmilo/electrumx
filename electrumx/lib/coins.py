@@ -4317,4 +4317,4 @@ class HemisTestnet(Hemis):
             return cls.BASIC_HEADER_SIZE
         else:
             return cls.EXPANDED_HEADER
-            
+

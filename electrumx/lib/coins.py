@@ -4266,7 +4266,6 @@ class Hemis(Coin):
     @classmethod
     def static_header_len(cls, height):
         '''Given a header height return its length.'''
-        print("Debugging - Processing block height:", height)
         if height <= 499:
             return cls.BASIC_HEADER_SIZE
         elif height == 500:
@@ -4308,7 +4307,6 @@ class HemisTestnet(Hemis):
     @classmethod
     def static_header_len(cls, height):
         '''Given a header height return its length.'''
-        print("Debugging - Processing block height:", height)
         if height <= 499:
             return cls.BASIC_HEADER_SIZE
         elif height == 500:

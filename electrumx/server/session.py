@@ -1907,6 +1907,6 @@ class HemisElectrumX(ElectrumX):
         if count and cp_height:
             cost += 1.0
             last_height = start_height + count - 1
-            result.updaate(await self._merkle_proof(cp_height, last_height))
+            result.update(await self._merkle_proof(cp_height, last_height))
         self.bump_cost(cost)
         return result

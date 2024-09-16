@@ -50,7 +50,7 @@ import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
 from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX,
-                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX)
+                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX, HemisElectrumX)
 
 
 @dataclass
@@ -4261,6 +4261,7 @@ class Hemis(Coin):
     EXPANDED_HEADER = 112
     SAPLING_START_HEIGHT = 502
     BLOCK_VERSION = 11
+    SESSIONCLS = HemisElectrumX
 
     @classmethod
     def static_header_len(cls, height):
@@ -4302,6 +4303,7 @@ class HemisTestnet(Hemis):
     REORG_LIMIT = 1000
     STATIC_BLOCK_HEADERS = False
     EXPANDED_HEADER = 112
+    SESSIONCLS = HemisElectrumX
 
     @classmethod
     def static_header_len(cls, height):

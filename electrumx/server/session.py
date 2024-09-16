@@ -1884,29 +1884,3 @@ class NameIndexElectrumX(ElectrumX):
 
 class NameIndexAuxPoWElectrumX(NameIndexElectrumX, AuxPoWElectrumX):
     pass
-
-
-class HemisElectrumX(ElectrumX):
-    async def block_headers(self, start_height, count, cp_height=0):
-        '''Return count concatenated block headers as hex for the main chain;
-        starting at start_height.
-        start_height and count must be non-negative integers.  At most
-        MAX_CHUNK_SIZE headers will be returned.
-        '''
-        start_height = non_negative_integer(start_height)
-        count = non_negative_integer(count)
-        cp_height = non_negative_integer(cp_height)
-        cost = count / 50
-
-        max_size = self.MAX_CHUNK_SIZE
-        count = min(count, max_size)
-        result = {'headers': [], 'count': count, 'max': max_size}
-        for x in range(0, count):
-            raw_header_hex = (await self.session_mgr.raw_header(start_height + x)).hex()
-            result['headers'].append(raw_header_hex)
-        if count and cp_height:
-            cost += 1.0
-            last_height = start_height + count - 1
-            result.update(await self._merkle_proof(cp_height, last_height))
-        self.bump_cost(cost)
-        return result

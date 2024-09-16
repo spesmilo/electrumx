@@ -50,7 +50,7 @@ import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
 from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX,
-                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX, HemisElectrumX)
+                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX)
 
 
 @dataclass
@@ -4261,7 +4261,6 @@ class Hemis(Coin):
     EXPANDED_HEADER = 112
     SAPLING_START_HEIGHT = 502
     BLOCK_VERSION = 11
-    SESSIONCLS = HemisElectrumX
 
     @classmethod
     def static_header_len(cls, height):

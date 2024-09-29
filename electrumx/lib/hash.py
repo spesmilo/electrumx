@@ -46,6 +46,10 @@ def double_sha256(x):
     '''SHA-256 of SHA-256, as used extensively in bitcoin.'''
     return sha256(sha256(x))
 
+def keccak_256(s):
+    from Cryptodome.Hash import keccak
+    keccak_hash = keccak.new(data=s, digest_bits=256)
+    return keccak_hash.digest()
 
 def hash_to_hex_str(x):
     '''Convert a big-endian binary hash to displayed hex string.

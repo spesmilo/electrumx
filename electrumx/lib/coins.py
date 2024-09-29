@@ -4249,25 +4249,16 @@ class Bitgesell(Coin):
     XPUB_VERBYTES = bytes.fromhex("0488b21e")
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     RPC_PORT = 8332
-    GENESIS_HASH = (
-        '00000018cdcfeeb4dfdebe9392b855cfea7d6ddb953ef13f974b58773606d53d')
-    PEERS = [
-    ]
-
-
+    GENESIS_HASH = ('00000018cdcfeeb4dfdebe9392b855cfea7d6ddb953ef13f974b58773606d53d')
+    PEERS = []
     DESERIALIZER = lib_tx.DeserializerSegWitBGL
-
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
     TX_COUNT = 14731600
     TX_COUNT_HEIGHT = 228495
     TX_PER_BLOCK = 64
-
-
-
     P2PKH_VERBYTE = bytes.fromhex("0a")
     P2SH_VERBYTES = (bytes.fromhex("19"),)
     WIF_BYTE = bytes.fromhex("80")
-
 
     @classmethod
     def header_hash(cls, header):

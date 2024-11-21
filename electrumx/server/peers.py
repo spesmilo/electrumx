@@ -8,6 +8,7 @@
 '''Peer management.'''
 
 import asyncio
+import hashlib
 import random
 import socket
 import ssl
@@ -282,6 +283,7 @@ class PeerManager:
                     kwargs['local_addr'] = (str(local_hosts.pop()), None)
 
             peer_text = f'[{peer}:{port} {kind}]'
+
             try:
                 async with connect_rs(peer.host, port, session_factory=PeerSession,
                                       **kwargs) as session:
@@ -344,6 +346,24 @@ class PeerManager:
 
         if self._is_blacklisted(peer):
             raise BadPeerError('blacklisted')
+
+        ssl_obj = session.transport._asyncio_transport.get_extra_info('ssl_object')
+        if ssl_obj is not None:
+            # try to verify fingerprint
+            der_cert = ssl_obj.getpeercert(True)
+            certfp_checked = False
+            for algorithm in ('sha1', 'sha256', 'blake2b'):
+                peerfp = getattr(peer, 'cert_' + algorithm)
+                if peerfp is not None:
+                    netfp = getattr(hashlib, algorithm)(der_cert).hexdigest()
+                    if netfp != peerfp:
+                        raise BadPeerError(f'peer {algorithm} thumbprint differs from network', peerfp, netfp)
+                    certfp_checked = True
+            if not certfp_checked:
+                self.logger.warn(f'{peer.host} has no cert fingerprint specified. Consider:')
+                self.logger.warn(f'"{peer.real_name()} xsha256={hashlib.sha256(der_cert).hexdigest()} xblake2b={hashlib.blake2b(der_cert).hexdigest()}"')
+        else:
+            self.logger.warn(f'connected to {peer.host} in the clear, no certificate to verify host identity')
 
         # Bucket good recent peers; forbid many servers from similar IPs
         # FIXME there's a race here, when verifying multiple peers

@@ -1454,7 +1454,7 @@ class ElectrumX(SessionBase):
             message = error['message']
             self.logger.info(f'error sending transaction: {message}')
             raise RPCError(BAD_REQUEST, 'the transaction was rejected by '
-                           f'network rules.\n\n{message}\n[{raw_tx}]')
+                           f'network rules.\n\n{message}')
         else:
             self.txs_sent += 1
             client_ver = util.protocol_tuple(self.client)

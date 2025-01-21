@@ -175,3 +175,12 @@ New methods
 -----------
 
   * :func:`blockchain.name.get_value_proof` to resolve a name (with proof).  Name index coins (e.g. Namecoin) only.
+
+
+Version 1.4.4
+=============
+
+New methods
+-----------
+
+  * :func:`blockchain.transaction.broadcast_package` to broadcast a package of transactions (submitpackage).

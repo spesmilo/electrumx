@@ -971,6 +971,23 @@ class BitcoinSegwitSignet(BitcoinSignet):
     NAME = "BitcoinSegwit"  # support legacy name
 
 
+class BitcoinTestnet4(BitcoinTestnet):
+    NAME = "Bitcoin"
+    NET = "testnet4"
+    GENESIS_HASH = ('00000000da84f2bafbbc53dee25a72ae'
+                    '507ff4914b867c565be350b0da8bf043')
+    PEERS = [
+        'blackie.c3-soft.com s57010 t57009',
+        'testnet4-electrumx.wakiyamap.dev',
+    ]
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+
+
+class BitcoinSegwitTestnet4(BitcoinTestnet4):
+    NAME = "BitcoinSegwit"  # support legacy name
+
+
 class BitcoinNolnet(BitcoinCash):
     '''Bitcoin Unlimited nolimit testnet.'''
     NET = "nolnet"
@@ -1200,14 +1217,19 @@ class Namecoin(NameIndexAuxPoWMixin, Coin):
     TX_PER_BLOCK = 10
     RPC_PORT = 8336
     PEERS = [
-        '188.167.144.126 s50002',
+        '198.50.223.25 s50002',
         '46.229.238.187 s57002',
-        '82.119.233.36 s50002',
+        '198.50.223.27 s50002',
         'electrum-nmc.le-space.de s50002',
-        'ex.lug.gs s446',
+        'electrumx2.nmc.dotbit.zone s50002',
+        'electrumx4.nmc.dotbit.zone s50002',
         'nmc.bitcoins.sk s50002',
         'nmc2.bitcoins.sk s57002',
         'ulrichard.ch s50006 t50005',
+        'h6qrnwxtwiaahsw4qhk2nbutswwb54vnqso6jrxeuk6nwtfbos7jkoqd.onion s50002',
+        'mqhok2edqcxdpklwovquuvvl2q5or4g2o777qwrinydgzfxjbixq76yd.onion s50002',
+        'wirg2tsto7rme7n26lkd3ivbvxmjyy2pktlozwjuep22jcsfsghfqbqd.onion s50002',
+        'quuzpffsddq3aim3gk4oiczzyt5okjjzf4zpe6okzo6qidao6rshynqd.onion s50002',
     ]
     BLOCK_PROCESSOR = block_proc.NameIndexBlockProcessor
     NAME_EXPIRATION = 36_000

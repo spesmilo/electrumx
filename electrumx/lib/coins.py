@@ -4263,6 +4263,26 @@ class Garlicoin(Coin):
     ]
 
 
+class Clam(ScryptMixin, Coin):
+    NAME = "Clam"
+    SHORTNAME = "CLAM"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    P2PKH_VERBYTE = bytes.fromhex("89")
+    P2SH_VERBYTES = (bytes.fromhex("0d"),)
+    WIF_BYTE = bytes.fromhex("85")
+    GENESIS_HASH = ('00000c3ce6b3d823a35224a39798eca9'
+                    'ad889966aeb5a9da7b960ffb9869db35')
+    DESERIALIZER = lib_tx.DeserializerTrezarcoin
+    DAEMON = daemon.FakeEstimateFeeDaemon
+    TX_COUNT = 10553627
+    TX_COUNT_HEIGHT = 4691882
+    TX_PER_BLOCK = 2
+    RPC_PORT = 30174
+    REORG_LIMIT = 2000
+
+
 class Diabase(Dash):
     NAME = "Diabase"
     SHORTNAME = "DIAC"

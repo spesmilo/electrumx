@@ -1501,8 +1501,22 @@ class ElectrumX(SessionBase):
             self.logger.info(f'broadcasted package: {txids}')
             if verbose:
                 return result
-            return {'package_msg': result.get('package_msg', ''),
-                    'replaced_txs': result.get('replaced-transactions', [])}
+            errors = []
+            for tx in result.get('tx-results', {}).values():
+                if tx.get('error'):
+                    error_msg = {
+                        'txid': tx.get('txid'),
+                        'error': tx['error']
+                    }
+                    errors.append(error_msg)
+            electrumx_result = {
+                'success': True if result.get('package_msg') == 'success' else False
+            }
+            if replaced := result.get('replaced-transactions'):
+                electrumx_result['replaced_txs'] = replaced
+            if errors:
+                electrumx_result['errors'] = errors
+            return electrumx_result
 
     async def transaction_get(self, tx_hash, verbose=False):
         '''Return the serialized raw transaction given its hash

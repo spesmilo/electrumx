@@ -691,10 +691,6 @@ class Bitcoin(BitcoinMixin, Coin):
         return 1008
 
 
-class BitcoinSegwit(Bitcoin):
-    NAME = "BitcoinSegwit"  # support legacy name
-
-
 class BitcoinGold(EquihashMixin, BitcoinMixin, Coin):
     CHUNK_SIZE = 252
     NAME = "BitcoinGold"
@@ -939,10 +935,6 @@ class BitcoinTestnet(BitcoinTestnetMixin, Coin):
         return False
 
 
-class BitcoinSegwitTestnet(BitcoinTestnet):
-    NAME = "BitcoinSegwit"  # support legacy name
-
-
 class BitcoinRegtest(BitcoinTestnet):
     NAME = "Bitcoin"
     NET = "regtest"
@@ -954,10 +946,6 @@ class BitcoinRegtest(BitcoinTestnet):
     RPC_PORT = 18443
 
 
-class BitcoinSegwitRegtest(BitcoinRegtest):
-    NAME = "BitcoinSegwit"  # support legacy name
-
-
 class BitcoinSignet(BitcoinTestnet):
     NAME = "Bitcoin"
     NET = "signet"
@@ -967,10 +955,6 @@ class BitcoinSignet(BitcoinTestnet):
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
     RPC_PORT = 38332
-
-
-class BitcoinSegwitSignet(BitcoinSignet):
-    NAME = "BitcoinSegwit"  # support legacy name
 
 
 class BitcoinTestnet4(BitcoinTestnet):
@@ -985,10 +969,6 @@ class BitcoinTestnet4(BitcoinTestnet):
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
     RPC_PORT = 48332
-
-
-class BitcoinSegwitTestnet4(BitcoinTestnet4):
-    NAME = "BitcoinSegwit"  # support legacy name
 
 
 class BitcoinNolnet(BitcoinCash):

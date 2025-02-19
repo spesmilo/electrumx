@@ -284,6 +284,164 @@ class Coin:
         return n
 
 
+class BitcoinMixin:
+    SHORTNAME = "BTC"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    RPC_PORT = 8332
+
+
+class Bitcoin(BitcoinMixin, Coin):
+    NAME = "Bitcoin"
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
+    TX_COUNT = 565436782
+    TX_COUNT_HEIGHT = 646855
+    TX_PER_BLOCK = 2200
+    CRASH_CLIENT_VER = (3, 2, 3)
+    BLACKLIST_URL = 'https://electrum.org/blacklist.json'
+    PEERS = [
+        'electrum.vom-stausee.de s t',
+        'electrum.hsmiths.com s t',
+        'helicarrier.bauerj.eu s t',
+        'electrum.hodlister.co s',
+        'electrum3.hodlister.co s',
+        'btc.usebsv.com s50006',
+        'fortress.qtornado.com s443 t',
+        'ecdsa.net s110 t',
+        'e2.keff.org s t',
+        'currentlane.lovebitco.in s t',
+        'electrum.jochen-hoenicke.de s50005 t50003',
+        'vps5.hsmiths.com s',
+        'electrum.emzy.de s',
+        'electrum1.cipig.net t10000 s20000',
+        'ulrichard.ch s',
+        'hodlers.beer s',
+        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
+        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
+        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
+        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
+        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
+    ]
+
+    @classmethod
+    def warn_old_client_on_tx_broadcast(cls, client_ver):
+        if client_ver < (3, 3, 3):
+            return ('<br/><br/>'
+                    'Your transaction was successfully broadcast.<br/><br/>'
+                    'However, you are using a VULNERABLE version of Electrum.<br/>'
+                    'Download the new version from the usual place:<br/>'
+                    'https://electrum.org/'
+                    '<br/><br/>')
+        return False
+
+    @classmethod
+    def bucket_estimatefee_block_target(cls, n: int) -> int:
+        # values based on https://github.com/bitcoin/bitcoin/blob/af05bd9e1e362c3148e3b434b7fac96a9a5155a1/src/policy/fees.h#L131  # noqa
+        if n <= 1:
+            return 1
+        if n <= 12:
+            return n
+        if n == 25:  # so common that we make an exception for it
+            return n
+        if n <= 48:
+            return n // 2 * 2
+        if n <= 1008:
+            return n // 24 * 24
+        return 1008
+
+
+class BitcoinTestnetMixin:
+    SHORTNAME = "XTN"
+    NET = "testnet"
+    XPUB_VERBYTES = bytes.fromhex("043587cf")
+    XPRV_VERBYTES = bytes.fromhex("04358394")
+    P2PKH_VERBYTE = bytes.fromhex("6f")
+    P2SH_VERBYTES = (bytes.fromhex("c4"),)
+    WIF_BYTE = bytes.fromhex("ef")
+    GENESIS_HASH = ('000000000933ea01ad0ee984209779ba'
+                    'aec3ced90fa3f408719526f8d77f4943')
+    REORG_LIMIT = 8000
+    TX_COUNT = 12242438
+    TX_COUNT_HEIGHT = 1035428
+    TX_PER_BLOCK = 21
+    RPC_PORT = 18332
+    PEER_DEFAULT_PORTS = {'t': '51001', 's': '51002'}
+
+
+class BitcoinTestnet(BitcoinTestnetMixin, Coin):
+    '''Bitcoin Testnet for Bitcoin Core >= 0.13.1.'''
+    NAME = "Bitcoin"
+    DESERIALIZER = lib_tx.DeserializerSegWit
+    CRASH_CLIENT_VER = (3, 2, 3)
+    PEERS = [
+        'testnet.hsmiths.com t53011 s53012',
+        'testnet.qtornado.com s t',
+        'testnet1.bauerj.eu t50001 s50002',
+        'tn.not.fyi t55001 s55002',
+        'bitcoin.cluelessperson.com s t',
+        'blackie.c3-soft.com s57006',
+        'electrum.blockstream.info t60001 s60002',
+        'testnet.aranguren.org s t',
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t143',
+        'electrum1.cipig.net t10068',
+    ]
+
+    @classmethod
+    def warn_old_client_on_tx_broadcast(cls, client_ver):
+        if client_ver < (3, 3, 3):
+            return ('<br/><br/>'
+                    'Your transaction was successfully broadcast.<br/><br/>'
+                    'However, you are using a VULNERABLE version of Electrum.<br/>'
+                    'Download the new version from the usual place:<br/>'
+                    'https://electrum.org/'
+                    '<br/><br/>')
+        return False
+
+
+class BitcoinRegtest(BitcoinTestnet):
+    NAME = "Bitcoin"
+    NET = "regtest"
+    GENESIS_HASH = ('0f9188f13cb7b2c71f2a335e3a4fc328'
+                    'bf5beb436012afca590b1a11466e2206')
+    PEERS = []
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+    RPC_PORT = 18443
+
+
+class BitcoinSignet(BitcoinTestnet):
+    NAME = "Bitcoin"
+    NET = "signet"
+    GENESIS_HASH = ('00000008819873e925422c1ff0f99f7c'
+                    'c9bbb232af63a077a480a3633bee1ef6')
+    PEERS = []
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+    RPC_PORT = 38332
+
+
+class BitcoinTestnet4(BitcoinTestnet):
+    NAME = "Bitcoin"
+    NET = "testnet4"
+    GENESIS_HASH = ('00000000da84f2bafbbc53dee25a72ae'
+                    '507ff4914b867c565be350b0da8bf043')
+    PEERS = [
+        'blackie.c3-soft.com s57010 t57009',
+        'testnet4-electrumx.wakiyamap.dev',
+    ]
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+    RPC_PORT = 48332
+
+
+######################################################################
+# Non-Bitcoin stuff goes strictly below this line.
+######################################################################
+
+
 class AuxPowMixin:
     STATIC_BLOCK_HEADERS = False
     DESERIALIZER = lib_tx.DeserializerAuxPow
@@ -348,14 +506,6 @@ class KomodoMixin:
     GENESIS_HASH = ('027e3758c3a65b12aa1046462b486d0a'
                     '63bfa1beae327897f56c5cfb7daaae71')
     DESERIALIZER = lib_tx.DeserializerZcash
-
-
-class BitcoinMixin:
-    SHORTNAME = "BTC"
-    NET = "mainnet"
-    XPUB_VERBYTES = bytes.fromhex("0488b21e")
-    XPRV_VERBYTES = bytes.fromhex("0488ade4")
-    RPC_PORT = 8332
 
 
 class NameMixin:
@@ -630,67 +780,6 @@ class BitcoinCash(BitcoinMixin, Coin):
         return False
 
 
-class Bitcoin(BitcoinMixin, Coin):
-    NAME = "Bitcoin"
-    DESERIALIZER = lib_tx.DeserializerSegWit
-    MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
-    TX_COUNT = 565436782
-    TX_COUNT_HEIGHT = 646855
-    TX_PER_BLOCK = 2200
-    CRASH_CLIENT_VER = (3, 2, 3)
-    BLACKLIST_URL = 'https://electrum.org/blacklist.json'
-    PEERS = [
-        'electrum.vom-stausee.de s t',
-        'electrum.hsmiths.com s t',
-        'helicarrier.bauerj.eu s t',
-        'electrum.hodlister.co s',
-        'electrum3.hodlister.co s',
-        'btc.usebsv.com s50006',
-        'fortress.qtornado.com s443 t',
-        'ecdsa.net s110 t',
-        'e2.keff.org s t',
-        'currentlane.lovebitco.in s t',
-        'electrum.jochen-hoenicke.de s50005 t50003',
-        'vps5.hsmiths.com s',
-        'electrum.emzy.de s',
-        'electrum1.cipig.net t10000 s20000',
-        'ulrichard.ch s',
-        'hodlers.beer s',
-        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
-        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
-        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
-        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
-        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
-        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
-    ]
-
-    @classmethod
-    def warn_old_client_on_tx_broadcast(cls, client_ver):
-        if client_ver < (3, 3, 3):
-            return ('<br/><br/>'
-                    'Your transaction was successfully broadcast.<br/><br/>'
-                    'However, you are using a VULNERABLE version of Electrum.<br/>'
-                    'Download the new version from the usual place:<br/>'
-                    'https://electrum.org/'
-                    '<br/><br/>')
-        return False
-
-    @classmethod
-    def bucket_estimatefee_block_target(cls, n: int) -> int:
-        # values based on https://github.com/bitcoin/bitcoin/blob/af05bd9e1e362c3148e3b434b7fac96a9a5155a1/src/policy/fees.h#L131  # noqa
-        if n <= 1:
-            return 1
-        if n <= 12:
-            return n
-        if n == 25:  # so common that we make an exception for it
-            return n
-        if n <= 48:
-            return n // 2 * 2
-        if n <= 1008:
-            return n // 24 * 24
-        return 1008
-
-
 class BitcoinGold(EquihashMixin, BitcoinMixin, Coin):
     CHUNK_SIZE = 252
     NAME = "BitcoinGold"
@@ -829,24 +918,6 @@ class Emercoin(NameMixin, Coin):
         return super().hashX_from_script(address_script)
 
 
-class BitcoinTestnetMixin:
-    SHORTNAME = "XTN"
-    NET = "testnet"
-    XPUB_VERBYTES = bytes.fromhex("043587cf")
-    XPRV_VERBYTES = bytes.fromhex("04358394")
-    P2PKH_VERBYTE = bytes.fromhex("6f")
-    P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
-    GENESIS_HASH = ('000000000933ea01ad0ee984209779ba'
-                    'aec3ced90fa3f408719526f8d77f4943')
-    REORG_LIMIT = 8000
-    TX_COUNT = 12242438
-    TX_COUNT_HEIGHT = 1035428
-    TX_PER_BLOCK = 21
-    RPC_PORT = 18332
-    PEER_DEFAULT_PORTS = {'t': '51001', 's': '51002'}
-
-
 class BitcoinSVTestnet(BitcoinTestnetMixin, Coin):
     '''Bitcoin Testnet for Bitcoin SV daemons.'''
     NAME = "BitcoinSV"
@@ -903,72 +974,6 @@ class BitcoinSVRegtest(BitcoinSVTestnet):
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
     GENESIS_ACTIVATION = 10_000
-
-
-class BitcoinTestnet(BitcoinTestnetMixin, Coin):
-    '''Bitcoin Testnet for Core bitcoind >= 0.13.1.'''
-    NAME = "Bitcoin"
-    DESERIALIZER = lib_tx.DeserializerSegWit
-    CRASH_CLIENT_VER = (3, 2, 3)
-    PEERS = [
-        'testnet.hsmiths.com t53011 s53012',
-        'testnet.qtornado.com s t',
-        'testnet1.bauerj.eu t50001 s50002',
-        'tn.not.fyi t55001 s55002',
-        'bitcoin.cluelessperson.com s t',
-        'blackie.c3-soft.com s57006',
-        'electrum.blockstream.info t60001 s60002',
-        'testnet.aranguren.org s t',
-        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t143',
-        'electrum1.cipig.net t10068',
-    ]
-
-    @classmethod
-    def warn_old_client_on_tx_broadcast(cls, client_ver):
-        if client_ver < (3, 3, 3):
-            return ('<br/><br/>'
-                    'Your transaction was successfully broadcast.<br/><br/>'
-                    'However, you are using a VULNERABLE version of Electrum.<br/>'
-                    'Download the new version from the usual place:<br/>'
-                    'https://electrum.org/'
-                    '<br/><br/>')
-        return False
-
-
-class BitcoinRegtest(BitcoinTestnet):
-    NAME = "Bitcoin"
-    NET = "regtest"
-    GENESIS_HASH = ('0f9188f13cb7b2c71f2a335e3a4fc328'
-                    'bf5beb436012afca590b1a11466e2206')
-    PEERS = []
-    TX_COUNT = 1
-    TX_COUNT_HEIGHT = 1
-    RPC_PORT = 18443
-
-
-class BitcoinSignet(BitcoinTestnet):
-    NAME = "Bitcoin"
-    NET = "signet"
-    GENESIS_HASH = ('00000008819873e925422c1ff0f99f7c'
-                    'c9bbb232af63a077a480a3633bee1ef6')
-    PEERS = []
-    TX_COUNT = 1
-    TX_COUNT_HEIGHT = 1
-    RPC_PORT = 38332
-
-
-class BitcoinTestnet4(BitcoinTestnet):
-    NAME = "Bitcoin"
-    NET = "testnet4"
-    GENESIS_HASH = ('00000000da84f2bafbbc53dee25a72ae'
-                    '507ff4914b867c565be350b0da8bf043')
-    PEERS = [
-        'blackie.c3-soft.com s57010 t57009',
-        'testnet4-electrumx.wakiyamap.dev',
-    ]
-    TX_COUNT = 1
-    TX_COUNT_HEIGHT = 1
-    RPC_PORT = 48332
 
 
 class BitcoinNolnet(BitcoinCash):

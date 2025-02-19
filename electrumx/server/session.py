@@ -1626,6 +1626,11 @@ class LocalRPC(SessionBase):
         return 'RPC'
 
 
+######################################################################
+# Non-Bitcoin stuff goes strictly below this line.
+######################################################################
+
+
 class DashElectrumX(ElectrumX):
     '''A TCP server that handles incoming Electrum Dash connections.'''
 

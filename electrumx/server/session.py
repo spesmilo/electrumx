@@ -18,7 +18,7 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Sequence
 import asyncio
 
 import attr
@@ -32,7 +32,7 @@ import electrumx.lib.util as util
 from electrumx.lib.lrucache import LRUCache
 from electrumx.lib.util import OldTaskGroup
 from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
-                                hex_str_to_hash, sha256)
+                                hex_str_to_hash, sha256, double_sha256)
 from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
 from electrumx.server.daemon import DaemonError
@@ -786,6 +786,11 @@ class SessionManager:
         self.txs_sent += 1
         return hex_hash
 
+    async def broadcast_package(self, tx_package: Sequence[str]) -> dict:
+        result = await self.daemon.broadcast_package(tx_package)
+        self.txs_sent += len(tx_package)
+        return result
+
     async def limited_history(self, hashX):
         '''Returns a pair (history, cost).
 
@@ -1468,6 +1473,51 @@ class ElectrumX(SessionBase):
             self.logger.info(f'sent tx: {hex_hash}')
             return hex_hash
 
+    async def package_broadcast(self, tx_package: Sequence[str], verbose: bool = False) -> dict:
+        """Broadcast a package of raw transactions to the network (submitpackage).
+        The package must consist of a child with its parents,
+        and none of the parents may depend on one another.
+
+        raw_txs: a list of raw transactions as hexadecimal strings"""
+        self.bump_cost(0.25 + sum(len(tx) / 5000 for tx in tx_package))
+        try:
+            txids = [double_sha256(bytes.fromhex(tx)).hex() for tx in tx_package]
+        except ValueError:
+            self.logger.info(f"error calculating txids", exc_info=True)
+            raise RPCError(
+                BAD_REQUEST,
+                f'not a valid hex encoded transaction package: {tx_package}')
+        try:
+            daemon_result = await self.session_mgr.broadcast_package(tx_package)
+        except DaemonError as e:
+            error, = e.args
+            message = error['message']
+            self.logger.info(f"error submitting package: {message}")
+            raise RPCError(BAD_REQUEST, 'the tx package was rejected by '
+                           f'network rules.\n\n{message}. Package txids: {txids}')
+        else:
+            self.txs_sent += len(tx_package)
+            self.logger.info(f'broadcasted package: {txids}')
+            if verbose:
+                return daemon_result
+            errors = []
+            for tx in daemon_result.get('tx-results', {}).values():
+                if tx.get('error'):
+                    error_msg = {
+                        'txid': tx.get('txid'),
+                        'error': tx['error']
+                    }
+                    errors.append(error_msg)
+            # check both, package_msg and package-msg due to ongoing discussion to change rpc
+            # https://github.com/bitcoin/bitcoin/pull/31900
+            package_msg = daemon_result.get('package_msg', daemon_result.get('package-msg'))
+            electrumx_result = {
+                'success': True if package_msg == 'success' else False
+            }
+            if errors:
+                electrumx_result['errors'] = errors
+            return electrumx_result
+
     async def transaction_get(self, tx_hash, verbose=False):
         '''Return the serialized raw transaction given its hash
 
@@ -1555,6 +1605,9 @@ class ElectrumX(SessionBase):
 
         if ptuple >= (1, 4, 2):
             handlers['blockchain.scripthash.unsubscribe'] = self.scripthash_unsubscribe
+
+        # experimental:
+        handlers['blockchain.transaction.broadcast_package'] = self.package_broadcast
 
         self.request_handlers = handlers
 

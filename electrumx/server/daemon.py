@@ -13,7 +13,7 @@ import itertools
 import time
 from calendar import timegm
 from struct import pack
-from typing import TYPE_CHECKING, Type, List
+from typing import TYPE_CHECKING, Type, Sequence
 
 import aiohttp
 from aiorpcx import JSONRPC
@@ -310,7 +310,7 @@ class Daemon:
         '''Broadcast a transaction to the network.'''
         return await self._send_single('sendrawtransaction', (raw_tx, ))
 
-    async def broadcast_package(self, raw_txs: List[str]):
+    async def broadcast_package(self, raw_txs: Sequence[str]):
         """Broadcast a package of transactions to the network using 'submitpackage'."""
         return await self._send_single('submitpackage', (raw_txs, ))
 

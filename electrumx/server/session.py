@@ -15,11 +15,10 @@ import math
 import os
 import ssl
 import time
-import traceback
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Optional, TYPE_CHECKING, List
+from typing import Optional, TYPE_CHECKING, Sequence
 import asyncio
 
 import attr
@@ -787,7 +786,7 @@ class SessionManager:
         self.txs_sent += 1
         return hex_hash
 
-    async def broadcast_package(self, tx_package: List[str]) -> dict:
+    async def broadcast_package(self, tx_package: Sequence[str]) -> dict:
         result = await self.daemon.broadcast_package(tx_package)
         self.txs_sent += len(tx_package)
         return result
@@ -984,7 +983,7 @@ class ElectrumX(SessionBase):
     '''A TCP server that handles incoming Electrum connections.'''
 
     PROTOCOL_MIN = (1, 4)
-    PROTOCOL_MAX = (1, 4, 4)
+    PROTOCOL_MAX = (1, 4, 3)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1474,7 +1473,7 @@ class ElectrumX(SessionBase):
             self.logger.info(f'sent tx: {hex_hash}')
             return hex_hash
 
-    async def package_broadcast(self, tx_package: List[str], verbose: bool = False) -> dict:
+    async def package_broadcast(self, tx_package: Sequence[str], verbose: bool = False) -> dict:
         """Broadcast a package of raw transactions to the network (submitpackage).
         The package must consist of a child with its parents,
         and none of the parents may depend on one another.
@@ -1484,7 +1483,7 @@ class ElectrumX(SessionBase):
         try:
             txids = [double_sha256(bytes.fromhex(tx)).hex() for tx in tx_package]
         except ValueError:
-            self.logger.info(f"error calculating txids: {traceback.format_exc()}")
+            self.logger.info(f"error calculating txids", exc_info=True)
             raise RPCError(
                 BAD_REQUEST,
                 f'not a valid hex encoded transaction package: {tx_package}')
@@ -1606,8 +1605,10 @@ class ElectrumX(SessionBase):
 
         if ptuple >= (1, 4, 2):
             handlers['blockchain.scripthash.unsubscribe'] = self.scripthash_unsubscribe
-        if ptuple >= (1, 4, 4):
-            handlers['blockchain.transaction.broadcast_package'] = self.package_broadcast
+
+        # experimental:
+        handlers['blockchain.transaction.broadcast_package'] = self.package_broadcast
+
         self.request_handlers = handlers
 
 

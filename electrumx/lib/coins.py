@@ -951,6 +951,7 @@ class BitcoinRegtest(BitcoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+    RPC_PORT = 18443
 
 
 class BitcoinSegwitRegtest(BitcoinRegtest):
@@ -965,6 +966,7 @@ class BitcoinSignet(BitcoinTestnet):
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+    RPC_PORT = 38332
 
 
 class BitcoinSegwitSignet(BitcoinSignet):
@@ -982,6 +984,7 @@ class BitcoinTestnet4(BitcoinTestnet):
     ]
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
+    RPC_PORT = 48332
 
 
 class BitcoinSegwitTestnet4(BitcoinTestnet4):

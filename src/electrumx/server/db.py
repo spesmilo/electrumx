@@ -430,14 +430,14 @@ class DB:
         # Truncate header_mc: header count is 1 more than the height.
         self.header_mc.truncate(height + 1)
 
-    async def raw_header(self, height):
+    async def raw_header(self, height: int) -> bytes:
         '''Return the binary header at the given height.'''
         header, n = await self.read_headers(height, 1)
         if n != 1:
             raise IndexError(f'height {height:,d} out of range')
         return header
 
-    async def read_headers(self, start_height, count):
+    async def read_headers(self, start_height: int, count: int) -> Tuple[bytes, int]:
         '''Requires start_height >= 0, count >= 0.  Reads as many headers as
         are available starting at start_height up to count.  This
         would be zero if start_height is beyond self.db_height, for

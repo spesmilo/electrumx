@@ -234,7 +234,7 @@ class Coin:
         return cls.ENCODE_CHECK(payload)
 
     @classmethod
-    def header_hash(cls, header):
+    def header_hash(cls, header: bytes) -> bytes:
         '''Given a header return hash'''
         return double_sha256(header)
 

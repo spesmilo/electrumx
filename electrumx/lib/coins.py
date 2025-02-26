@@ -76,7 +76,6 @@ class Coin:
     BASIC_HEADER_SIZE = 80
     STATIC_BLOCK_HEADERS = True
     SESSIONCLS = ElectrumX
-    DEFAULT_MAX_SEND = 1000000
     DESERIALIZER = lib_tx.Deserializer
     DAEMON = daemon.Daemon
     BLOCK_PROCESSOR = block_proc.BlockProcessor
@@ -93,6 +92,14 @@ class Coin:
     GENESIS_HASH = ('000000000019d6689c085ae165831e93'
                     '4ff763ae46a2a6c172b3f1b60a8ce26f')
     GENESIS_ACTIVATION = 100_000_000
+
+    # max byte-size of single jsonrpc message
+    # note: we should probably be able to serve a client asking for the largest consensus-valid tx.
+    #       For Bitcoin, that is 4 M weight units, i.e. 4 MB on the p2p wire.
+    #       Double that due to our JSON-RPC hex-encoding, plus overhead, we need to send 8+ MB.
+    #       When receiving from a client, e.g. to broadcast, such a tx would be non-standard anyway.
+    DEFAULT_MAX_SEND = 8_100_000
+    DEFAULT_MAX_RECV = 1_000_000
 
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 500
     # first bin size in vbytes. smaller bins mean more precision but also bandwidth:

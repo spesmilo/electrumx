@@ -50,7 +50,7 @@ BAD_REQUEST = 1
 DAEMON_ERROR = 2
 
 
-def scripthash_to_hashX(scripthash):
+def scripthash_to_hashX(scripthash: str) -> bytes:
     try:
         bin_hash = hex_str_to_hash(scripthash)
         if len(bin_hash) == 32:
@@ -58,6 +58,13 @@ def scripthash_to_hashX(scripthash):
     except (ValueError, TypeError):
         pass
     raise RPCError(BAD_REQUEST, f'{scripthash} is not a valid script hash')
+
+
+def spk_to_scripthash(spk: str) -> str:
+    """Converts scriptPubKey to scripthash."""
+    assert_hex_str(spk)
+    h = sha256(bytes.fromhex(spk))
+    return h[::-1].hex()
 
 
 def non_negative_integer(value):
@@ -1447,6 +1454,30 @@ class ElectrumX(SessionBase):
         hashX = scripthash_to_hashX(scripthash)
         return self.unsubscribe_hashX(hashX) is not None
 
+    def scriptpubkey_get_balance(self, spk: str):
+        scripthash = spk_to_scripthash(spk)
+        return self.scripthash_get_balance(scripthash)
+
+    def scriptpubkey_get_history(self, spk: str):
+        scripthash = spk_to_scripthash(spk)
+        return self.scripthash_get_history(scripthash)
+
+    def scriptpubkey_get_mempool(self, spk: str):
+        scripthash = spk_to_scripthash(spk)
+        return self.scripthash_get_mempool(scripthash)
+
+    def scriptpubkey_listunspent(self, spk: str):
+        scripthash = spk_to_scripthash(spk)
+        return self.scripthash_listunspent(scripthash)
+
+    def scriptpubkey_subscribe(self, spk: str):
+        scripthash = spk_to_scripthash(spk)
+        return self.scripthash_subscribe(scripthash)
+
+    def scriptpubkey_unsubscribe(self, spk: str):
+        scripthash = spk_to_scripthash(spk)
+        return self.scripthash_unsubscribe(scripthash)
+
     async def txoutpoint_subscribe(self, tx_hash, txout_idx, spk_hint=None):
         '''Subscribe to an outpoint.
 
@@ -1870,11 +1901,6 @@ class ElectrumX(SessionBase):
             'blockchain.block.headers': self.block_headers,
             'blockchain.estimatefee': self.estimatefee,
             'blockchain.headers.subscribe': self.headers_subscribe,
-            'blockchain.scripthash.get_balance': self.scripthash_get_balance,
-            'blockchain.scripthash.get_history': self.scripthash_get_history,
-            'blockchain.scripthash.get_mempool': self.scripthash_get_mempool,
-            'blockchain.scripthash.listunspent': self.scripthash_listunspent,
-            'blockchain.scripthash.subscribe': self.scripthash_subscribe,
             'blockchain.transaction.broadcast': self.transaction_broadcast,
             'blockchain.transaction.get': self.transaction_get,
             'blockchain.transaction.get_merkle': self.transaction_merkle,
@@ -1889,7 +1915,14 @@ class ElectrumX(SessionBase):
             'server.version': self.server_version,
         }
 
-        if ptuple >= (1, 4, 2):
+        if ptuple < (1, 7):
+            handlers['blockchain.scripthash.get_balance'] = self.scripthash_get_balance
+            handlers['blockchain.scripthash.get_history'] = self.scripthash_get_history
+            handlers['blockchain.scripthash.get_mempool'] = self.scripthash_get_mempool
+            handlers['blockchain.scripthash.listunspent'] = self.scripthash_listunspent
+            handlers['blockchain.scripthash.subscribe'] = self.scripthash_subscribe
+
+        if (1, 4, 2) <= ptuple < (1, 7):
             handlers['blockchain.scripthash.unsubscribe'] = self.scripthash_unsubscribe
 
         if ptuple >= (1, 6):
@@ -1902,6 +1935,12 @@ class ElectrumX(SessionBase):
         if ptuple >= (1, 7):
             handlers['blockchain.outpoint.subscribe'] = self.txoutpoint_subscribe
             handlers['blockchain.outpoint.unsubscribe'] = self.txoutpoint_unsubscribe
+            handlers['blockchain.scriptpubkey.get_balance'] = self.scriptpubkey_get_balance
+            handlers['blockchain.scriptpubkey.get_history'] = self.scriptpubkey_get_history
+            handlers['blockchain.scriptpubkey.get_mempool'] = self.scriptpubkey_get_mempool
+            handlers['blockchain.scriptpubkey.listunspent'] = self.scriptpubkey_listunspent
+            handlers['blockchain.scriptpubkey.subscribe'] = self.scriptpubkey_subscribe
+            handlers['blockchain.scriptpubkey.unsubscribe'] = self.scriptpubkey_unsubscribe
 
         self.request_handlers = handlers
 

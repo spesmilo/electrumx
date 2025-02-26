@@ -19,12 +19,15 @@ from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any, Tuple, Set, Dict, Mapping
+from typing import Callable
 
 import attr
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession, Service,
                      handler_invocation, serve_rs, serve_ws, sleep,
-                     NewlineFramer, TaskTimeout, timeout_after, run_in_thread)
+                     NewlineFramer, TaskTimeout, timeout_after, run_in_thread,
+                     Notification)
+from aiorpcx.jsonrpc import SingleRequest
 
 import electrumx
 import electrumx.lib.util as util
@@ -982,6 +985,8 @@ class SessionBase(RPCSessionWithTaskGroup):
     MAX_CHUNK_SIZE = 2016
     session_counter = itertools.count()
     log_new = False
+    request_handlers: Dict[str, Callable]
+    notification_handlers: Dict[str, Callable]
 
     def __init__(
             self,
@@ -1074,14 +1079,13 @@ class SessionBase(RPCSessionWithTaskGroup):
     def sub_count_total(self):
         return self.sub_count_scripthashes() + self.sub_count_txoutpoints()
 
-    async def handle_request(self, request):
-        '''Handle an incoming request.  ElectrumX doesn't receive
-        notifications from client sessions.
-        '''
+    async def handle_request(self, request: SingleRequest):
+        '''Handle an incoming request.'''
+        handler = None
         if isinstance(request, Request):
             handler = self.request_handlers.get(request.method)
-        else:
-            handler = None
+        elif isinstance(request, Notification):
+            handler = self.notification_handlers.get(request.method)
         method = 'invalid method' if handler is None else request.method
 
         # Version negotiation must happen before any other messages.
@@ -1709,12 +1713,25 @@ class ElectrumX(SessionBase):
             cache[(number, mode)] = (blockhash, feerate, lock)
             return feerate
 
-    async def ping(self):
+    async def ping(self, pong_len=0, data=""):
         '''Serves as a connection keep-alive mechanism and for the client to
-        confirm the server is still responding.
+        confirm the server is still responding. It can also be used to obfuscate
+        traffic patterns.
         '''
         self.bump_cost(0.1)
-        return None
+        if self.protocol_tuple < (1, 7):
+            return None
+        assert_hex_str(data)
+        pong_len = non_negative_integer(pong_len)
+        if pong_len > self.env.max_send:
+            raise RPCError(BAD_REQUEST, f'pong_len value too high')
+        pong_data = pong_len * "0"
+        return {"data": pong_data}
+
+    async def on_ping_notification(self, data=""):
+        self.bump_cost(0.1)  # note: the bw cost for receiving 'data' has already been incurred
+        assert_hex_str(data)
+        # nothing to do
 
     async def server_version(
             self,
@@ -1928,6 +1945,7 @@ class ElectrumX(SessionBase):
             'server.ping': self.ping,
             'server.version': self.server_version,
         }
+        notif_handlers = {}
 
         if ptuple < (1, 7):
             handlers['blockchain.scripthash.get_balance'] = self.scripthash_get_balance
@@ -1955,8 +1973,10 @@ class ElectrumX(SessionBase):
             handlers['blockchain.scriptpubkey.listunspent'] = self.scriptpubkey_listunspent
             handlers['blockchain.scriptpubkey.subscribe'] = self.scriptpubkey_subscribe
             handlers['blockchain.scriptpubkey.unsubscribe'] = self.scriptpubkey_unsubscribe
+            notif_handlers['server.ping'] = self.on_ping_notification
 
         self.request_handlers = handlers
+        self.notification_handlers = notif_handlers
 
 
 class LocalRPC(SessionBase):
@@ -1970,6 +1990,8 @@ class LocalRPC(SessionBase):
         self.sv_negotiated.set()
         self.client = 'RPC'
         self.connection.max_response_size = 0
+        # note: self.request_handlers are set on the class, in SessionManager.__init__
+        self.notification_handlers = {}
 
     def protocol_version_string(self):
         return 'RPC'

@@ -758,8 +758,11 @@ class SessionManager:
         branch = [hash_to_hex_str(hash) for hash in branch]
         return branch, cost / 2500
 
-    async def merkle_branch_for_tx_hash(self, height, tx_hash):
-        '''Return a triple (branch, tx_pos, cost).'''
+    async def merkle_branch_for_tx_hash(
+            self, *, tx_hash: bytes, height: int,
+    ) -> Tuple[Sequence[str], int, bytes, float]:
+        '''Return (branch, tx_pos, block_header, cost).'''
+        block_header = await self.raw_header(height)
         tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height)
         try:
             tx_pos = tx_hashes.index(tx_hash)
@@ -767,7 +770,11 @@ class SessionManager:
             raise RPCError(BAD_REQUEST,
                            f'tx {hash_to_hex_str(tx_hash)} not in block at height {height:,d}')
         branch, merkle_cost = await self._merkle_branch(height, tx_hashes, tx_pos)
-        return branch, tx_pos, tx_hashes_cost + merkle_cost
+        if block_header != await self.raw_header(height):
+            # there was a reorg while processing the request... TODO maybe retry?
+            raise RPCError(BAD_REQUEST,
+                           f'tx {hash_to_hex_str(tx_hash)} was reorged while processing request')
+        return branch, tx_pos, block_header, tx_hashes_cost + merkle_cost
 
     async def merkle_branch_for_tx_pos(self, height, tx_pos):
         '''Return a triple (branch, tx_hash_hex, cost).'''
@@ -817,7 +824,7 @@ class SessionManager:
         except DaemonError as e:
             raise RPCError(DAEMON_ERROR, f'daemon error: {e!r}') from None
 
-    async def raw_header(self, height):
+    async def raw_header(self, height: int) -> bytes:
         '''Return the binary header at the given height.'''
         try:
             return await self.db.raw_header(height)
@@ -1940,11 +1947,17 @@ class ElectrumX(SessionBase):
         tx_hash = assert_tx_hash(tx_hash)
         height = non_negative_integer(height)
 
-        branch, tx_pos, cost = await self.session_mgr.merkle_branch_for_tx_hash(
-            height, tx_hash)
+        branch, tx_pos, block_header, cost = await self.session_mgr.merkle_branch_for_tx_hash(
+            tx_hash=tx_hash, height=height)
         self.bump_cost(cost)
+        blockhash = hash_to_hex_str(self.coin.header_hash(block_header))
 
-        return {"block_height": height, "merkle": branch, "pos": tx_pos}
+        return {
+            "block_height": height,
+            "block_hash": blockhash,
+            "merkle": branch,
+            "pos": tx_pos,
+        }
 
     async def transaction_id_from_pos(self, height, tx_pos, merkle=False):
         '''Return the txid and optionally a merkle proof, given

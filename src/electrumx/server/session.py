@@ -1153,6 +1153,7 @@ class ElectrumX(SessionBase):
             'genesis_hash': env.coin.GENESIS_HASH,
             'hash_function': 'sha256',
             'services': [str(service) for service in env.report_services],
+            'method_flavours': {},
         }
 
     async def server_features_async(self):

@@ -1,6 +1,6 @@
 unittests_task:
   container:
-    image: debian:bookworm
+    image: debian:trixie
     cpu: 1
     memory: 1G
   before_install_script:
@@ -20,7 +20,7 @@ unittests_task:
     - pip install pycodestyle
     - pip install pytest-asyncio
     - pip install pytest-cov
-    - pip install coveralls
+    #- pip install coveralls  # broken for python 3.13
     - pip install Sphinx
     # hacks for rocksdb
     - pip install 'Cython<3.0'
@@ -46,8 +46,8 @@ unittests_task:
     - pip install bitweb_yespower==1.0.5
   script:
     - pytest --cov=electrumx
-  coveralls_script:
-    - if [ ! -z "$COVERALLS_REPO_TOKEN" ] ; then coveralls ; fi
+  #coveralls_script:
+  #  - if [ ! -z "$COVERALLS_REPO_TOKEN" ] ; then coveralls ; fi
   env:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
     # following CI_* env vars are set up for coveralls

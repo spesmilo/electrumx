@@ -19,7 +19,7 @@ from electrumx.lib.util import OldTaskGroup
 coin = BitcoinCash
 tx_hash_fn = coin.DESERIALIZER.TX_HASH_FN
 # Change seed daily
-seed(datetime.date.today().toordinal)
+seed(datetime.date.today().toordinal())
 
 
 def random_tx(hash160s, utxos):

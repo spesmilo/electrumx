@@ -34,7 +34,7 @@ Authors and License
 ===================
 
 Neil Booth wrote the vast majority of the code; see :ref:`Authors`.
-Python version at least 3.8 is required.
+Python version at least 3.10 is required.
 
 The code is released under the `MIT Licence
 <https://github.com/spesmilo/electrumx/LICENCE>`_.

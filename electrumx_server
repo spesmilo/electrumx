@@ -26,8 +26,8 @@ def main():
 
     logger.info('ElectrumX server starting')
     try:
-        if sys.version_info < (3, 8):
-            raise RuntimeError('ElectrumX requires Python 3.8 or greater')
+        if sys.version_info < (3, 10):
+            raise RuntimeError('ElectrumX requires Python 3.10 or greater')
         env = Env()
         logger.info(f'logging level: {env.log_level}')
         logger.setLevel(env.log_level)

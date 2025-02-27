@@ -42,8 +42,8 @@ from electrumx.server.db import DB
 
 
 async def compact_history():
-    if sys.version_info < (3, 8):
-        raise RuntimeError('Python >= 3.8 is required to run ElectrumX')
+    if sys.version_info < (3, 10):
+        raise RuntimeError('Python >= 3.10 is required to run ElectrumX')
 
     environ['DAEMON_URL'] = ''   # Avoid Env erroring out
     env = Env()

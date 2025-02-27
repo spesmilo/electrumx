@@ -24,7 +24,7 @@ setuptools.setup(
     name='e-x',
     version=version,
     scripts=['electrumx_server', 'electrumx_rpc', 'electrumx_compact_history'],
-    python_requires='>=3.8',
+    python_requires='>=3.10',
     install_requires=requirements,
     extras_require={
         'dev': ['objgraph'],
@@ -57,7 +57,7 @@ setuptools.setup(
         'Framework :: AsyncIO',
         'License :: OSI Approved :: MIT License',
         'Operating System :: Unix',
-        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.10",
         "Topic :: Database",
         'Topic :: Internet',
     ],

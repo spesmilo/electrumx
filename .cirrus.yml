@@ -58,7 +58,7 @@ unittests_task:
 
 pycodestyle_task:
   container:
-    image: python:3.8
+    image: python:3.10
     cpu: 1
     memory: 1G
   install_script:

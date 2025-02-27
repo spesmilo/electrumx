@@ -751,7 +751,7 @@ class NameIndexBlockProcessor(BlockProcessor):
         hashXs_by_tx = []
         append_hashXs = hashXs_by_tx.append
 
-        for tx, _tx_hash in txs:
+        for tx in txs:
             hashXs = []
             append_hashX = hashXs.append
 
@@ -790,7 +790,8 @@ class LTORBlockProcessor(BlockProcessor):
         hashXs_by_tx = [set() for _ in txs]
 
         # Add the new UTXOs
-        for (tx, tx_hash), hashXs in zip(txs, hashXs_by_tx):
+        for tx, hashXs in zip(txs, hashXs_by_tx):
+            tx_hash = tx.txid
             add_hashXs = hashXs.add
             tx_numb = to_le_uint64(tx_num)[:TXNUM_LEN]
 
@@ -808,7 +809,7 @@ class LTORBlockProcessor(BlockProcessor):
 
         # Spend the inputs
         # A separate for-loop here allows any tx ordering in block.
-        for (tx, tx_hash), hashXs in zip(txs, hashXs_by_tx):
+        for tx, hashXs in zip(txs, hashXs_by_tx):
             add_hashXs = hashXs.add
             for txin in tx.inputs:
                 if txin.is_generation():
@@ -844,7 +845,7 @@ class LTORBlockProcessor(BlockProcessor):
         # Restore coins that had been spent
         # (may include coins made then spent in this block)
         n = 0
-        for tx, tx_hash in txs:
+        for tx in txs:
             for txin in tx.inputs:
                 if txin.is_generation():
                     continue
@@ -856,7 +857,8 @@ class LTORBlockProcessor(BlockProcessor):
         assert n == len(undo_info)
 
         # Remove tx outputs made in this block, by spending them.
-        for tx, tx_hash in txs:
+        for tx in txs:
+            tx_hash = tx.txid
             for idx, txout in enumerate(tx.outputs):
                 # Spend the TX outputs.  Be careful with unspendable
                 # outputs - we didn't save those in the first place.

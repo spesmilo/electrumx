@@ -35,6 +35,7 @@ import logging
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
+from typing import Set
 
 import aiorpcx
 

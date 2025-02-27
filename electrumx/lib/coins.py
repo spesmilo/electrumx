@@ -53,12 +53,11 @@ from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       NameIndexElectrumX, NameIndexAuxPoWElectrumX)
 
 
-@dataclass
+@dataclass(slots=True)
 class Block:
-    __slots__ = "raw", "header", "transactions"
     raw: bytes
     header: bytes
-    transactions: Sequence[Tuple[Tx, bytes]]
+    transactions: Sequence[Tx]
 
 
 class CoinError(Exception):

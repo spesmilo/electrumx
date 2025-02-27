@@ -41,7 +41,8 @@ def test_transaction(transaction_details):
     coin, tx_info = transaction_details
 
     raw_tx = unhexlify(tx_info['hex'])
-    tx, tx_hash = coin.DESERIALIZER(raw_tx, 0).read_tx_and_hash()
+    tx = coin.DESERIALIZER(raw_tx, 0).read_tx()
+    tx_hash = tx.txid
     assert tx_info['txid'] == hash_to_hex_str(tx_hash)
 
     vin = tx_info['vin']

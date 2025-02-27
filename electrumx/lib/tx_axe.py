@@ -26,19 +26,22 @@
 
 '''Deserializer for AXE DIP2 special transaction types'''
 
-from collections import namedtuple
+from dataclasses import dataclass
+from typing import Any
 
-from electrumx.lib.tx import Deserializer
+from electrumx.lib.tx import Deserializer, Tx
 from electrumx.lib.util import (pack_le_uint16, pack_le_int32, pack_le_uint32,
                                 pack_le_int64, pack_varint, pack_varbytes,
                                 pack_be_uint16)
 
 
 # https://github.com/dashpay/dips/blob/master/dip-0002.md
-class AxeTx(namedtuple("AxeTx",
-                       "version inputs outputs locktime "
-                       "tx_type extra_payload")):
+@dataclass(kw_only=True, slots=True)
+class AxeTx(Tx):
     '''Class representing a Axe transaction'''
+    tx_type: int
+    extra_payload: Any
+
     def serialize(self):
         nLocktime = pack_le_uint32(self.locktime)
         txins = (pack_varint(len(self.inputs)) +
@@ -69,12 +72,23 @@ class AxeTx(namedtuple("AxeTx",
 
 
 # https://github.com/dashpay/dips/blob/master/dip-0002-special-transactions.md
-class AxeProRegTx(namedtuple("AxeProRegTx",
-                             "version type mode collateralOutpoint "
-                             "ipAddress port KeyIdOwner PubKeyOperator "
-                             "KeyIdVoting operatorReward scriptPayout "
-                             "inputsHash payloadSig")):
+@dataclass(kw_only=True, slots=True)
+class AxeProRegTx:
     '''Class representing DIP3 ProRegTx'''
+    version: int
+    type: int
+    mode: int
+    collateralOutpoint: 'TxOutPoint'
+    ipAddress: bytes
+    port: int
+    KeyIdOwner: bytes
+    PubKeyOperator: bytes
+    KeyIdVoting: bytes
+    operatorReward: int
+    scriptPayout: bytes
+    inputsHash: bytes
+    payloadSig: bytes
+
     def serialize(self):
         assert (len(self.ipAddress) == 16
                 and len(self.KeyIdOwner) == 20
@@ -100,27 +114,33 @@ class AxeProRegTx(namedtuple("AxeProRegTx",
     @classmethod
     def read_tx_extra(cls, deser):
         return AxeProRegTx(
-            deser._read_le_uint16(),                    # version
-            deser._read_le_uint16(),                    # type
-            deser._read_le_uint16(),                    # mode
-            deser._read_outpoint(),                     # collateralOutpoint
-            deser._read_nbytes(16),                     # ipAddress
-            deser._read_be_uint16(),                    # port
-            deser._read_nbytes(20),                     # KeyIdOwner
-            deser._read_nbytes(48),                     # PubKeyOperator
-            deser._read_nbytes(20),                     # KeyIdVoting
-            deser._read_le_uint16(),                    # operatorReward
-            deser._read_varbytes(),                     # scriptPayout
-            deser._read_nbytes(32),                     # inputsHash
-            deser._read_varbytes()                      # payloadSig
+            version=deser._read_le_uint16(),
+            type=deser._read_le_uint16(),
+            mode=deser._read_le_uint16(),
+            collateralOutpoint=deser._read_outpoint(),
+            ipAddress=deser._read_nbytes(16),
+            port=deser._read_be_uint16(),
+            KeyIdOwner=deser._read_nbytes(20),
+            PubKeyOperator=deser._read_nbytes(48),
+            KeyIdVoting=deser._read_nbytes(20),
+            operatorReward=deser._read_le_uint16(),
+            scriptPayout=deser._read_varbytes(),
+            inputsHash=deser._read_nbytes(32),
+            payloadSig=deser._read_varbytes(),
         )
 
 
-class AxeProUpServTx(namedtuple("AxeProUpServTx",
-                                "version proTxHash ipAddress port "
-                                "scriptOperatorPayout inputsHash "
-                                "payloadSig")):
+@dataclass(kw_only=True, slots=True)
+class AxeProUpServTx:
     '''Class representing DIP3 ProUpServTx'''
+    version: int
+    proTxHash: bytes
+    ipAddress: bytes
+    port: int
+    scriptOperatorPayout: bytes
+    inputsHash: bytes
+    payloadSig: bytes
+
     def serialize(self):
         assert (len(self.proTxHash) == 32
                 and len(self.ipAddress) == 16
@@ -139,21 +159,28 @@ class AxeProUpServTx(namedtuple("AxeProUpServTx",
     @classmethod
     def read_tx_extra(cls, deser):
         return AxeProUpServTx(
-            deser._read_le_uint16(),                    # version
-            deser._read_nbytes(32),                     # proTxHash
-            deser._read_nbytes(16),                     # ipAddress
-            deser._read_be_uint16(),                    # port
-            deser._read_varbytes(),                     # scriptOperatorPayout
-            deser._read_nbytes(32),                     # inputsHash
-            deser._read_nbytes(96)                      # payloadSig
+            version=deser._read_le_uint16(),
+            proTxHash=deser._read_nbytes(32),
+            ipAddress=deser._read_nbytes(16),
+            port=deser._read_be_uint16(),
+            scriptOperatorPayout=deser._read_varbytes(),
+            inputsHash=deser._read_nbytes(32),
+            payloadSig=deser._read_nbytes(96),
         )
 
 
-class AxeProUpRegTx(namedtuple("AxeProUpRegTx",
-                               "version proTxHash mode PubKeyOperator "
-                               "KeyIdVoting scriptPayout inputsHash "
-                               "payloadSig")):
+@dataclass(kw_only=True, slots=True)
+class AxeProUpRegTx:
     '''Class representing DIP3 ProUpRegTx'''
+    version: int
+    proTxHash: bytes
+    mode: int
+    PubKeyOperator: bytes
+    KeyIdVoting: bytes
+    scriptPayout: bytes
+    inputsHash: bytes
+    payloadSig: bytes
+
     def serialize(self):
         assert (len(self.proTxHash) == 32
                 and len(self.PubKeyOperator) == 48
@@ -173,21 +200,26 @@ class AxeProUpRegTx(namedtuple("AxeProUpRegTx",
     @classmethod
     def read_tx_extra(cls, deser):
         return AxeProUpRegTx(
-            deser._read_le_uint16(),                    # version
-            deser._read_nbytes(32),                     # proTxHash
-            deser._read_le_uint16(),                    # mode
-            deser._read_nbytes(48),                     # PubKeyOperator
-            deser._read_nbytes(20),                     # KeyIdVoting
-            deser._read_varbytes(),                     # scriptPayout
-            deser._read_nbytes(32),                     # inputsHash
-            deser._read_varbytes()                      # payloadSig
+            version=deser._read_le_uint16(),
+            proTxHash=deser._read_nbytes(32),
+            mode=deser._read_le_uint16(),
+            PubKeyOperator=deser._read_nbytes(48),
+            KeyIdVoting=deser._read_nbytes(20),
+            scriptPayout=deser._read_varbytes(),
+            inputsHash=deser._read_nbytes(32),
+            payloadSig=deser._read_varbytes(),
         )
 
 
-class AxeProUpRevTx(namedtuple("AxeProUpRevTx",
-                               "version proTxHash reason "
-                               "inputsHash payloadSig")):
+@dataclass(kw_only=True, slots=True)
+class AxeProUpRevTx:
     '''Class representing DIP3 ProUpRevTx'''
+    version: int
+    proTxHash: bytes
+    reason: int
+    inputsHash: bytes
+    payloadSig: bytes
+
     def serialize(self):
         assert (len(self.proTxHash) == 32
                 and len(self.inputsHash) == 32
@@ -203,17 +235,22 @@ class AxeProUpRevTx(namedtuple("AxeProUpRevTx",
     @classmethod
     def read_tx_extra(cls, deser):
         return AxeProUpRevTx(
-            deser._read_le_uint16(),                    # version
-            deser._read_nbytes(32),                     # proTxHash
-            deser._read_le_uint16(),                    # reason
-            deser._read_nbytes(32),                     # inputsHash
-            deser._read_nbytes(96)                      # payloadSig
+            version=deser._read_le_uint16(),
+            proTxHash=deser._read_nbytes(32),
+            reason=deser._read_le_uint16(),
+            inputsHash=deser._read_nbytes(32),
+            payloadSig=deser._read_nbytes(96),
         )
 
 
-class AxeCbTx(namedtuple("AxeCbTx", "version height merkleRootMNList "
-                                    "merkleRootQuorums")):
+@dataclass(kw_only=True, slots=True)
+class AxeCbTx:
     '''Class representing DIP4 coinbase special tx'''
+    version: int
+    height: int
+    merkleRootMNList: bytes
+    merkleRootQuorums: bytes
+
     def serialize(self):
         assert len(self.merkleRootMNList) == 32
         res = (
@@ -234,12 +271,22 @@ class AxeCbTx(namedtuple("AxeCbTx", "version height merkleRootMNList "
         merkleRootQuorums = b''
         if version > 1:
             merkleRootQuorums = deser._read_nbytes(32)
-        return AxeCbTx(version, height, merkleRootMNList, merkleRootQuorums)
+        return AxeCbTx(
+            version=version,
+            height=height,
+            merkleRootMNList=merkleRootMNList,
+            merkleRootQuorums=merkleRootQuorums,
+        )
 
 
-class AxeSubTxRegister(namedtuple("AxeSubTxRegister",
-                                  "version userName pubKey payloadSig")):
+@dataclass(kw_only=True, slots=True)
+class AxeSubTxRegister:
     '''Class representing DIP5 SubTxRegister'''
+    version: int
+    userName: bytes
+    pubKey: bytes
+    payloadSig: bytes
+
     def serialize(self):
         assert (len(self.pubKey) == 48
                 and len(self.payloadSig) == 96)
@@ -253,16 +300,19 @@ class AxeSubTxRegister(namedtuple("AxeSubTxRegister",
     @classmethod
     def read_tx_extra(cls, deser):
         return AxeSubTxRegister(
-            deser._read_le_uint16(),                    # version
-            deser._read_varbytes(),                     # userName
-            deser._read_nbytes(48),                     # pubKey
-            deser._read_nbytes(96)                      # payloadSig
+            version=deser._read_le_uint16(),
+            userName=deser._read_varbytes(),
+            pubKey=deser._read_nbytes(48),
+            payloadSig=deser._read_nbytes(96),
         )
 
 
-class AxeSubTxTopup(namedtuple("AxeSubTxTopup",
-                               "version regTxHash")):
+@dataclass(kw_only=True, slots=True)
+class AxeSubTxTopup:
     '''Class representing DIP5 SubTxTopup'''
+    version: int
+    regTxHash: bytes
+
     def serialize(self):
         assert len(self.regTxHash) == 32
         return (
@@ -273,15 +323,21 @@ class AxeSubTxTopup(namedtuple("AxeSubTxTopup",
     @classmethod
     def read_tx_extra(cls, deser):
         return AxeSubTxTopup(
-            deser._read_le_uint16(),                    # version
-            deser._read_nbytes(32)                      # regTxHash
+            version=deser._read_le_uint16(),
+            regTxHash=deser._read_nbytes(32),
         )
 
 
-class AxeSubTxResetKey(namedtuple("AxeSubTxResetKey",
-                                  "version regTxHash hashPrevSubTx "
-                                  "creditFee newPubKey payloadSig")):
+@dataclass(kw_only=True, slots=True)
+class AxeSubTxResetKey:
     '''Class representing DIP5 SubTxResetKey'''
+    version: int
+    regTxHash: bytes
+    hashPrevSubTx: bytes
+    creditFee: int
+    newPubKey: bytes
+    payloadSig: bytes
+
     def serialize(self):
         assert (len(self.regTxHash) == 32
                 and len(self.hashPrevSubTx) == 32
@@ -299,19 +355,24 @@ class AxeSubTxResetKey(namedtuple("AxeSubTxResetKey",
     @classmethod
     def read_tx_extra(cls, deser):
         return AxeSubTxResetKey(
-            deser._read_le_uint16(),                    # version
-            deser._read_nbytes(32),                     # regTxHash
-            deser._read_nbytes(32),                     # hashPrevSubTx
-            deser._read_le_int64(),                     # creditFee
-            deser._read_nbytes(48),                     # newPubKey
-            deser._read_nbytes(96)                      # payloadSig
+            version=deser._read_le_uint16(),
+            regTxHash=deser._read_nbytes(32),
+            hashPrevSubTx=deser._read_nbytes(32),
+            creditFee=deser._read_le_int64(),
+            newPubKey=deser._read_nbytes(48),
+            payloadSig=deser._read_nbytes(96),
         )
 
 
-class AxeSubTxCloseAccount(namedtuple("AxeSubTxCloseAccount",
-                                      "version regTxHash hashPrevSubTx "
-                                      "creditFee payloadSig")):
+@dataclass(kw_only=True, slots=True)
+class AxeSubTxCloseAccount:
     '''Class representing DIP5 SubTxCloseAccount'''
+    version: int
+    regTxHash: bytes
+    hashPrevSubTx: bytes
+    creditFee: int
+    payloadSig: bytes
+
     def serialize(self):
         assert (len(self.regTxHash) == 32
                 and len(self.hashPrevSubTx) == 32
@@ -327,17 +388,21 @@ class AxeSubTxCloseAccount(namedtuple("AxeSubTxCloseAccount",
     @classmethod
     def read_tx_extra(cls, deser):
         return AxeSubTxCloseAccount(
-            deser._read_le_uint16(),                    # version
-            deser._read_nbytes(32),                     # regTxHash
-            deser._read_nbytes(32),                     # hashPrevSubTx
-            deser._read_le_int64(),                     # creditFee
-            deser._read_nbytes(96)                      # payloadSig
+            version=deser._read_le_uint16(),
+            regTxHash=deser._read_nbytes(32),
+            hashPrevSubTx=deser._read_nbytes(32),
+            creditFee=deser._read_le_int64(),
+            payloadSig=deser._read_nbytes(96),
         )
 
 
 # https://dash-docs.github.io/en/developer-reference#outpoint
-class TxOutPoint(namedtuple("TxOutPoint", "hash index")):
+@dataclass(kw_only=True, slots=True)
+class TxOutPoint:
     '''Class representing tx output outpoint'''
+    hash: bytes
+    index: int
+
     def serialize(self):
         assert len(self.hash) == 32
         return (
@@ -348,8 +413,8 @@ class TxOutPoint(namedtuple("TxOutPoint", "hash index")):
     @classmethod
     def read_outpoint(cls, deser):
         return TxOutPoint(
-            deser._read_nbytes(32),                     # hash
-            deser._read_le_uint32()                     # index
+            hash=deser._read_nbytes(32),
+            index=deser._read_le_uint32(),
         )
 
 
@@ -382,6 +447,7 @@ class DeserializerAxe(Deserializer):
         return TxOutPoint.read_outpoint(self)
 
     def read_tx(self):
+        start = self.cursor
         header = self._read_le_uint32()
         tx_type = header >> 16  # DIP2 tx type
         if tx_type:
@@ -409,5 +475,15 @@ class DeserializerAxe(Deserializer):
             assert self.cursor == end
         else:
             extra_payload = b''
-        tx = AxeTx(version, inputs, outputs, locktime, tx_type, extra_payload)
+        txid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        tx = AxeTx(
+            version=version,
+            inputs=inputs,
+            outputs=outputs,
+            locktime=locktime,
+            tx_type=tx_type,
+            extra_payload=extra_payload,
+            txid=txid,
+            wtxid=txid,
+        )
         return tx

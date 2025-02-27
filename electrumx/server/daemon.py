@@ -240,7 +240,7 @@ class Daemon:
             self.available_rpcs[method] = available
         return available
 
-    async def block_hex_hashes(self, first, count):
+    async def block_hex_hashes(self, first, count) -> Sequence[str]:
         '''Return the hex hashes of count block starting at height first.'''
         params_iterable = ((h, ) for h in range(first, first + count))
         return await self._send_vector('getblockhash', params_iterable)
@@ -249,7 +249,7 @@ class Daemon:
         '''Return the deserialised block with the given hex hash.'''
         return await self._send_single('getblock', (hex_hash, True))
 
-    async def raw_blocks(self, hex_hashes):
+    async def raw_blocks(self, hex_hashes: Sequence[str]) -> Sequence[bytes]:
         '''Return the raw binary blocks with the given hex hashes.'''
         params_iterable = ((h, False) for h in hex_hashes)
         blocks = await self._send_vector('getblock', params_iterable)

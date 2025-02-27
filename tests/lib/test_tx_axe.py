@@ -394,7 +394,7 @@ def test_axe_tx_serialize_wrong_tx_type():
     deser = lib_tx_axe.DeserializerAxe(test)
     tx = deser.read_tx()
     assert tx.tx_type == 5
-    tx = tx._replace(tx_type=4)
+    tx.tx_type = 4
     assert tx.tx_type == 4
     with pytest.raises(ValueError) as excinfo:
         ser = tx.serialize()

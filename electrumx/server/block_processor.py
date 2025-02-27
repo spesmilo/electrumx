@@ -27,7 +27,7 @@ from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
 from electrumx.server.history import TXNUM_LEN
 
 if TYPE_CHECKING:
-    from electrumx.lib.coins import Coin
+    from electrumx.lib.coins import Coin, Block
     from electrumx.server.env import Env
     from electrumx.server.controller import Notifications
 
@@ -47,7 +47,7 @@ class Prefetcher:
         self.daemon = daemon
         self.coin = coin
         self.blocks_event = blocks_event
-        self.blocks = []
+        self.blocks = []  # type: List[bytes]
         self.caught_up = False
         # Access to fetched_height should be protected by the semaphore
         self.fetched_height = None
@@ -78,7 +78,7 @@ class Prefetcher:
             except Exception:
                 self.logger.exception(f'ignoring unexpected exception')
 
-    def get_prefetched_blocks(self):
+    def get_prefetched_blocks(self) -> Sequence[bytes]:
         '''Called by block processor when it is processing queued blocks.'''
         blocks = self.blocks
         self.blocks = []
@@ -221,7 +221,7 @@ class BlockProcessor:
                 return await run_in_thread(func, *args)
         return await asyncio.shield(run_in_thread_locked())
 
-    async def check_and_advance_blocks(self, raw_blocks):
+    async def check_and_advance_blocks(self, raw_blocks: Sequence[bytes]) -> None:
         '''Process the list of raw blocks passed.  Detects and handles
         reorgs.
         '''
@@ -403,7 +403,7 @@ class BlockProcessor:
             return utxo_MB >= cache_MB * 4 // 5
         return None
 
-    def advance_blocks(self, blocks):
+    def advance_blocks(self, blocks: Sequence['Block']):
         '''Synchronously advance the blocks.
 
         It is already verified they correctly connect onto our tip.
@@ -430,10 +430,10 @@ class BlockProcessor:
 
     def advance_txs(
             self,
-            txs: Sequence[Tuple[Tx, bytes]],
+            txs: Sequence[Tx],
             is_unspendable: Callable[[bytes], bool],
     ) -> Sequence[bytes]:
-        self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
+        self.tx_hashes.append(b''.join(tx.txid for tx in txs))
 
         # Use local vars for speed in the loops
         undo_info = []
@@ -448,7 +448,8 @@ class BlockProcessor:
         to_le_uint32 = pack_le_uint32
         to_le_uint64 = pack_le_uint64
 
-        for tx, tx_hash in txs:
+        for tx in txs:
+            tx_hash = tx.txid
             hashXs = []
             append_hashX = hashXs.append
             tx_numb = to_le_uint64(tx_num)[:TXNUM_LEN]
@@ -515,7 +516,7 @@ class BlockProcessor:
 
     def backup_txs(
             self,
-            txs: Sequence[Tuple[Tx, bytes]],
+            txs: Sequence[Tx],
             is_unspendable: Callable[[bytes], bool],
     ):
         # Prevout values, in order down the block (coinbase first if present)
@@ -532,7 +533,8 @@ class BlockProcessor:
         touched = self.touched
         undo_entry_len = HASHX_LEN + TXNUM_LEN + 8
 
-        for tx, tx_hash in reversed(txs):
+        for tx in reversed(txs):
+            tx_hash = tx.txid
             for idx, txout in enumerate(tx.outputs):
                 # Spend the TX outputs.  Be careful with unspendable
                 # outputs - we didn't save those in the first place.
@@ -772,7 +774,7 @@ class NameIndexBlockProcessor(BlockProcessor):
 class LTORBlockProcessor(BlockProcessor):
 
     def advance_txs(self, txs, is_unspendable):
-        self.tx_hashes.append(b''.join(tx_hash for tx, tx_hash in txs))
+        self.tx_hashes.append(b''.join(tx.txid for tx in txs))
 
         # Use local vars for speed in the loops
         undo_info = []

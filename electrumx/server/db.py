@@ -35,9 +35,8 @@ if TYPE_CHECKING:
     from electrumx.server.env import Env
 
 
-@dataclass(order=True)
+@dataclass(slots=True, order=True)
 class UTXO:
-    __slots__ = 'tx_num', 'tx_pos', 'tx_hash', 'height', 'value'
     tx_num: int      # index of tx in chain order
     tx_pos: int      # tx output idx
     tx_hash: bytes   # txid
@@ -50,7 +49,7 @@ class FlushData:
     height = attr.ib()
     tx_count = attr.ib()
     headers = attr.ib()
-    block_tx_hashes = attr.ib()
+    block_tx_hashes = attr.ib()  # type: List[bytes]
     # The following are flushed to the UTXO DB if undo_infos is not None
     undo_infos = attr.ib()  # type: List[Tuple[Sequence[bytes], int]]
     adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats

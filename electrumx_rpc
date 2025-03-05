@@ -42,6 +42,22 @@ other_commands = {
             'help': 'e.g. "a.domain.name s995 t"',
         },
     ),
+    'add_user': (
+        'add a private user',
+        [], {
+            'type': str,
+            'dest': 'pubkey',
+            'help': 'public key"',
+        },
+    ),
+    'rm_user': (
+        'remove a private user',
+        [], {
+            'type': str,
+            'dest': 'pubkey',
+            'help': 'public key"',
+        },
+    ),
     'daemon_url': (
         "replace the daemon's URL at run-time, and forecefully rotate "
         " to the first URL in the list",

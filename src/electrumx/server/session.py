@@ -170,8 +170,10 @@ class SessionManager:
         self._reorg_count = 0
         self._history_cache = LRUCache(maxsize=1000)
         self._txids_cache = LRUCache(maxsize=1000)
+        self._wtxids_cache = LRUCache(maxsize=1000)
         # Really a MerkleCache cache
         self._merkle_txid_cache = LRUCache(maxsize=1000)
+        self._merkle_wtxid_cache = LRUCache(maxsize=1000)
         self.estimatefee_cache = LRUCache(maxsize=1000)
         self.notified_height = None
         self.hsub_results = None
@@ -309,7 +311,9 @@ class SessionManager:
             self._reorg_count += 1
             # not: history_cache is cleared in _notify_sessions
             self._txids_cache.clear()
+            self._wtxids_cache.clear()
             self._merkle_txid_cache.clear()
+            self._merkle_wtxid_cache.clear()
 
     async def _recalc_concurrency(self):
         '''Periodically recalculate session concurrency.'''
@@ -350,6 +354,7 @@ class SessionManager:
             'groups': len(self.session_groups),
             'history cache': cache_fmt(self._history_cache),
             'merkle txid cache': cache_fmt(self._merkle_txid_cache),
+            'merkle wtxid cache': cache_fmt(self._merkle_wtxid_cache),
             'pid': os.getpid(),
             'peers': self.peer_mgr.info(),
             'request counts': self._method_counts,
@@ -366,6 +371,7 @@ class SessionManager:
                 'subs_txo': sum(s.sub_count_txoutpoints() for s in sessions),
             },
             'txids cache': cache_fmt(self._txids_cache),
+            'wtxids cache': cache_fmt(self._wtxids_cache),
             'txs sent': self.txs_sent,
             'uptime': util.formatted_time(time.time() - self.start_time),
             'version': electrumx.version,
@@ -726,22 +732,39 @@ class SessionManager:
             return 0
         return sum((group.cost() - session.cost) * group.weight for group in groups)
 
-    async def _merkle_branch(self, height, tx_hashes, tx_pos):
+    async def getrawtransaction(self, tx_hash: bytes, *, verbose: bool = False) -> str:
+        tx_hash_hex = hash_to_hex_str(tx_hash)
+        blockhash = None
+        if not self.env.daemon_has_txindex:
+            height, tx_pos = await self.db.get_blockheight_and_txpos_for_txhash(tx_hash)
+            if height is not None:
+                block_header = await self.db.raw_header(height)
+                blockhash = self.env.coin.header_hash(block_header).hex()
+
+        return await self.daemon_request('getrawtransaction', tx_hash_hex, verbose, blockhash)
+
+    async def _merkle_branch(
+            self, height: int, tx_hashes: Sequence[bytes], tx_pos: int, wtxid: bool = False,
+    ) -> Tuple[Sequence[str], float]:
+        mccache = self._merkle_wtxid_cache if wtxid else self._merkle_txid_cache
         tx_hash_count = len(tx_hashes)
         cost = tx_hash_count
+        if wtxid:
+            tx_hashes = list(tx_hashes)
+            tx_hashes[0] = bytes(32)  # The wtxid of coinbase tx is assumed to be 0x0000....0000
 
         if tx_hash_count >= 200:
-            self._merkle_txid_cache.num_lookups += 1
-            merkle_cache = self._merkle_txid_cache.get(height)
+            mccache.num_lookups += 1
+            merkle_cache = mccache.get(height)
             if merkle_cache:
-                self._merkle_txid_cache.num_hits += 1
+                mccache.num_hits += 1
                 cost = 10 * math.sqrt(tx_hash_count)
             else:
                 async def tx_hashes_func(start, count):
                     return tx_hashes[start: start + count]
 
                 merkle_cache = MerkleCache(self.db.merkle, tx_hashes_func)
-                self._merkle_txid_cache[height] = merkle_cache
+                mccache[height] = merkle_cache
                 await merkle_cache.initialize(len(tx_hashes))
             branch, _root = await merkle_cache.branch_and_root(tx_hash_count, tx_pos)
         else:
@@ -751,38 +774,25 @@ class SessionManager:
         return branch, cost / 2500
 
     async def merkle_branch_for_tx_hash(
-            self, *, tx_hash: bytes, height: int = None,
-    ) -> Tuple[int, Sequence[str], int, bytes, float]:
-        '''Returns (height, branch, tx_pos, block_header, cost).'''
-        cost = 0
-        tx_pos = None
-        if height is None:
-            cost += 0.1
-            height, tx_pos = await self.db.get_blockheight_and_txpos_for_txhash(tx_hash)
+            self, *, tx_hash: bytes, witness: bool,
+    ) -> Tuple[int, Optional[bytes], Sequence[str], int, bytes, float]:
+        '''Returns (height, wtxid, branch, tx_pos, block_header, cost).'''
+        cost = 0.1
+        height, tx_pos = await self.db.get_blockheight_and_txpos_for_txhash(tx_hash)
         if height is None:
             raise RPCError(BAD_REQUEST,
                            f'tx {hash_to_hex_str(tx_hash)} not in any block')
+        assert tx_pos is not None
         block_header = await self.raw_header(height)
-        tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height)
-        if tx_pos is None:
-            try:
-                tx_pos = tx_hashes.index(tx_hash)
-            except ValueError:
-                raise RPCError(BAD_REQUEST,
-                               f'tx {hash_to_hex_str(tx_hash)} not in block at height {height:,d}')
-
-        def error_reorg():
+        tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height, wtxid=witness)
+        wtxid = tx_hashes[tx_pos] if witness else None
+        if block_header != await self.raw_header(height):
             # there was a reorg while processing the request... TODO maybe retry?
             raise RPCError(BAD_REQUEST,
                            f'tx {hash_to_hex_str(tx_hash)} was reorged while processing request')
-
-        if not (len(tx_hashes) > tx_pos and tx_hashes[tx_pos] == tx_hash):
-            error_reorg()
-        if block_header != await self.raw_header(height):
-            error_reorg()
-        branch, merkle_cost = await self._merkle_branch(height, tx_hashes, tx_pos)
+        branch, merkle_cost = await self._merkle_branch(height, tx_hashes, tx_pos, wtxid=witness)
         cost += tx_hashes_cost + merkle_cost
-        return height, branch, tx_pos, block_header, cost
+        return height, wtxid, branch, tx_pos, block_header, cost
 
     async def merkle_branch_for_tx_pos(self, height, tx_pos):
         '''Return a triple (branch, tx_hash_hex, cost).'''
@@ -795,29 +805,32 @@ class SessionManager:
         branch, merkle_cost = await self._merkle_branch(height, tx_hashes, tx_pos)
         return branch, hash_to_hex_str(tx_hash), tx_hashes_cost + merkle_cost
 
-    async def tx_hashes_at_blockheight(self, height):
+    async def tx_hashes_at_blockheight(
+            self, height, *, wtxid: bool = False,
+    ) -> Tuple[Sequence[bytes], float]:
         '''Returns a pair (tx_hashes, cost).
 
         tx_hashes is an ordered list of binary hashes, cost is an estimated cost of
         getting the hashes; cheaper if in-cache.  Raises RPCError.
         '''
-        self._txids_cache.num_lookups += 1
-        tx_hashes = self._txids_cache.get(height)
+        cache = self._wtxids_cache if wtxid else self._txids_cache
+        cache.num_lookups += 1
+        tx_hashes = cache.get(height)  # type: Sequence[bytes]
         if tx_hashes:
-            self._txids_cache.num_hits += 1
+            cache.num_hits += 1
             return tx_hashes, 0.1
 
         # Ensure the tx_hashes are fresh before placing in the cache
         while True:
             reorg_count = self._reorg_count
             try:
-                tx_hashes = await self.db.tx_hashes_at_blockheight(height)
+                tx_hashes = await self.db.tx_hashes_at_blockheight(height, wtxid=wtxid)
             except self.db.DBError as e:
                 raise RPCError(BAD_REQUEST, f'db error: {e!r}')
             if reorg_count == self._reorg_count:
                 break
 
-        self._txids_cache[height] = tx_hashes
+        cache[height] = tx_hashes
 
         return tx_hashes, 0.25 + len(tx_hashes) * 0.0001
 
@@ -1849,28 +1862,18 @@ class ElectrumX(SessionBase):
             response['errors'] = errors
         return response
 
-    async def transaction_get(self, tx_hash, verbose=False):
+    async def transaction_get(self, tx_hash: str, verbose=False):
         '''Return the serialized raw transaction given its hash
 
         tx_hash: the transaction hash as a hexadecimal string
         verbose: passed on to the daemon
         '''
-        tx_hash_bytes = assert_tx_hash(tx_hash)
-        tx_hash_hex = tx_hash
-        del tx_hash
+        tx_hash = assert_tx_hash(tx_hash)
         if verbose not in (True, False):
             raise RPCError(BAD_REQUEST, '"verbose" must be a boolean')
 
         self.bump_cost(1.0)
-
-        blockhash = None
-        if not self.env.daemon_has_txindex:
-            height, tx_pos = await self.db.get_blockheight_and_txpos_for_txhash(tx_hash_bytes)
-            if height is not None:
-                block_header = await self.db.raw_header(height)
-                blockhash = self.coin.header_hash(block_header).hex()
-
-        return await self.daemon_request('getrawtransaction', tx_hash_hex, verbose, blockhash)
+        return await self.session_mgr.getrawtransaction(tx_hash, verbose=verbose)
 
     async def transaction_merkle(self, tx_hash, height=None):
         '''Return the merkle branch to a confirmed transaction given its hash
@@ -1881,10 +1884,11 @@ class ElectrumX(SessionBase):
         '''
         tx_hash = assert_tx_hash(tx_hash)
         if height is not None:
-            height = non_negative_integer(height)
+            height = non_negative_integer(height)  # unused
 
-        height, branch, tx_pos, block_header, cost = await self.session_mgr.merkle_branch_for_tx_hash(
-            tx_hash=tx_hash, height=height)
+        (height, wtxid, branch, tx_pos, block_header, cost) = (
+            await self.session_mgr.merkle_branch_for_tx_hash(
+                tx_hash=tx_hash, witness=False))
         self.bump_cost(cost)
         blockhash = self.coin.header_hash(block_header).hex()
 
@@ -1895,6 +1899,59 @@ class ElectrumX(SessionBase):
             "merkle": branch,
             "pos": tx_pos,
         }
+
+    async def transaction_merkle_witness(self, tx_hash: str, height=None, cb=False):
+        '''Return the witness merkle branch to a confirmed transaction given its hash
+        and height.
+
+        tx_hash: the transaction hash as a hexadecimal string
+        height: the height of the block it is in
+        cb: whether to include `cb_tx` and `cb_proof` in response
+        '''
+        tx_hash = assert_tx_hash(tx_hash)
+        if height is not None:
+            height = non_negative_integer(height)  # unused
+
+        (height, wtxid, wbranch, tx_pos, block_header, cost) = (
+            await self.session_mgr.merkle_branch_for_tx_hash(
+                tx_hash=tx_hash, witness=True))
+        self.bump_cost(cost)
+        blockhash = self.coin.header_hash(block_header).hex()
+        assert isinstance(wtxid, bytes) and len(wtxid) == 32
+        wtxid_hex = hash_to_hex_str(wtxid)
+        assert height is not None
+
+        ret = {
+            "block_height": height,
+            "block_hash": blockhash,
+            "wmerkle": wbranch,
+            "pos": tx_pos,
+            "wtxid": wtxid_hex,
+        }
+        if not cb:
+            return ret
+
+        # add coinbase proof
+        tx_hashes, cost = await self.session_mgr.tx_hashes_at_blockheight(height)
+        self.bump_cost(cost)
+        cb_txid = tx_hashes[0]
+        cb_tx = await self.session_mgr.getrawtransaction(cb_txid)
+
+        (cb_height, cb_wtxid, cb_branch, cb_tx_pos, cb_block_header, cost) = (
+            await self.session_mgr.merkle_branch_for_tx_hash(
+                tx_hash=cb_txid, witness=False))
+        self.bump_cost(cost)
+
+        if block_header != cb_block_header:
+            # there was a reorg while processing the request... TODO maybe retry?
+            raise RPCError(BAD_REQUEST,
+                           f'tx {hash_to_hex_str(tx_hash)} was reorged while processing request')
+
+        ret.update({
+            "cb_tx": cb_tx,
+            "cb_proof": cb_branch,
+        })
+        return ret
 
     async def transaction_id_from_pos(self, height, tx_pos, merkle=False):
         '''Return the txid and optionally a merkle proof, given
@@ -1973,6 +2030,7 @@ class ElectrumX(SessionBase):
             handlers['blockchain.scriptpubkey.listunspent'] = self.scriptpubkey_listunspent
             handlers['blockchain.scriptpubkey.subscribe'] = self.scriptpubkey_subscribe
             handlers['blockchain.scriptpubkey.unsubscribe'] = self.scriptpubkey_unsubscribe
+            handlers['blockchain.transaction.get_merkle_witness'] = self.transaction_merkle_witness
             notif_handlers['server.ping'] = self.on_ping_notification
 
         self.request_handlers = handlers

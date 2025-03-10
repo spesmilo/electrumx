@@ -57,6 +57,10 @@ class Cache(collections.abc.MutableMapping):
         self.__data = dict()
         self.__currsize = 0
         self.__maxsize = maxsize
+        # these can be used externally to keep track of cache hit statistics:
+        # (proper internal bookkeeping w/o double-counting seems either expensive or complicated)
+        self.num_lookups = 0
+        self.num_hits = 0
 
     def __repr__(self):
         return "%s(%s, maxsize=%r, currsize=%r)" % (

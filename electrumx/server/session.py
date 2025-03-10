@@ -147,15 +147,9 @@ class SessionManager:
         self._method_counts = defaultdict(int)
         self._reorg_count = 0
         self._history_cache = LRUCache(maxsize=1000)
-        self._history_lookups = 0
-        self._history_hits = 0
-        self._tx_hashes_cache = LRUCache(maxsize=1000)
-        self._tx_hashes_lookups = 0
-        self._tx_hashes_hits = 0
+        self._txids_cache = LRUCache(maxsize=1000)
         # Really a MerkleCache cache
-        self._merkle_cache = LRUCache(maxsize=1000)
-        self._merkle_lookups = 0
-        self._merkle_hits = 0
+        self._merkle_txid_cache = LRUCache(maxsize=1000)
         self.estimatefee_cache = LRUCache(maxsize=1000)
         self.notified_height = None
         self.hsub_results = None
@@ -280,8 +274,9 @@ class SessionManager:
             await self.bp.backed_up_event.wait()
             self.logger.info(f'reorg signalled; clearing tx_hashes and merkle caches')
             self._reorg_count += 1
-            self._tx_hashes_cache.clear()
-            self._merkle_cache.clear()
+            # not: history_cache is cleared in _notify_sessions
+            self._txids_cache.clear()
+            self._merkle_txid_cache.clear()
 
     async def _recalc_concurrency(self):
         '''Periodically recalculate session concurrency.'''
@@ -311,7 +306,8 @@ class SessionManager:
 
     def _get_info(self):
         '''A summary of server state.'''
-        cache_fmt = '{:,d} lookups {:,d} hits {:,d} entries'
+        def cache_fmt(cache: LRUCache):
+            return f"{cache.num_lookups} lookups, {cache.num_hits} hits, {len(cache)} entries"
         sessions = self.sessions
         return {
             'coin': self.env.coin.__name__,
@@ -320,10 +316,8 @@ class SessionManager:
             'db height': self.db.db_height,
             'db_flush_count': self.db.history.flush_count,
             'groups': len(self.session_groups),
-            'history cache': cache_fmt.format(
-                self._history_lookups, self._history_hits, len(self._history_cache)),
-            'merkle cache': cache_fmt.format(
-                self._merkle_lookups, self._merkle_hits, len(self._merkle_cache)),
+            'history cache': cache_fmt(self._history_cache),
+            'merkle txid cache': cache_fmt(self._merkle_txid_cache),
             'pid': os.getpid(),
             'peers': self.peer_mgr.info(),
             'request counts': self._method_counts,
@@ -336,8 +330,7 @@ class SessionManager:
                 'pending requests': sum(s.unanswered_request_count() for s in sessions),
                 'subs': sum(s.sub_count() for s in sessions),
             },
-            'tx hashes cache': cache_fmt.format(
-                self._tx_hashes_lookups, self._tx_hashes_hits, len(self._tx_hashes_cache)),
+            'txids cache': cache_fmt(self._txids_cache),
             'txs sent': self.txs_sent,
             'uptime': util.formatted_time(time.time() - self.start_time),
             'version': electrumx.version,
@@ -695,17 +688,17 @@ class SessionManager:
         cost = tx_hash_count
 
         if tx_hash_count >= 200:
-            self._merkle_lookups += 1
-            merkle_cache = self._merkle_cache.get(height)
+            self._merkle_txid_cache.num_lookups += 1
+            merkle_cache = self._merkle_txid_cache.get(height)
             if merkle_cache:
-                self._merkle_hits += 1
+                self._merkle_txid_cache.num_hits += 1
                 cost = 10 * math.sqrt(tx_hash_count)
             else:
                 async def tx_hashes_func(start, count):
                     return tx_hashes[start: start + count]
 
                 merkle_cache = MerkleCache(self.db.merkle, tx_hashes_func)
-                self._merkle_cache[height] = merkle_cache
+                self._merkle_txid_cache[height] = merkle_cache
                 await merkle_cache.initialize(len(tx_hashes))
             branch, _root = await merkle_cache.branch_and_root(tx_hash_count, tx_pos)
         else:
@@ -742,10 +735,10 @@ class SessionManager:
         tx_hashes is an ordered list of binary hashes, cost is an estimated cost of
         getting the hashes; cheaper if in-cache.  Raises RPCError.
         '''
-        self._tx_hashes_lookups += 1
-        tx_hashes = self._tx_hashes_cache.get(height)
+        self._txids_cache.num_lookups += 1
+        tx_hashes = self._txids_cache.get(height)
         if tx_hashes:
-            self._tx_hashes_hits += 1
+            self._txids_cache.num_hits += 1
             return tx_hashes, 0.1
 
         # Ensure the tx_hashes are fresh before placing in the cache
@@ -758,7 +751,7 @@ class SessionManager:
             if reorg_count == self._reorg_count:
                 break
 
-        self._tx_hashes_cache[height] = tx_hashes
+        self._txids_cache[height] = tx_hashes
 
         return tx_hashes, 0.25 + len(tx_hashes) * 0.0001
 
@@ -799,10 +792,10 @@ class SessionManager:
         # as JSON.
         limit = self.env.max_send // 99
         cost = 0.1
-        self._history_lookups += 1
+        self._history_cache.num_lookups += 1
         try:
             result = self._history_cache[hashX]
-            self._history_hits += 1
+            self._history_cache.num_hits += 1
         except KeyError:
             result = await self.db.limited_history(hashX, limit=limit)
             cost += 0.1 + len(result) * 0.001

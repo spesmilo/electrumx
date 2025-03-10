@@ -27,6 +27,7 @@
 '''Merkle trees, branches, proofs and roots.'''
 
 from math import ceil, log
+from typing import Sequence, Optional, Callable, Tuple, Iterable, List, Awaitable
 
 from aiorpcx import Event
 
@@ -41,13 +42,13 @@ class Merkle:
     calculating the next merkle layer up the tree.
     '''
 
-    def __init__(self, hash_func=double_sha256):
+    def __init__(self, hash_func: Callable[[bytes], bytes] = double_sha256):
         self.hash_func = hash_func
 
-    def tree_depth(self, hash_count):
+    def tree_depth(self, hash_count: int) -> int:
         return self.branch_length(hash_count) + 1
 
-    def branch_length(self, hash_count):
+    def branch_length(self, hash_count: int) -> int:
         '''Return the length of a merkle branch given the number of hashes.'''
         if not isinstance(hash_count, int):
             raise TypeError('hash_count must be an integer')
@@ -55,7 +56,9 @@ class Merkle:
             raise ValueError('hash_count must be at least 1')
         return ceil(log(hash_count, 2))
 
-    def branch_and_root(self, hashes, index, length=None):
+    def branch_and_root(
+            self, hashes: Iterable[bytes], index: int, length: Optional[int] = None,
+    ) -> Tuple[List[bytes], bytes]:
         '''Return a (merkle branch, merkle_root) pair given hashes, and the
         index of one of those hashes.
         '''
@@ -86,12 +89,12 @@ class Merkle:
 
         return branch, hashes[0]
 
-    def root(self, hashes, length=None):
+    def root(self, hashes: Sequence[bytes], length: Optional[int] = None) -> bytes:
         '''Return the merkle root of a non-empty iterable of binary hashes.'''
         _branch, root = self.branch_and_root(hashes, 0, length)
         return root
 
-    def root_from_proof(self, hash, branch, index):
+    def root_from_proof(self, hash: bytes, branch: Iterable[bytes], index: int) -> bytes:
         '''Return the merkle root given a hash, a merkle branch to it, and
         its index in the hashes array.
 
@@ -115,7 +118,7 @@ class Merkle:
             raise ValueError('index out of range for branch')
         return hash
 
-    def level(self, hashes, depth_higher):
+    def level(self, hashes: Sequence[bytes], depth_higher: int) -> List[bytes]:
         '''Return a level of the merkle tree of hashes the given depth
         higher than the bottom row of the original tree.'''
         size = 1 << depth_higher
@@ -123,8 +126,9 @@ class Merkle:
         return [root(hashes[n: n + size], depth_higher)
                 for n in range(0, len(hashes), size)]
 
-    def branch_and_root_from_level(self, level, leaf_hashes, index,
-                                   depth_higher):
+    def branch_and_root_from_level(
+            self, level: List[bytes], leaf_hashes: Sequence[bytes], index: int, depth_higher: int,
+    ) -> Tuple[List[bytes], bytes]:
         '''Return a (merkle branch, merkle_root) pair when a merkle-tree has a
         level cached.
 
@@ -160,7 +164,11 @@ class Merkle:
 class MerkleCache:
     '''A cache to calculate merkle branches efficiently.'''
 
-    def __init__(self, merkle, source_func):
+    def __init__(
+            self,
+            merkle: 'Merkle',
+            source_func: Callable[[int, int], Awaitable[Sequence[bytes]]],
+    ):
         '''Initialise a cache hashes taken from source_func:
 
            async def source_func(index, count):
@@ -168,25 +176,25 @@ class MerkleCache:
         '''
         self.merkle = merkle
         self.source_func = source_func
-        self.length = 0
-        self.level = []
-        self.depth_higher = 0
+        self.length = 0  # type: int
+        self.level = []  # type: List[bytes]
+        self.depth_higher = 0  # type: int
         self.initialized = Event()
 
-    def _segment_length(self):
+    def _segment_length(self) -> int:
         return 1 << self.depth_higher
 
-    def _leaf_start(self, index):
+    def _leaf_start(self, index: int) -> int:
         '''Given a level's depth higher and a hash index, return the leaf
         index and leaf hash count needed to calculate a merkle branch.
         '''
         depth_higher = self.depth_higher
         return (index >> depth_higher) << depth_higher
 
-    def _level(self, hashes):
+    def _level(self, hashes: Sequence[bytes]) -> List[bytes]:
         return self.merkle.level(hashes, self.depth_higher)
 
-    async def _extend_to(self, length):
+    async def _extend_to(self, length: int) -> None:
         '''Extend the length of the cache if necessary.'''
         if length <= self.length:
             return
@@ -197,7 +205,7 @@ class MerkleCache:
         self.level[start >> self.depth_higher:] = self._level(hashes)
         self.length = length
 
-    async def _level_for(self, length):
+    async def _level_for(self, length: int) -> List[bytes]:
         '''Return a (level_length, final_hash) pair for a truncation
         of the hashes to the given length.'''
         if length == self.length:
@@ -209,14 +217,14 @@ class MerkleCache:
         level += self._level(hashes)
         return level
 
-    async def initialize(self, length):
+    async def initialize(self, length: int) -> None:
         '''Call to initialize the cache to a source of given length.'''
         self.length = length
         self.depth_higher = self.merkle.tree_depth(length) // 2
         self.level = self._level(await self.source_func(0, length))
         self.initialized.set()
 
-    def truncate(self, length):
+    def truncate(self, length: int) -> None:
         '''Truncate the cache so it covers no more than length underlying
         hashes.'''
         if not isinstance(length, int):
@@ -229,7 +237,7 @@ class MerkleCache:
         self.length = length
         self.level[length >> self.depth_higher:] = []
 
-    async def branch_and_root(self, length, index):
+    async def branch_and_root(self, length: int, index: int) -> Tuple[List[bytes], bytes]:
         '''Return a merkle branch and root.  Length is the number of
         hashes used to calculate the merkle root, index is the position
         of the hash to calculate the branch of.

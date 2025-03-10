@@ -17,6 +17,7 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from glob import glob
 from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING, Union
+from functools import partial
 
 import attr
 from aiorpcx import run_in_thread, sleep
@@ -54,6 +55,7 @@ class FlushData:
     headers = attr.ib()
     block_tx_hashes = attr.ib()  # type: List[bytes]
     undo_block_tx_hashes = attr.ib()  # type: List[bytes]
+    block_wtxids = attr.ib()  # type: List[bytes]
     undo_historical_spends = attr.ib()  # type: List[bytes]
     # The following are flushed to the UTXO DB if undo_infos is not None
     undo_infos = attr.ib()  # type: List[Tuple[Sequence[bytes], int]]
@@ -132,6 +134,8 @@ class DB:
         self.tx_counts_file = util.LogicalFile('meta/txcounts', 2, 2000000)
         # on-disk: 32 byte txids in chain order, allows (tx_num -> txid) map
         self.hashes_file = util.LogicalFile('meta/hashes', 4, 16000000)
+        # on-disk: 32 byte wtxids in chain order, allows (tx_num -> wtxid) map
+        self.wtxids_file = util.LogicalFile('meta/wtxids', 4, 16000000)
         if not self.coin.STATIC_BLOCK_HEADERS:
             self.headers_offsets_file = util.LogicalFile(
                 'meta/headers_offsets', 2, 16000000)
@@ -221,6 +225,7 @@ class DB:
         assert not flush_data.headers
         assert not flush_data.block_tx_hashes
         assert not flush_data.undo_block_tx_hashes
+        assert not flush_data.block_wtxids
         assert not flush_data.undo_historical_spends
         assert not flush_data.adds
         assert not flush_data.deletes
@@ -280,14 +285,20 @@ class DB:
         prior_tx_count = (self.tx_counts[self.fs_height]
                           if self.fs_height >= 0 else 0)
         assert len(flush_data.block_tx_hashes) == len(flush_data.headers)
+        assert len(flush_data.block_wtxids) == len(flush_data.headers)
         assert flush_data.height == self.fs_height + len(flush_data.headers)
         assert flush_data.tx_count == (self.tx_counts[-1] if self.tx_counts
                                        else 0)
         assert len(self.tx_counts) == flush_data.height + 1
+
         hashes = b''.join(flush_data.block_tx_hashes)
         flush_data.block_tx_hashes.clear()
         assert len(hashes) % 32 == 0
         assert len(hashes) // 32 == flush_data.tx_count - prior_tx_count
+
+        wtxids = b''.join(flush_data.block_wtxids)
+        flush_data.block_wtxids.clear()
+        assert len(wtxids) == len(hashes)
 
         # Write the headers, tx counts, and tx hashes
         start_time = time.monotonic()
@@ -302,6 +313,8 @@ class DB:
                                   self.tx_counts[height_start:].tobytes())
         offset = prior_tx_count * 32
         self.hashes_file.write(offset, hashes)
+        offset = prior_tx_count * 32
+        self.wtxids_file.write(offset, wtxids)
 
         self.fs_height = flush_data.height
         self.fs_tx_count = flush_data.tx_count
@@ -370,6 +383,7 @@ class DB:
         '''Like flush_dbs() but when backing up.  All UTXOs are flushed.'''
         assert not flush_data.headers
         assert not flush_data.block_tx_hashes
+        assert not flush_data.block_wtxids
         assert flush_data.height < self.db_height
         self.history.assert_flushed()
         assert len(flush_data.undo_block_tx_hashes) == self.db_height - flush_data.height
@@ -461,18 +475,19 @@ class DB:
 
         return await run_in_thread(read_headers)
 
-    def fs_tx_hash(self, tx_num: int) -> Tuple[Optional[bytes], int]:
+    def fs_tx_hash(self, tx_num: int, *, wtxid: bool = False) -> Tuple[Optional[bytes], int]:
         '''Return a pair (tx_hash, tx_height) for the given tx number.
 
         If the tx_height is not on disk, returns (None, tx_height).'''
+        file = self.wtxids_file if wtxid else self.hashes_file
         tx_height = bisect_right(self.tx_counts, tx_num)
         if tx_height > self.db_height:
             tx_hash = None
         else:
-            tx_hash = self.hashes_file.read(tx_num * 32, 32)
+            tx_hash = file.read(tx_num * 32, 32)
         return tx_hash, tx_height
 
-    def fs_tx_hashes_at_blockheight(self, block_height):
+    def fs_tx_hashes_at_blockheight(self, block_height, *, wtxid: bool = False) -> Sequence[bytes]:
         '''Return a list of tx_hashes at given block height,
         in the same order as in the block.
         '''
@@ -484,12 +499,16 @@ class DB:
         else:
             first_tx_num = 0
         num_txs_in_block = self.tx_counts[block_height] - first_tx_num
-        tx_hashes = self.hashes_file.read(first_tx_num * 32, num_txs_in_block * 32)
+        file = self.wtxids_file if wtxid else self.hashes_file
+        tx_hashes = file.read(first_tx_num * 32, num_txs_in_block * 32)
         assert num_txs_in_block == len(tx_hashes) // 32
         return [tx_hashes[idx * 32: (idx+1) * 32] for idx in range(num_txs_in_block)]
 
-    async def tx_hashes_at_blockheight(self, block_height):
-        return await run_in_thread(self.fs_tx_hashes_at_blockheight, block_height)
+    async def tx_hashes_at_blockheight(
+            self, block_height, *, wtxid: bool = False,
+    ) -> Sequence[bytes]:
+        func = partial(self.fs_tx_hashes_at_blockheight, block_height, wtxid=wtxid)
+        return await run_in_thread(func)
 
     async def fs_block_hashes(self, height, count):
         headers_concat, headers_count = await self.read_headers(height, count)

@@ -85,11 +85,11 @@ This above command will enter docker container with root account.
 Run below commands inside container root account in electrumx folder  /opt/electrumx
 
 ```
-   python3.7 electrumx_compact_history
+   python3.10 electrumx_compact_history
    exit
 ```
 
-The above python3.7 command should take a few minutes to complete and then exit container
+The above python3.10 command should take a few minutes to complete and then exit container
 
 
 #### (4) Delete the containers and re-start electrumx-chta container job

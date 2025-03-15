@@ -33,5 +33,5 @@ RUN mkdir -p /ssl
 WORKDIR  /opt/electrumx
 
 RUN pip3 install .
-CMD ["/usr/bin/python3", "/usr/local/bin/electrumx_server"]
+CMD ["/usr/bin/python3", "/opt/electrumx/electrumx_server"]
 

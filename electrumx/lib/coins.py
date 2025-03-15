@@ -4283,6 +4283,23 @@ class Clam(ScryptMixin, Coin):
     REORG_LIMIT = 2000
 
 
+class Cheetahcoin(Coin):
+     NAME = "Cheetahcoin"
+     SHORTNAME = "CHTA"
+     NET = "mainnet"
+     XPUB_VERBYTES = bytes.fromhex("0488B21E")
+     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
+     P2PKH_VERBYTE = bytes.fromhex("1c")
+     P2SH_VERBYTES = (bytes.fromhex("05"),)
+     WIF_BYTE = bytes.fromhex("80")
+     GENESIS_HASH = ('0000000090ae6bab6c2abd99179a7632'
+                     'b84f286f876def641dd35c3221eee7be')
+     TX_COUNT = 952551
+     TX_COUNT_HEIGHT = 802661
+     TX_PER_BLOCK = 2
+     REORG_LIMIT = 2000
+
+
 class Diabase(Dash):
     NAME = "Diabase"
     SHORTNAME = "DIAC"

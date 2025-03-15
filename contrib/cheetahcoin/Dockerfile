@@ -1,13 +1,13 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 WORKDIR /
 
 RUN apt-get update && \
-        apt-get -y install python3-setuptools python3-multidict python3.8 python3.8-dev libleveldb-dev python3-setuptools python3-multidict gcc g++ libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev build-essential python3-pip git
+        apt-get -y install python3-setuptools python3-multidict python3.10 python3.10-dev libleveldb-dev python3-setuptools python3-multidict gcc g++ libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev build-essential python3-pip git
 
-RUN python3.8 -m pip install --upgrade pip
-RUN python3.8 -m pip install aiohttp pylru Cython uvloop quark_hash
-RUN python3.8 -m pip install   plyvel
+RUN python3.10 -m pip install --upgrade pip
+RUN python3.10 -m pip install aiohttp pylru Cython uvloop quark_hash
+RUN python3.10 -m pip install plyvel
 RUN git clone https://github.com/ShorelineCrypto/electrumx-1 /opt/electrumx && cd /opt/electrumx && git checkout cheetahcoin
 
 ENV COIN=Cheetahcoin
@@ -34,6 +34,6 @@ RUN mkdir -p /ssl
 
 WORKDIR  /opt/electrumx
 
-RUN python3.8 setup.py install
-CMD ["/usr/bin/python3.8", "/opt/electrumx/electrumx_server"]
+RUN python3.10 setup.py install
+CMD ["/usr/bin/python3.10", "/opt/electrumx/electrumx_server"]
 

@@ -13,7 +13,7 @@ RUN git clone https://github.com/ShorelineCrypto/electrumx-1 /opt/electrumx && c
 ENV COIN=Cheetahcoin
 ENV DB_DIRECTORY=/db
 ENV DAEMON_URL="http://RPCUSER:RPCPASSWORD@IP:RPCPORT/"
-ENV SERVICES="tcp://:10007,rpc://0.0.0.0:8007,ssl://:10008"
+ENV SERVICES="tcp://:10007,rpc://0.0.0.0:8007,ssl://:10008,wss://:10009"
 ENV EVENT_LOOP_POLICY=uvloop
 ENV PEER_DISCOVERY=self
 ENV INITIAL_CONCURRENT=50

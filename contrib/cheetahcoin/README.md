@@ -1,19 +1,28 @@
 ## Install electrumx docker image for Cheetahcoin on x86_64 (amd64) or arm64 (aarch64) GNU/linux: 
-Build docker image with:
+
+Pull down a working docker image from docker hub:
+
+x64
+```
+  docker pull shorelinecrypto/electrumx-chta:amd64
+  docker tag shorelinecrypto/electrumx-chta:amd64 electrumx-chta:latest
+```
+
+Alternatively, build docker image from source:
 
 ```
   docker build -t electrumx-chta .
 ```
 
-## Run electrumx Cheetahcoin server with docker
+### Run electrumx Cheetahcoin server with docker
 
 Replace with your CHTA full node rpcuser/rpcpassword and your server hostname with below command, assuming the CHTA full node runs at rpcport=8546 :
 
 ```
-  docker run -d --net=host -v /opt/electrumx/db-CHTA/:/db -v /opt/electrumx/ssl:/ssl -e DAEMON_URL="http://youruser:yourpass@127.0.0.1:8546" -e REPORT_SERVICES=tcp://yourhost:10007,ssl://yourhost:10008 electrumx-chta
+  docker run -d --net=host -v /opt/electrumx/db-CHTA/:/db -v /opt/electrumx/ssl:/ssl -e DAEMON_URL="http://youruser:yourpass@127.0.0.1:8546" -e REPORT_SERVICES=tcp://yourhost:10007,ssl://yourhost:10008,wss://yourhost:10009 electrumx-chta
 ```
 
-## Trouble shoot or check docker container status
+### Trouble shoot or check docker container status
 
 Your docker run electrumx server job should be running, run below to obtain image / container ID
 

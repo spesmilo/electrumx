@@ -8,7 +8,7 @@ RUN apt-get update && \
 RUN python3.10 -m pip install --upgrade pip
 RUN python3.10 -m pip install aiohttp pylru Cython uvloop quark_hash
 RUN python3.10 -m pip install plyvel
-RUN git clone https://github.com/ShorelineCrypto/electrumx-1 /opt/electrumx && cd /opt/electrumx && git checkout cheetahcoin
+RUN git clone https://github.com/ShorelineCrypto/electrumx-1 /opt/electrumx
 
 ENV COIN=Cheetahcoin
 ENV DB_DIRECTORY=/db

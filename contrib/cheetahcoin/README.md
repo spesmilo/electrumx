@@ -7,7 +7,11 @@ x64
   docker pull shorelinecrypto/electrumx-chta:amd64
   docker tag shorelinecrypto/electrumx-chta:amd64 electrumx-chta:latest
 ```
-
+arm64
+```
+  docker pull shorelinecrypto/electrumx-chta:arm64
+  docker tag shorelinecrypto/electrumx-chta:arm64 electrumx-chta:latest
+```
 Alternatively, build docker image from source:
 
 ```

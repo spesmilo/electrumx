@@ -7,27 +7,27 @@ WORKDIR /usr/src/app
 
 # Install the libs needed by rocksdb (including development headers)
 RUN apt-get update \
-    && apt-get -y --no-install-recommends install \
-        librocksdb-dev libsnappy-dev libbz2-dev libz-dev liblz4-dev \
+    && apt-get -y --no-install-recommends install librocksdb-dev libsnappy-dev libbz2-dev libz-dev liblz4-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv venv \
-    && venv/bin/pip install --no-cache-dir e-x[rapidjson,rocksdb]==1.16.0
-
+    && venv/bin/pip install --no-cache-dir Cython==0.29.21 \
+    && venv/bin/pip install --no-cache-dir e-x==1.16.0 \
+    && venv/bin/pip install --no-cache-dir python-rapidjson==1.11 \
+    && venv/bin/pip install --no-cache-dir python-rocksdb==0.7.0
 
 FROM python:3.9.16-slim-bullseye
 
 # Install the libs needed by rocksdb (no development headers or statics)
 RUN apt-get update \
-    && apt-get -y --no-install-recommends install \
-        librocksdb6.11 libsnappy1v5 libbz2-1.0 zlib1g liblz4-1 \
+    && apt-get -y --no-install-recommends install librocksdb6.11 libsnappy1v5 libbz2-1.0 zlib1g liblz4-1 \
     && rm -rf /var/lib/apt/lists/*
 
-ENV SERVICES="tcp://:50001"
-ENV COIN=Bitcoin
-ENV DB_DIRECTORY=/var/lib/electrumx
-ENV DAEMON_URL="http://username:password@hostname:port/"
-ENV ALLOW_ROOT=true
+ENV HOME /data
+ENV DB_DIRECTORY=/data
+ENV SSL_CERTFILE ${DB_DIRECTORY}/electrumx.crt
+ENV SSL_KEYFILE ${DB_DIRECTORY}/electrumx.key
+ENV ALLOW_ROOT=1
 ENV DB_ENGINE=rocksdb
 ENV MAX_SEND=10000000
 ENV BANDWIDTH_UNIT_COST=50000
@@ -36,9 +36,12 @@ ENV CACHE_MB=2000
 WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app .
 
-VOLUME /var/lib/electrumx
-
 RUN mkdir -p "$DB_DIRECTORY" && ulimit -n 1048576
+
+VOLUME ["/data"]
+
+WORKDIR /data
+RUN openssl req -newkey rsa:2048 -sha256 -nodes -x509 -days 365 -subj "/O=ElectrumX" -keyout electrumx.key -out electrumx.crt
 
 CMD ["/usr/src/app/venv/bin/python", "/usr/src/app/venv/bin/electrumx_server"]
 

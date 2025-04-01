@@ -665,7 +665,7 @@ class DeserializerTxTimeSegWit(DeserializerTxTime):
         return self._read_tx_parts()[0]
 
     def read_tx_and_vsize(self):
-        tx, tx_hash, vsize = self._read_tx_parts()
+        tx, vsize = self._read_tx_parts()
         return tx, vsize
 
 
@@ -751,7 +751,7 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
         return self._read_tx_parts()[0]
 
     def read_tx_and_vsize(self):
-        tx, tx_hash, vsize = self._read_tx_parts()
+        tx, vsize = self._read_tx_parts()
         return tx, vsize
 
 

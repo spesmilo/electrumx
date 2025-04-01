@@ -147,8 +147,12 @@ class Deserializer:
         tx.wtxid = txid
         return tx
 
-    def read_tx_and_vsize(self):
-        '''Return a (deserialized TX, vsize) pair.'''
+    def read_tx_and_vsize(self) -> Tuple[Tx, int]:
+        '''Return a (deserialized TX, vsize) tuple.'''
+        return self._read_tx_parts()
+
+    def _read_tx_parts(self) -> Tuple[Tx, int]:
+        '''Return a (deserialized TX, vsize) tuple.'''
         return self.read_tx(), self.binary_length
 
     def read_tx_block(self) -> Sequence[Tx]:
@@ -298,10 +302,6 @@ class DeserializerSegWit(Deserializer):
 
     def read_tx(self):
         return self._read_tx_parts()[0]
-
-    def read_tx_and_vsize(self):
-        tx, vsize = self._read_tx_parts()
-        return tx, vsize
 
 
 class DeserializerLitecoin(DeserializerSegWit):
@@ -664,10 +664,6 @@ class DeserializerTxTimeSegWit(DeserializerTxTime):
     def read_tx(self):
         return self._read_tx_parts()[0]
 
-    def read_tx_and_vsize(self):
-        tx, vsize = self._read_tx_parts()
-        return tx, vsize
-
 
 class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
     def _read_witness(self, fields):
@@ -749,10 +745,6 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
 
     def read_tx(self):
         return self._read_tx_parts()[0]
-
-    def read_tx_and_vsize(self):
-        tx, vsize = self._read_tx_parts()
-        return tx, vsize
 
 
 @dataclass(kw_only=True, slots=True)
@@ -1067,10 +1059,6 @@ class DeserializerDecred(Deserializer):
 
     def read_tx(self):
         return self._read_tx_parts()[0]
-
-    def read_tx_and_vsize(self):
-        tx, vsize = self._read_tx_parts()
-        return tx, vsize
 
     def read_tx_block(self):
         read = self.read_tx

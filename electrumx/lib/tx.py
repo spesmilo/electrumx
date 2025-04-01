@@ -326,10 +326,9 @@ class DeserializerLitecoin(DeserializerSegWit):
     def _read_tx_parts(self):
         start = self.cursor
         marker = self.binary[self.cursor + 4]
-        if marker:
+        if marker:  # non-segwit
             tx = Deserializer.read_tx(self)
-            tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
-            return tx, tx_hash, self.binary_length
+            return tx, self.binary_length
 
         version = self._read_le_int32()
         orig_ser = self.binary[start:self.cursor]
@@ -621,10 +620,9 @@ class DeserializerTxTimeSegWit(DeserializerTxTime):
     def _read_tx_parts(self):
         start = self.cursor
         marker = self.binary[self.cursor + 8]
-        if marker:
+        if marker:  # non-segwit
             tx = DeserializerTxTime.read_tx(self)
-            tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
-            return tx, tx_hash, self.binary_length
+            return tx, self.binary_length
 
         version = self._read_le_int32()
         time = self._read_le_uint32()
@@ -704,10 +702,9 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
     def _read_tx_parts(self):
         start = self.cursor
         marker = self.binary[self.cursor + 8]
-        if marker:
+        if marker:  # non-segwit
             tx = self.read_tx_no_segwit()
-            tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
-            return tx, tx_hash, self.binary_length
+            return tx, self.binary_length
 
         version = self._read_le_int32()
         time = self._read_le_uint32()
@@ -1207,10 +1204,9 @@ class DeserializerBitcoinDiamondSegWit(DeserializerBitcoinDiamond,
         else:
             marker = self.binary[self.cursor + 4]
 
-        if marker:
+        if marker:  # non-segwit
             tx = DeserializerBitcoinDiamond.read_tx(self)
-            tx_hash = self.TX_HASH_FN(self.binary[start:self.cursor])
-            return tx, tx_hash, self.binary_length
+            return tx, self.binary_length
 
         # Ugh, this is nasty.
         version = self._read_le_int32()

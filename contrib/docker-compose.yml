@@ -1,0 +1,51 @@
+version: "3.7"
+
+services:
+
+  electrumx:
+    container_name: electrumx
+    #define $UID, $GID in .env file the user to run docker and write in data folder
+    #user: "$UID:$GID"
+    environment:
+      ## create a copy of ./dot.env.sample in new .env file
+      ## references: ../docs/environment.rst
+      #
+      #CACHE_MB: 2000
+      #COST_HARD_LIMIT: 10000
+      #COST_SOFT_LIMIT: 1000
+      #DAEMON_VERSION:
+      #DB_ENGINE: leveldb
+      #MAX_SEND: 1000000
+      #MAX_SESSIONS: 30000
+      #PEER_ANNOUNCE:
+      #REQUEST_TIMEOUT: 30
+      #SERVICES: "tcp://:50001,ssl://:50002,wss://:50004,rpc://0.0.0.0:8000"
+      #SSL_CERTFILE: /etc/ssl/certs/electrumx.crt
+      #SSL_KEYFILE: /etc/ssl/private/electrumx.key
+      ALLOW_ROOT: true
+      COIN: Bitcoin
+      #define $USERPASS in .env file
+      #define $DAEMON_HOST .env file, use 172.17.0.1 if bitcoincore in the same machine of docker
+      DAEMON_URL: "http://$USERPASS@$DAEMON_HOST:8332/"
+      DB_DIRECTORY: /var/lib/electrumx
+      DB_ENGINE: leveldb
+      LOG_LEVEL: debug
+      PEER_DISCOVERY: 'off'
+      SERVICES: "tcp://:50001"
+
+    build:
+      context: .
+      args:
+        VERSION: $VERSION
+      dockerfile: ./Dockerfile
+    image: electrumx:latest
+    restart: "no"
+    ports:
+      - "50001:50001"
+      - "50002:50002"
+      - "50004:50004"
+      - "8000:8000"
+    #volumes:
+      #define $DATA folder in .env file
+      #- $DATA:/var/lib/electrumx
+      #- ./ssl:/etc/ssl

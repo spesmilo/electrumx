@@ -265,7 +265,7 @@ class PeerManager:
 
             kwargs = {'family': family}
             if kind == 'SSL':
-                kwargs['ssl'] = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                kwargs['ssl'] = True
 
             if self.env.force_proxy or peer.is_tor:
                 if not self.proxy:
@@ -283,10 +283,19 @@ class PeerManager:
 
             peer_text = f'[{peer}:{port} {kind}]'
             try:
-                async with connect_rs(peer.host, port, session_factory=PeerSession,
-                                      **kwargs) as session:
-                    session.sent_request_timeout = 120 if peer.is_tor else 30
-                    await self._verify_peer(session, peer)
+                try:
+                    async with connect_rs(peer.host, port, session_factory=PeerSession,
+                                          **kwargs) as session:
+                        session.sent_request_timeout = 120 if peer.is_tor else 30
+                        await self._verify_peer(session, peer)
+                except ssl.SSLCertVerificationError as e:
+                    self.logger.warn(f'{peer.host} {e}')
+                    self.logger.warn(f'Please ask {peer.host} to properly configure with a CA such as letsencrypt.org')
+                    kwargs['ssl'] = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                    async with connect_rs(peer.host, port, session_factory=PeerSession,
+                                          **kwargs) as session:
+                        session.sent_request_timeout = 120 if peer.is_tor else 30
+                        await self._verify_peer(session, peer)
                 is_good = True
                 break
             except BadPeerError as e:

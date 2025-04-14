@@ -30,7 +30,7 @@ class Env(EnvBase):
     # Peer discovery
     PD_OFF, PD_SELF, PD_ON = ('OFF', 'SELF', 'ON')
     SSL_PROTOCOLS = {'ssl', 'wss'}
-    KNOWN_PROTOCOLS = {'ssl', 'tcp', 'ws', 'wss', 'rpc'}
+    KNOWN_PROTOCOLS = {'ssl', 'tcp', 'ws', 'wss', 'rpc', 'bolt8'}
 
     coin: Type[Coin]
 
@@ -43,6 +43,9 @@ class Env(EnvBase):
 
         # Core items
 
+        self.is_public = self.boolean('PUBLIC', False)
+        self.is_watchtower = self.boolean('WATCHTOWER', False)
+        assert not (self.is_public and self.is_watchtower)
         self.db_dir = self.required('DB_DIRECTORY')
         self.daemon_url = self.required('DAEMON_URL')
         if coin is not None:
@@ -54,7 +57,6 @@ class Env(EnvBase):
             self.coin = Coin.lookup_coin_class(coin_name, network)
 
         # Peer discovery
-
         self.peer_discovery = self.peer_discovery_enum()
         self.peer_announce = self.boolean('PEER_ANNOUNCE', True)
         self.force_proxy = self.boolean('FORCE_PROXY', False)
@@ -101,6 +103,8 @@ class Env(EnvBase):
         if {service.protocol for service in self.services}.intersection(self.SSL_PROTOCOLS):
             self.ssl_certfile = self.required('SSL_CERTFILE')
             self.ssl_keyfile = self.required('SSL_KEYFILE')
+        if any([service.protocol == 'bolt8' for service in self.services]):
+            self.bolt8_keyfile = self.required('BOLT8_KEYFILE')
         self.report_services = self.services_to_report()
 
     def sane_max_sessions(self):

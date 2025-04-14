@@ -158,9 +158,10 @@ class SessionManager:
         # Event triggered when electrumx is listening for incoming requests.
         self.server_listening = Event()
         self.session_event = Event()
+        self._authorized_users = self._read_users()
 
         # Set up the RPC request handlers
-        cmds = ('add_peer daemon_url disconnect getinfo groups log peers '
+        cmds = ('add_peer add_user rm_user daemon_url disconnect getinfo groups log peers '
                 'query reorg sessions stop debug_memusage_list_all_objects '
                 'debug_memusage_get_random_backref_chain'.split())
         LocalRPC.request_handlers = {cmd: getattr(self, 'rpc_' + cmd)
@@ -171,6 +172,57 @@ class SessionManager:
             self._sslc = ssl.SSLContext(ssl.PROTOCOL_TLS)
             self._sslc.load_cert_chain(self.env.ssl_certfile, keyfile=self.env.ssl_keyfile)
         return self._sslc
+
+    def _get_bolt8_server(self):
+        from electrum import ecc
+        from electrum import logging
+        from electrum.lntransport import create_bolt8_server
+        logging._configure_stderr_logging(verbosity='*')
+        path = os.path.join(self.env.bolt8_keyfile)
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                s = f.read()
+            self.bolt8_privkey = bytes.fromhex(s)
+        else:
+            self.bolt8_privkey = os.urandom(32)
+            with open(path, 'w') as f:
+                f.write(self.bolt8_privkey.hex())
+        self.bolt8_pubkey = ecc.ECPrivkey(self.bolt8_privkey).get_public_key_bytes()
+        self.logger.info(f'public server: {self.env.is_public}')
+        self.logger.info(f'bolt8 pubkey {self.bolt8_pubkey.hex()}')
+        whitelist = None if self.env.is_public else self._authorized_users
+        # allow self, for watchtower
+        if whitelist is not None:
+            whitelist.add(self.bolt8_pubkey)
+        return partial(create_bolt8_server, b'electrum', self.bolt8_privkey, whitelist)
+
+    def add_user(self, pubkey):
+        assert len(pubkey) == 33
+        self._authorized_users.add(pubkey)
+        self._save_users()
+
+    def rm_user(self, pubkey):
+        assert len(pubkey) == 33
+        self._authorized_users.remove(pubkey)
+        self._save_users()
+
+    def _save_users(self):
+        import json
+        path = os.path.join(self.env.db_dir, 'authorized_users')
+        s = json.dumps([x.hex() for x in sorted(self._authorized_users)])
+        with open(path, 'w') as f:
+            f.write(s)
+
+    def _read_users(self):
+        import json
+        path = os.path.join(self.env.db_dir, 'authorized_users')
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                _list = json.loads(f.read())
+                _set = set([bytes.fromhex(x) for x in _list])
+        else:
+            _set = set()
+        return _set
 
     async def _start_servers(self, services):
         for service in services:
@@ -185,6 +237,8 @@ class SessionManager:
                 session_class = self.env.coin.SESSIONCLS
             if service.protocol in ('ws', 'wss'):
                 serve = serve_ws
+            elif service.protocol in ('bolt8'):
+                serve = self._get_bolt8_server()
             else:
                 serve = serve_rs
             # FIXME: pass the service not the kind
@@ -427,6 +481,18 @@ class SessionManager:
         await self.peer_mgr.add_localRPC_peer(real_name)
         return f"peer '{real_name}' added"
 
+    async def rpc_add_user(self, pubkey):
+        '''Add a whitelisted user.
+        '''
+        self.add_user(bytes.fromhex(pubkey))
+        return f"user added"
+
+    async def rpc_rm_user(self, pubkey):
+        '''Remove a whitelisted user.
+        '''
+        self.rm_user(bytes.fromhex(pubkey))
+        return f"user removed"
+
     async def rpc_disconnect(self, session_ids):
         '''Disconnect sesssions.
 
@@ -620,6 +686,41 @@ class SessionManager:
                     output=fd))
             return fd.getvalue()
 
+    async def start_watchtower(self):
+        # FIXME: this creates a socket to self.
+        # We should create a Network object that taps directly into ElectrumX RPC
+        import electrum
+        for s in self.env.services:
+            if s.protocol == 'bolt8':
+                server_addr = 'localhost:%d:b:%s'%(s.port, self.bolt8_pubkey.hex())
+                break
+        else:
+            return
+        electrum.logging._configure_stderr_logging(verbosity='*')
+        electrum.util._asyncio_event_loop = asyncio.get_event_loop()
+        config = {
+            'server': server_addr,
+            'oneserver': True,
+        }
+        if self.env.coin.NET == 'regtest':
+            electrum.constants.set_regtest()
+            config['regtest'] = True
+        elif self.env.coin.NET == 'testnet':
+            electrum.constants.set_regtest()
+            config['testnet'] = True
+        config = electrum.simple_config.SimpleConfig(config)
+        config.set_bolt8_privkey_for_server(self.bolt8_pubkey.hex(), self.bolt8_privkey.hex())
+
+        self.network = electrum.network.Network(config)
+        self.network.start()
+        self.lnwatcher = electrum.lnwatcher.WatchTower(self.network)
+        self.lnwatcher.adb.start_network(self.network)
+        await self.lnwatcher.start_watching()
+
+    async def stop_watchtower(self):
+        await self.lnwatcher.stop()
+        await self.network.stop()
+
     # --- External Interface
 
     async def serve(self, notifications, event):
@@ -658,6 +759,10 @@ class SessionManager:
             # Start notifications; initialize hsub_results
             await notifications.start(self.db.db_height, self._notify_sessions)
             await self._start_external_servers()
+            # start watchtower
+            if self.env.is_watchtower:
+                self.logger.info('starting watchtower')
+                await self.start_watchtower()
             # Peer discovery should start after the external servers
             # because we connect to ourself
             async with self._task_group as group:
@@ -1427,6 +1532,12 @@ class ElectrumX(SessionBase):
 
         return electrumx.version, self.protocol_version_string()
 
+    async def watchtower_get_ctn(self, outpoint, addr):
+        return await self.session_mgr.lnwatcher.get_ctn(outpoint, addr)
+
+    async def watchtower_add_sweep_tx(self, *args):
+        return await self.session_mgr.lnwatcher.sweepstore.add_sweep_tx(*args)
+
     async def crash_old_client(self, ptuple, crash_client_ver):
         if crash_client_ver:
             client_ver = util.protocol_tuple(self.client)
@@ -1594,6 +1705,8 @@ class ElectrumX(SessionBase):
             'server.peers.subscribe': self.peers_subscribe,
             'server.ping': self.ping,
             'server.version': self.server_version,
+            'watchtower.get_ctn': self.watchtower_get_ctn,
+            'watchtower.add_sweep_tx': self.watchtower_add_sweep_tx,
         }
 
         if ptuple >= (1, 4, 2):

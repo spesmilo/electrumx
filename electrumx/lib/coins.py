@@ -145,11 +145,6 @@ class Coin:
     def sanitize_url(cls, url):
         # Remove surrounding ws and trailing /s
         url = url.strip().rstrip('/')
-        match = cls.RPC_URL_REGEX.match(url)
-        if not match:
-            raise CoinError(f'invalid daemon URL: "{url}"')
-        if match.groups()[1] is None:
-            url = f'{url}:{cls.RPC_PORT:d}'
         if not url.startswith(('http://', 'https://')):
             url = f'http://{url}'
         return url + '/'
@@ -1284,6 +1279,7 @@ class Dogecoin(AuxPowMixin, Coin):
     TX_PER_BLOCK = 20
     REORG_LIMIT = 2000
     DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
+    RPC_PORT = 22555
 
 
 class DogecoinTestnet(Dogecoin):

@@ -70,7 +70,7 @@ You will need to install one of:
 
 + `plyvel <https://plyvel.readthedocs.io/en/latest/installation.html>`_ for LevelDB.
 
-  Included as part of a regular pip or ``setup.py`` installation of ElectrumX.
+  Included as part of a regular pip installation of ElectrumX.
 + `python-rocksdb <https://pypi.python.org/pypi/python-rocksdb>`_ for RocksDB
 
   ``pip3 install python-rocksdb`` or use the rocksdb extra install option to ElectrumX.
@@ -94,9 +94,9 @@ There are many extra Python dependencies available to fit the needs of your
 system or coins. For example, to install the RocksDB dependencies and a faster
 JSON parsing library::
 
-    pip3 install .[rocksdb,ujson]
+    pip3 install ".[rocksdb,ujson]"
 
-see setup.py's ``extra_requires`` for a complete list.
+see pyproject.toml's ``project.optional-dependencies`` for a complete list.
 
 You can also run the code from the source tree or a copy of it.
 

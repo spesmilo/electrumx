@@ -13,7 +13,7 @@ unittests_task:
     - git tag
   pip_cache:
     folder: ~/.cache/pip
-    fingerprint_script: echo $(python3 --version) && cat requirements.txt
+    fingerprint_script: echo $(python3 --version) && cat pyproject.toml
     populate_script: mkdir -p ~/.cache/pip
   install_script:
     # test framework -related deps

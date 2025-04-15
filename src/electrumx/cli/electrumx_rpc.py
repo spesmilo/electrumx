@@ -83,7 +83,8 @@ other_commands = {
         },
     ),
     'debug_memusage_get_random_backref_chain': (
-        'Return a dotfile as text containing the backref chain for a randomly selected object of type objtype',
+        "Return a dotfile as text containing the backref chain "
+        "for a randomly selected object of type objtype",
         [], {
             'type': str,
             'dest': 'objtype',

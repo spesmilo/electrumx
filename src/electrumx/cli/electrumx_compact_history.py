@@ -65,6 +65,7 @@ async def compact_history():
     # When completed also update the UTXO flush count
     db.set_flush_count(history.flush_count)
 
+
 def main():
     logging.basicConfig(level=logging.INFO)
     logging.info('Starting history compaction...')

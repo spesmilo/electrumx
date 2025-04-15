@@ -63,7 +63,7 @@ pycodestyle_task:
   install_script:
     - pip install pycodestyle
   script:
-    - pycodestyle --max-line-length=100 electrumx/server/*.py electrumx/lib/*.py *.py
+    - pycodestyle --max-line-length=100 src
 
 build_docs_task:
   # note: this build task is not related to read-the-docs; it is only here to sanity-check the docs can be built.

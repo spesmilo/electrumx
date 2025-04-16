@@ -13,7 +13,7 @@ unittests_task:
     - git tag
   pip_cache:
     folder: ~/.cache/pip
-    fingerprint_script: echo $(python3 --version) && cat requirements.txt
+    fingerprint_script: echo $(python3 --version) && cat pyproject.toml
     populate_script: mkdir -p ~/.cache/pip
   install_script:
     # test framework -related deps
@@ -63,7 +63,7 @@ pycodestyle_task:
   install_script:
     - pip install pycodestyle
   script:
-    - pycodestyle --max-line-length=100 electrumx/server/*.py electrumx/lib/*.py *.py
+    - pycodestyle --max-line-length=100 src
 
 build_docs_task:
   # note: this build task is not related to read-the-docs; it is only here to sanity-check the docs can be built.

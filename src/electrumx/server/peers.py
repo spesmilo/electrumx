@@ -26,6 +26,7 @@ from aiorpcx.jsonrpc import CodeMessageError
 from electrumx.lib.peer import Peer
 from electrumx.lib.util import class_logger, json_deserialize, OldTaskGroup
 from electrumx.server.session import RPCSessionWithTaskGroup
+from electrumx.server.transport import PaddedRSTransport
 
 if TYPE_CHECKING:
     from electrumx.server.env import Env
@@ -292,6 +293,7 @@ class PeerManager:
                 async with connect_rs(
                         peer.host, port,
                         session_factory=session_factory,
+                        transport=PaddedRSTransport,
                         **kwargs,
                 ) as session:
                     session.sent_request_timeout = 120 if peer.is_tor else 30

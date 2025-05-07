@@ -13,7 +13,7 @@ readme = "README.md"
 license = {'file'="LICENSE"}
 requires-python = ">=3.10"
 dependencies = [
-    "aiorpcx[ws]>=0.23.0,<0.26",
+    "aiorpcx[ws]>=0.25.0,<0.26",
     "attrs",  # TODO try to use stdlib dataclasses instead
     "plyvel",
     "aiohttp>=3.3,<4",

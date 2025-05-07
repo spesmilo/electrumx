@@ -36,6 +36,7 @@ from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
 from electrumx.server.daemon import DaemonError
 from electrumx.server.peers import PeerManager
+from electrumx.server.transport import PaddedRSTransport
 
 if TYPE_CHECKING:
     from electrumx.server.db import DB
@@ -183,9 +184,10 @@ class SessionManager:
             else:
                 session_class = self.env.coin.SESSIONCLS
             if service.protocol in ('ws', 'wss'):
+                # FIXME also add padding to msgs in websocket sessions
                 serve = serve_ws
             else:
-                serve = serve_rs
+                serve = partial(serve_rs, transport=PaddedRSTransport)
             # FIXME: pass the service not the kind
             session_factory = partial(session_class, self, self.db, self.mempool,
                                       self.peer_mgr, kind)

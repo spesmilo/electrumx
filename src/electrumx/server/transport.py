@@ -75,12 +75,8 @@ class PaddedRSTransport(RSTransport):
             npad = npad_ssize
             p_idx = payload_ssize
         # pad by adding spaces near end
-        assert buf[p_idx-2:p_idx] in (b"}\n", b"]\n"), f"unexpected json-rpc terminator: {buf[p_idx-2:p_idx]=!r}"
-        # self.session.maybe_log(
-        #     f"PaddedRSTransport. calling low-level write(). "
-        #     f"chose between (lsize:{payload_lsize}+{npad_lsize}, ssize:{payload_ssize}+{npad_ssize}). "
-        #     f"won: {'tie' if npad_lsize == npad_ssize else 'lsize' if npad_lsize < npad_ssize else 'ssize'}."
-        # )
+        assert buf[p_idx-2:p_idx] in (b"}\n", b"]\n"), \
+            f"unexpected json-rpc terminator: {buf[p_idx-2:p_idx]=!r}"
         buf2 = buf[:p_idx - 2] + (npad * b" ") + buf[p_idx - 2:p_idx]
         self._asyncio_transport.write(buf2)
         self._last_send = time.monotonic()

@@ -121,9 +121,10 @@ class SessionManager:
 
     def __init__(
             self,
+            *,
             env: 'Env',
             db: 'DB',
-            bp: 'BlockProcessor',
+            block_processor: 'BlockProcessor',
             daemon: 'Daemon',
             mempool: 'MemPool',
             shutdown_event: asyncio.Event,
@@ -131,7 +132,7 @@ class SessionManager:
         env.max_send = max(350000, env.max_send)
         self.env = env
         self.db = db
-        self.bp = bp
+        self.bp = block_processor
         self.daemon = daemon
         self.mempool = mempool
         self.peer_mgr = PeerManager(env, db)
@@ -187,8 +188,14 @@ class SessionManager:
             else:
                 serve = serve_rs
             # FIXME: pass the service not the kind
-            session_factory = partial(session_class, self, self.db, self.mempool,
-                                      self.peer_mgr, kind)
+            session_factory = partial(
+                session_class,
+                session_mgr=self,
+                db=self.db,
+                mempool=self.mempool,
+                peer_mgr=self.peer_mgr,
+                kind=kind,
+            )
             host = None if service.host == 'all_interfaces' else str(service.host)
             try:
                 self.servers[service] = await serve(session_factory, host,
@@ -879,12 +886,13 @@ class SessionBase(RPCSession):
 
     def __init__(
             self,
+            transport,
+            *,
             session_mgr: 'SessionManager',
             db: 'DB',
             mempool: 'MemPool',
             peer_mgr: 'PeerManager',
             kind: str,
-            transport,
     ):
         connection = JSONRPCConnection(JSONRPCAutoDetect)
         super().__init__(transport, connection=connection)

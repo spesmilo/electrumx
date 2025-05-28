@@ -992,6 +992,9 @@ class SessionBase(RPCSession):
         coro = handler_invocation(handler, request)()
         return await coro
 
+    def protocol_version_string(self) -> str:
+        raise NotImplementedError()
+
 
 class ElectrumX(SessionBase):
     '''A TCP server that handles incoming Electrum connections.'''

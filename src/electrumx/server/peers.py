@@ -15,6 +15,7 @@ import time
 from collections import Counter, defaultdict
 from ipaddress import IPv4Address, IPv6Address
 from typing import TYPE_CHECKING, Type
+from functools import partial
 
 import aiohttp
 from aiorpcx import (Event, Notification, RPCSession, SOCKSError,
@@ -24,6 +25,8 @@ from aiorpcx.jsonrpc import CodeMessageError
 
 from electrumx.lib.peer import Peer
 from electrumx.lib.util import class_logger, json_deserialize, OldTaskGroup
+from electrumx.server.session import RPCSessionWithTaskGroup
+from electrumx.server.transport import PaddedRSTransport
 
 if TYPE_CHECKING:
     from electrumx.server.env import Env
@@ -47,7 +50,7 @@ def assert_good(message, result, instance):
                            f'{type(result).__name__}')
 
 
-class PeerSession(RPCSession):
+class PeerSession(RPCSessionWithTaskGroup):
     '''An outgoing session to a peer.'''
 
     async def handle_request(self, request):
@@ -281,10 +284,18 @@ class PeerManager:
                 if local_hosts:
                     kwargs['local_addr'] = (str(local_hosts.pop()), None)
 
+            session_factory = partial(
+                PeerSession,
+                manager_taskgroup=self.group,
+            )
             peer_text = f'[{peer}:{port} {kind}]'
             try:
-                async with connect_rs(peer.host, port, session_factory=PeerSession,
-                                      **kwargs) as session:
+                async with connect_rs(
+                        peer.host, port,
+                        session_factory=session_factory,
+                        transport=PaddedRSTransport,
+                        **kwargs,
+                ) as session:
                     session.sent_request_timeout = 120 if peer.is_tor else 30
                     await self._verify_peer(session, peer)
                 is_good = True

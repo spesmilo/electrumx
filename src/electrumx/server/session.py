@@ -35,7 +35,7 @@ from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
 from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
 from electrumx.server.daemon import DaemonError
-from electrumx.server.peers import PeerManager
+from electrumx.server.transport import PaddedRSTransport
 
 if TYPE_CHECKING:
     from electrumx.server.db import DB
@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from electrumx.server.block_processor import BlockProcessor
     from electrumx.server.daemon import Daemon
     from electrumx.server.mempool import MemPool
+    from electrumx.server.peers import PeerManager
 
 
 BAD_REQUEST = 1
@@ -135,6 +136,7 @@ class SessionManager:
         self.bp = block_processor
         self.daemon = daemon
         self.mempool = mempool
+        from electrumx.server.peers import PeerManager
         self.peer_mgr = PeerManager(env, db)
         self.shutdown_event = shutdown_event
         self.logger = util.class_logger(__name__, self.__class__.__name__)
@@ -180,13 +182,17 @@ class SessionManager:
             else:
                 sslc = None
             if service.protocol == 'rpc':
+                # local admin RPC
                 session_class = LocalRPC
-            else:
-                session_class = self.env.coin.SESSIONCLS
-            if service.protocol in ('ws', 'wss'):
-                serve = serve_ws
-            else:
                 serve = serve_rs
+            else:
+                # electrum protocol sessions
+                session_class = self.env.coin.SESSIONCLS
+                if service.protocol in ('ws', 'wss'):
+                    # FIXME also add padding to msgs in websocket sessions
+                    serve = serve_ws
+                else:
+                    serve = partial(serve_rs, transport=PaddedRSTransport)
             # FIXME: pass the service not the kind
             session_factory = partial(
                 session_class,
@@ -873,7 +879,38 @@ class SessionManager:
             group.sessions.remove(session)
 
 
-class SessionBase(RPCSession):
+class RPCSessionWithTaskGroup(RPCSession):
+    def __init__(self, *args, manager_taskgroup: OldTaskGroup, **kwargs):
+        RPCSession.__init__(self, *args, **kwargs)
+        self.taskgroup = OldTaskGroup()
+        asyncio.get_event_loop().create_task(
+            manager_taskgroup.spawn(self.main_loop()))
+
+    async def main_loop(self):
+        """Manages taskgroup tied to this session.
+        The session and the taskgroup share a lifecycle, either dying will kill the other.
+        This method must not raise, to avoid killing the manager_taskgroup.
+        """
+        self.logger.debug("starting taskgroup.")
+        try:
+            async with self.taskgroup as group:
+                await group.spawn(asyncio.Event().wait)  # run forever (until cancel)
+        except Exception as e:
+            self.logger.exception("taskgroup died.")
+        finally:
+            try:
+                await self.close(force_after=1.0)
+            except Exception:
+                self.logger.exception("unexpected exception while closing session")
+            self.logger.debug("taskgroup stopped.")
+
+    async def connection_lost(self):
+        """Handle client disconnection."""
+        await self.taskgroup.cancel_remaining()
+        await super().connection_lost()
+
+
+class SessionBase(RPCSessionWithTaskGroup):
     '''Base class of ElectrumX JSON sessions.
 
     Each session runs its tasks in asynchronous parallelism with other
@@ -895,7 +932,11 @@ class SessionBase(RPCSession):
             kind: str,
     ):
         connection = JSONRPCConnection(JSONRPCAutoDetect)
-        super().__init__(transport, connection=connection)
+        super().__init__(
+            transport,
+            manager_taskgroup=session_mgr._task_group,
+            connection=connection,
+        )
         self.session_mgr = session_mgr
         self.db = db
         self.mempool = mempool
@@ -905,7 +946,6 @@ class SessionBase(RPCSession):
         self.coin = self.env.coin
         self.client = 'unknown'
         self.anon_logs = self.env.anon_logs
-        self.taskgroup = OldTaskGroup()
         self.txs_sent = 0
         self.log_me = SessionBase.log_new
         self.session_id = None
@@ -918,26 +958,6 @@ class SessionBase(RPCSession):
                          f'{self.session_mgr.session_count():,d} total')
         self.session_mgr.add_session(self)
         self.recalc_concurrency()  # must be called after session_mgr.add_session
-        asyncio.get_event_loop().create_task(
-            session_mgr._task_group.spawn(self.main_loop()))
-
-    async def main_loop(self):
-        """Manages taskgroup tied to this session.
-        The session and the taskgroup share a lifecycle, either dying will kill the other.
-        This method must not raise, to avoid killing session_mgr._task_group
-        """
-        self.logger.debug("starting taskgroup.")
-        try:
-            async with self.taskgroup as group:
-                await group.spawn(asyncio.Event().wait)  # run forever (until cancel)
-        except Exception as e:
-            self.logger.exception("taskgroup died.")
-        finally:
-            try:
-                await self.close(force_after=1.0)
-            except Exception:
-                self.logger.exception("unexpected exception while closing session")
-            self.logger.debug("taskgroup stopped.")
 
     async def notify(self, touched, height_changed):
         pass
@@ -964,7 +984,6 @@ class SessionBase(RPCSession):
 
     async def connection_lost(self):
         '''Handle client disconnection.'''
-        await self.taskgroup.cancel_remaining()
         await super().connection_lost()
         self.session_mgr.remove_session(self)
         msg = ''

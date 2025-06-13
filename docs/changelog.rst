@@ -3,6 +3,17 @@
 ===========
 
 
+Version 1.18.0 (14 June 2025)
+=============================
+
+* protocol:
+   - add basic countermeasures against traffic analysis by padding the jsonrpc payload
+     with whitespaces to have ~uniform-size TCP packets, and by artificially delaying
+     sending messages a bit. (`spesmilo/electrumx#301`_)
+* dependencies:
+   - bump required aiorpcx to >=0.25.0,<0.26
+
+
 Version 1.17.0 (16 Apr 2025)
 ============================
 
@@ -241,6 +252,7 @@ This fork maintained by:
 .. _spesmilo/electrumx#248:  https://github.com/spesmilo/electrumx/pull/248
 .. _spesmilo/electrumx#273:  https://github.com/spesmilo/electrumx/pull/273
 .. _spesmilo/electrumx#298:  https://github.com/spesmilo/electrumx/pull/298
+.. _spesmilo/electrumx#301:  https://github.com/spesmilo/electrumx/pull/301
 
 
 .. _4b3f6510:  https://github.com/spesmilo/electrumx/commit/4b3f6510e94670a013c1abe6247cdd2b0e7e6f8c

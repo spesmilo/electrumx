@@ -24,3 +24,10 @@ Electrum server network runs ElectrumX.
 
 See [readthedocs](https://electrumx-spesmilo.readthedocs.io).
 
+### Releases
+
+ElectrumX is generally mature software and usually running git HEAD in production is fine.
+Alternatively, conservative people can run from the latest tag, for which there are also releases on PyPI:
+```
+$ pip install e-x
+```

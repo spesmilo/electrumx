@@ -10,7 +10,7 @@
 ### 3. Tag
 
 ```
-$ git tag -s $VERSION -m "$VERSION"
+$ git tag -s "$VERSION" -m "$VERSION"
 $ git push "$REMOTE_ORIGIN" tag "$VERSION"
 ```
 

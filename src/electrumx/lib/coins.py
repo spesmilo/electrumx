@@ -4129,6 +4129,7 @@ class FerriteTestnet(Ferrite):
         'enode3.ferritecoin.org s t',
     ]
 
+
 class Goldcoin(Coin):
     NAME = "Goldcoin"
     SHORTNAME = "GLC"
@@ -4148,3 +4149,4 @@ class Goldcoin(Coin):
         'electrum1.netseed.net s t',
         'electrum2.netseed.net s t'
     ]
+    

@@ -4149,4 +4149,4 @@ class Goldcoin(Coin):
         'electrum1.netseed.net s t',
         'electrum2.netseed.net s t'
     ]
-    
+

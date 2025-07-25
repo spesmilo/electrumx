@@ -57,9 +57,13 @@ class B(Base):
     pass
 
 
+class C(A):
+    pass
+
+
 def test_subclasses():
-    assert util.subclasses(Base) == [A, B]
-    assert util.subclasses(Base, strict=False) == [A, B, Base]
+    assert util.subclasses(Base) == [A, B, C]
+    assert util.subclasses(Base, strict=False) == [A, B, Base, C]
 
 
 def test_chunks():

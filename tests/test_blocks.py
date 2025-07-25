@@ -30,8 +30,39 @@ from binascii import unhexlify
 
 import pytest
 
+from electrumx.lib import coins
 from electrumx.lib.coins import Coin
 from electrumx.lib.hash import hex_str_to_hash
+from electrumx.lib.util import subclasses
+
+
+def _does_coin_require_testcase(coin: Coin) -> bool:
+    if coin.NET != 'mainnet':
+        return False
+    # legacy whitelist: these coins do not have tests. FIXME
+    if coin in [
+        coins.Bitcoin,
+        coins.BitcoinCash,
+        coins.Viacoin,
+        coins.Argentum,
+        coins.FairCoin,
+        coins.Einsteinium,
+        coins.Crown,
+        coins.Monaize,
+        coins.Bitbay,
+        coins.Fujicoin,
+        coins.Neblio,
+        coins.Bitzeny,
+        coins.Sibcoin,
+        coins.CanadaeCoin,
+        coins.Auroracoin,
+    ]:
+        return False
+    return True
+
+
+coin_classes_all = set([coin for coin in subclasses(Coin) if _does_coin_require_testcase(coin)])
+coin_classes_tested = set()
 
 BLOCKS_DIR = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 'blocks')
@@ -44,6 +75,8 @@ for name in os.listdir(BLOCKS_DIR):
     try:
         name_parts = name.split("_")
         coin = Coin.lookup_coin_class(name_parts[0], name_parts[1])
+        if _does_coin_require_testcase(coin):
+            coin_classes_tested.add(coin)
         with open(os.path.join(BLOCKS_DIR, name)) as f:
             blocks.append((coin, json.load(f)))
     except Exception as e:
@@ -69,5 +102,9 @@ def test_block(block_details):
     assert (coin.header_prevhash(block.header)
             == hex_str_to_hash(block_info['previousblockhash']))
     assert len(block_info['tx']) == len(block.transactions)
-    for n, (tx, txid) in enumerate(block.transactions):
-        assert txid == hex_str_to_hash(block_info['tx'][n])
+    for n, tx in enumerate(block.transactions):
+        assert tx.txid == hex_str_to_hash(block_info['tx'][n])
+
+
+def test_all_coins_are_covered():
+    assert coin_classes_all - coin_classes_tested == set()

@@ -19,7 +19,7 @@ from electrumx.lib.util import OldTaskGroup
 coin = BitcoinCash
 tx_hash_fn = coin.DESERIALIZER.TX_HASH_FN
 # Change seed daily
-seed(datetime.date.today().toordinal)
+seed(datetime.date.today().toordinal())
 
 
 def random_tx(hash160s, utxos):
@@ -33,13 +33,23 @@ def random_tx(hash160s, utxos):
     for n in range(n_inputs):
         prevout = choice(list(utxos))
         hashX, value = utxos.pop(prevout)
-        inputs.append(TxInput(prevout[0], prevout[1], b'', 4294967295))
+        inputs.append(TxInput(
+            prev_hash=prevout[0],
+            prev_idx=prevout[1],
+            script=b'',
+            sequence=4294967295,
+        ))
         input_value += value
 
-    # Seomtimes add a generation/coinbase like input that is present
+    # Sometimes add a generation/coinbase like input that is present
     # in some coins
     if randrange(0, 10) == 0:
-        inputs.append(TxInput(bytes(32), 4294967295, b'', 4294967295))
+        inputs.append(TxInput(
+            prev_hash=bytes(32),
+            prev_idx=4294967295,
+            script=b'',
+            sequence=4294967295,
+        ))
 
     fee = min(input_value, randrange(500))
     input_value -= fee
@@ -49,11 +59,12 @@ def random_tx(hash160s, utxos):
         value = randrange(input_value + 1)
         input_value -= value
         pk_script = coin.hash160_to_P2PKH_script(choice(hash160s))
-        outputs.append(TxOutput(value, pk_script))
+        outputs.append(TxOutput(value=value, pk_script=pk_script))
 
-    tx = Tx(2, inputs, outputs, 0)
+    tx = Tx(version=2, inputs=inputs, outputs=outputs, locktime=0, txid=None, wtxid=None)
     tx_bytes = tx.serialize()
     tx_hash = tx_hash_fn(tx_bytes)
+    tx.txid = tx.wtxid = tx_hash
     for n, output in enumerate(tx.outputs):
         utxos[(tx_hash, n)] = (coin.hashX_from_script(output.pk_script),
                                output.value)

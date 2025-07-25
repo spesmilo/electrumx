@@ -311,7 +311,7 @@ def test_DB_ENGINE():
 
 
 def test_MAX_SEND():
-    assert_integer('MAX_SEND', 'max_send', 1000000)
+    assert_integer('MAX_SEND', 'max_send', 8_100_000)
 
 
 def test_LOG_LEVEL():

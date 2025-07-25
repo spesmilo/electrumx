@@ -237,6 +237,12 @@ async def test_broadcast_transaction(daemon):
     daemon.session = ClientSessionGood(('sendrawtransaction', [raw_tx], tx_hash))
     assert await daemon.broadcast_transaction(raw_tx) == tx_hash
 
+@pytest.mark.asyncio
+async def test_broadcast_package(daemon):
+    package = ["deadbeef", "deadc0de", "facefeed"]
+    result = {"package_msg": "success"}
+    daemon.session = ClientSessionGood(('submitpackage', [package], result))
+    assert await daemon.broadcast_package(package) == result
 
 @pytest.mark.asyncio
 async def test_relayfee(daemon):

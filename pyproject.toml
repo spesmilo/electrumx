@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools >= 61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "e-x"
+authors = [
+    { name = "The Electrum developers" },
+]
+description = "Server implementation for the Electrum protocol"
+keywords = ["asyncio", "bitcoin", "electrum", "electrum-server"]
+readme = "README.md"
+license = {'file'="LICENSE"}
+requires-python = ">=3.10"
+dependencies = [
+    "aiorpcx[ws]>=0.25.0,<0.26",
+    "attrs",  # TODO try to use stdlib dataclasses instead
+    "plyvel",
+    "aiohttp>=3.3,<4",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: AsyncIO",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: Unix",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Database",
+    "Topic :: Internet",
+]
+dynamic = ['version']
+
+[project.urls]
+Homepage = "https://github.com/spesmilo/electrumx"
+Repository = "https://github.com/spesmilo/electrumx"
+
+[project.scripts]
+electrumx_server = "electrumx.cli.electrumx_server:main"
+electrumx_rpc = "electrumx.cli.electrumx_rpc:main"
+electrumx_compact_history = "electrumx.cli.electrumx_compact_history:main"
+
+[tool.setuptools.dynamic]
+version = { attr = 'electrumx.__version__' }
+
+[project.optional-dependencies]
+dev = [
+    "objgraph",
+]
+rocksdb = [
+    "python-rocksdb>=0.6.9",
+    "Cython<3.0",
+]
+rapidjson = [
+    "python-rapidjson>=0.4.1,<2.0",
+]
+ujson = [
+    "ujson>=2.0.0,<4.0.0",
+]
+uvloop = [
+    "uvloop>=0.14",
+]
+# For various altcoins
+blake256 = ["blake256>=0.1.1", ]
+crypto = ["pycryptodomex>=3.8.1", ]
+groestl = ["groestlcoin-hash>=1.0.1", ]
+tribushashm = ["tribushashm>=1.0.5", ]
+xevan-hash = ["xevan-hash", ]
+dash_hash = ["dash_hash>=1.4", ]
+zny-yespower-0-5 = ["zny-yespower-0-5", ]

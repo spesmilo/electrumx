@@ -13,6 +13,7 @@ import asyncio
 import logging
 import sys
 
+import electrumx
 from electrumx import Controller, Env
 from electrumx.lib.util import CompactFormatter, make_logger
 
@@ -24,7 +25,9 @@ def main():
     handler.setFormatter(CompactFormatter(log_fmt))
     logger = make_logger('electrumx', handler=handler, level='INFO')
 
-    logger.info('ElectrumX server starting')
+    logger.info(
+        f'ElectrumX server starting. '
+        f'({electrumx.BRANDING}. version={electrumx.__version__})')
     try:
         if sys.version_info < (3, 10):
             raise RuntimeError('ElectrumX requires Python 3.10 or greater')

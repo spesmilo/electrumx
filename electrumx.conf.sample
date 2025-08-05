@@ -1,0 +1,19 @@
+
+COIN = Bitgesell
+NET = mainnet
+
+DAEMON_URL = http://rpcuser:rpcpassword@host.docker.internal:8555/
+
+DB_DIRECTORY = /electrumx/db
+
+TCP_PORT = 50001
+SSL_PORT = 50002
+HOST = 0.0.0.0
+
+COST_SOFT_LIMIT = 0
+COST_HARD_LIMIT = 0
+MAX_SEND = 10000000
+MAX_SESSIONS = 100
+BANNER_FILE = /electrumx/banner
+
+LOG_LEVEL = info

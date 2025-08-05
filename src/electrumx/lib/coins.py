@@ -38,7 +38,7 @@ from hashlib import sha256
 from typing import Sequence, Tuple
 
 import electrumx.lib.util as util
-from electrumx.lib.hash import Base58, double_sha256, hash_to_hex_str
+from electrumx.lib.hash import Base58, double_sha256, hash_to_hex_str, keccak_256
 from electrumx.lib.hash import HASHX_LEN, hex_str_to_hash
 from electrumx.lib.script import (_match_ops, Script, ScriptError,
                                   ScriptPubKey, OpCodes)
@@ -4128,3 +4128,35 @@ class FerriteTestnet(Ferrite):
         'enode2.ferritecoin.org s t',
         'enode3.ferritecoin.org s t',
     ]
+class Bitgesell(Coin):
+
+    NAME = "Bitgesell"
+    SHORTNAME = "BGL"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    RPC_PORT = 8332
+    GENESIS_HASH = (
+        '00000018cdcfeeb4dfdebe9392b855cfea7d6ddb953ef13f974b58773606d53d')
+    PEERS = [
+    ]
+
+
+    DESERIALIZER = lib_tx.DeserializerSegWitBGL
+
+    MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
+    TX_COUNT = 14731600
+    TX_COUNT_HEIGHT = 228495
+    TX_PER_BLOCK = 64
+
+
+
+    P2PKH_VERBYTE = bytes.fromhex("0a")
+    P2SH_VERBYTES = (bytes.fromhex("19"),)
+    WIF_BYTE = bytes.fromhex("80")
+
+
+    @classmethod
+    def header_hash(cls, header):
+        '''Given a header return hash'''
+        return keccak_256(header)

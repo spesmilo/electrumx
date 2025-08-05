@@ -303,6 +303,8 @@ class DeserializerSegWit(Deserializer):
     def read_tx(self):
         return self._read_tx_parts()[0]
 
+class DeserializerSegWitBGL(DeserializerSegWit):
+    TX_HASH_FN = staticmethod(sha256)
 
 class DeserializerLitecoin(DeserializerSegWit):
     '''Class representing Litecoin transactions, which may have the MW flag set.

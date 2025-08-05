@@ -30,6 +30,7 @@ import hashlib
 import hmac
 
 from electrumx.lib.util import bytes_to_int, int_to_bytes, hex_to_bytes
+from Cryptodome.Hash import keccak
 
 _sha256 = hashlib.sha256
 _new_hash = hashlib.new
@@ -54,6 +55,9 @@ def hash_to_hex_str(x):
     '''
     return bytes(reversed(x)).hex()
 
+def keccak_256(s):
+    keccak_hash = keccak.new(data=s, digest_bits=256)
+    return keccak_hash.digest()
 
 def hex_str_to_hash(x):
     '''Convert a displayed hex string to a binary hash.'''

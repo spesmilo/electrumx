@@ -290,11 +290,16 @@ class Daemon:
         network_info = await self.getnetworkinfo()
         return network_info['relayfee']
 
-    async def getrawtransaction(self, hex_hash, verbose=False):
+    async def getrawtransaction(self, hex_hash, verbose=False, blockhash=None):
         '''Return the serialized raw transaction with the given hash.'''
         # Cast to int because some coin daemons are old and require it
-        return await self._send_single('getrawtransaction',
-                                       (hex_hash, int(verbose)))
+        verbose = int(verbose)
+        if blockhash is None:
+            return await self._send_single('getrawtransaction', (hex_hash, verbose))
+        else:
+            # given a blockhash, modern bitcoind can lookup the tx even without txindex:
+            # https://github.com/bitcoin/bitcoin/pull/10275
+            return await self._send_single('getrawtransaction', (hex_hash, verbose, blockhash))
 
     async def getrawtransactions(self, hex_hashes, replace_errs=True):
         '''Return the serialized raw transactions with the given hashes.

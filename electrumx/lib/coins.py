@@ -2834,6 +2834,25 @@ class GroestlcoinSignet(GroestlcoinTestnet):
     TX_COUNT_HEIGHT = 1
 
 
+
+class Divi(Coin):
+    NAME = "DIVI"
+    SHORTNAME = "DIVI"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("022D2533")
+    XPRV_VERBYTES = bytes.fromhex("0221312B")
+    GENESIS_HASH = '00000e258596876664989374c7ee36445cf5f4f80889af415cc32478214394ea'
+    P2PKH_VERBYTE = bytes.fromhex("1e")
+    P2SH_VERBYTE = bytes.fromhex("0d")
+    WIF_BYTE = bytes.fromhex("d4")
+    DESERIALIZER = lib_tx.DeserializerDIVI
+    TX_COUNT_HEIGHT = 2456784
+    TX_COUNT = 2456784
+    TX_PER_BLOCK = 2
+    STATIC_BLOCK_HEADERS = True
+    RPC_PORT = 51473
+    REORG_LIMIT = 100
+
 class Pivx(Coin):
     NAME = "PIVX"
     SHORTNAME = "PIVX"

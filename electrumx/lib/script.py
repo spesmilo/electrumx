@@ -59,7 +59,8 @@ OpCodes = Enumeration("Opcodes", [
     "OP_CODESEPARATOR", "OP_CHECKSIG", "OP_CHECKSIGVERIFY", "OP_CHECKMULTISIG",
     "OP_CHECKMULTISIGVERIFY",
     "OP_NOP1",
-    "OP_CHECKLOCKTIMEVERIFY", "OP_CHECKSEQUENCEVERIFY"
+    "OP_CHECKLOCKTIMEVERIFY", "OP_CHECKSEQUENCEVERIFY",
+    "OP_REQUIRE_COINSTAKE"
 ])
 
 
@@ -70,6 +71,7 @@ assert OpCodes.OP_EQUAL == 0x87
 assert OpCodes.OP_EQUALVERIFY == 0x88
 assert OpCodes.OP_CHECKSIG == 0xac
 assert OpCodes.OP_CHECKMULTISIG == 0xae
+assert OpCodes.OP_REQUIRE_COINSTAKE == 0xb9
 
 
 def is_unspendable_legacy(script):

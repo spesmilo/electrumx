@@ -18,11 +18,11 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Optional, TYPE_CHECKING, Sequence
+from typing import Iterable, Optional, TYPE_CHECKING, Sequence
 
 import attr
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
-                     ReplyAndDisconnect, Request, RPCError, RPCSession,
+                     ReplyAndDisconnect, Request, RPCError, RPCSession, Service,
                      handler_invocation, serve_rs, serve_ws, sleep,
                      NewlineFramer, TaskTimeout, timeout_after, run_in_thread)
 
@@ -221,15 +221,14 @@ class SessionManager:
 
     async def _stop_servers(self, services):
         '''Stop the servers of the given protocols.'''
-        server_map = {service: self.servers.pop(service)
-                      for service in set(services).intersection(self.servers)}
-        # Close all before waiting
-        for service, server in server_map.items():
+        for service in services:
             self.logger.info(f'closing down server for {service}')
-            server.close()
-        # No value in doing these concurrently
-        for server in server_map.values():
-            await server.wait_closed()
+            self.servers[service].close()
+
+    def _remove_servers(self, services: Iterable[Service]):
+        '''Remove the servers of the given protocols.'''
+        for service in services:
+            del self.servers[service]
 
     async def _manage_servers(self):
         paused = False
@@ -242,8 +241,10 @@ class SessionManager:
                 self.logger.info(f'maximum sessions {max_sessions:,d} '
                                  f'reached, stopping new connections until '
                                  f'count drops to {low_watermark:,d}')
-                await self._stop_servers(service for service in self.servers
-                                         if service.protocol != 'rpc')
+                services_to_remove = [service for service in self.servers
+                                      if service.protocol != 'rpc']
+                await self._stop_servers(services_to_remove)
+                self._remove_servers(services_to_remove)
                 paused = True
             # Start listening for incoming connections if paused and
             # session count has fallen
@@ -680,11 +681,19 @@ class SessionManager:
                 await group.spawn(self._log_sessions())
                 await group.spawn(self._manage_servers())
         finally:
-            # Close servers then sessions
+            # Stop listening on servers, so no new sessions can be created
             await self._stop_servers(self.servers.keys())
+            # Then close sessions
+            self.logger.info(f'closing {len(self.sessions):,d} active sessions')
             async with OldTaskGroup() as group:
                 for session in list(self.sessions):
                     await group.spawn(session.close(force_after=1))
+            # Finally, wait for servers to be cleaned up and remove servers
+            self.logger.info(f"waiting for all server's resources to close")
+            for server in self.servers.values():
+                await server.wait_closed()
+            servers_to_remove = list(self.servers.keys())
+            self._remove_servers(servers_to_remove)
 
     def extra_cost(self, session):
         # Note there is no guarantee that session is still in self.sessions.  Example traceback:

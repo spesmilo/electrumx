@@ -12,6 +12,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv venv \
+    && venv/bin/pip install --no-cache-dir "Cython<3.0" \
     && venv/bin/pip install --no-cache-dir e-x[rapidjson,rocksdb]==1.16.0
 
 
@@ -38,7 +39,7 @@ COPY --from=builder /usr/src/app .
 
 VOLUME /var/lib/electrumx
 
-RUN mkdir -p "$DB_DIRECTORY" && ulimit -n 1048576
+RUN mkdir -p "$DB_DIRECTORY"
 
 CMD ["/usr/src/app/venv/bin/python", "/usr/src/app/venv/bin/electrumx_server"]
 

@@ -40,4 +40,32 @@ ENV BANDWIDTH_UNIT_COST=50000
 ENV CACHE_MB=2000
 
 
+
+
+######################################
+########## KNFCOIN SPECIFIC ##########
+######################################
+
+# Install openssl for certificate generation (Debian/Ubuntu)
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+# Create directory for SSL certificates
+RUN mkdir -p /etc/electrumx/ssl
+
+# Generate self-signed SSL certificate and key in /etc/electrumx/ssl
+RUN openssl req -newkey rsa:2048 -sha256 -nodes \
+    -keyout /etc/electrumx/ssl/server.key \
+    -x509 -days 3650 \
+    -out /etc/electrumx/ssl/server.crt \
+    -subj "/CN=knfcoin-electrumx" && \
+    chmod 644 /etc/electrumx/ssl/server.crt && \
+    chmod 600 /etc/electrumx/ssl/server.key
+
+######################################
+######################################
+######################################
+
+
+
+
 CMD ["electrumx_server"]

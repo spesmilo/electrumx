@@ -4128,3 +4128,51 @@ class FerriteTestnet(Ferrite):
         'enode2.ferritecoin.org s t',
         'enode3.ferritecoin.org s t',
     ]
+
+
+
+class KNFcoin(Coin):
+    NAME = "KNFcoin"
+    SHORTNAME = "KNF"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0488b21e")
+    XPRV_VERBYTES = bytes.fromhex("0488ade4")
+    P2PKH_VERBYTE = bytes.fromhex("30")
+    P2SH_VERBYTES = (bytes.fromhex("32"), bytes.fromhex("05"))
+    WIF_BYTE = bytes.fromhex("b0")
+    GENESIS_HASH = ('8099b90883632e7d02c47ee23d9a02b9'
+                    '80c61285d67289bd935e4c1b8f73d5ea')
+    DESERIALIZER = lib_tx.DeserializerLitecoin
+    TX_COUNT = 12
+    TX_COUNT_HEIGHT = 10
+    TX_PER_BLOCK = 2
+    RPC_PORT = 19332
+    REORG_LIMIT = 800
+    PEERS = []
+
+
+class KNFcoinTestnet(KNFcoin):
+    SHORTNAME = "tKNF"
+    NET = "testnet"
+    XPUB_VERBYTES = bytes.fromhex("043587cf")
+    XPRV_VERBYTES = bytes.fromhex("04358394")
+    P2PKH_VERBYTE = bytes.fromhex("6f")
+    P2SH_VERBYTES = (bytes.fromhex("3a"), bytes.fromhex("c4"))
+    WIF_BYTE = bytes.fromhex("ef")
+    GENESIS_HASH = ('8099b90883632e7d02c47ee23d9a02b9'
+                    '80c61285d67289bd935e4c1b8f73d5ea')
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+    TX_PER_BLOCK = 2
+    RPC_PORT = 19332
+    REORG_LIMIT = 4000
+    PEERS = []
+
+
+class KNFcoinRegtest(KNFcoinTestnet):
+    NET = "regtest"
+    GENESIS_HASH = ('3b1373a37308f3bb4cbd5c8529f4ddab'
+                    'fe927143da31cfeb7e355dd0feeba1e8')
+    PEERS = []
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1

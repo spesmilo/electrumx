@@ -1648,7 +1648,6 @@ class ElectrumX(SessionBase):
             'blockchain.block.headers': self.block_headers,
             'blockchain.estimatefee': self.estimatefee,
             'blockchain.headers.subscribe': self.headers_subscribe,
-            'blockchain.relayfee': self.relayfee,
             'blockchain.scripthash.get_balance': self.scripthash_get_balance,
             'blockchain.scripthash.get_history': self.scripthash_get_history,
             'blockchain.scripthash.get_mempool': self.scripthash_get_mempool,
@@ -1671,9 +1670,11 @@ class ElectrumX(SessionBase):
         if ptuple >= (1, 4, 2):
             handlers['blockchain.scripthash.unsubscribe'] = self.scripthash_unsubscribe
 
-        # experimental:
-        handlers['blockchain.transaction.broadcast_package'] = self.package_broadcast
-        handlers['mempool.get_info'] = self.mempool_info
+        if ptuple >= (1, 6):
+            handlers['blockchain.transaction.broadcast_package'] = self.package_broadcast
+            handlers['mempool.get_info'] = self.mempool_info
+        else:
+            handlers['blockchain.relayfee'] = self.relayfee  # removed in 1.6
 
         self.request_handlers = handlers
 

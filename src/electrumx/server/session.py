@@ -1036,6 +1036,7 @@ class ElectrumX(SessionBase):
     '''A TCP server that handles incoming Electrum connections.'''
 
     PROTOCOL_MIN = (1, 4)
+    # consider bumping Coin.MIN_REQUIRED_DAEMON_VERSION too when releasing a new protocol version
     PROTOCOL_MAX = (1, 4, 3)
 
     def __init__(self, *args, **kwargs):

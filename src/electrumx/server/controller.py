@@ -73,7 +73,7 @@ class Notifications:
 
 
 class Controller(ServerBase):
-    '''Manages server initialisation and stutdown.
+    '''Manages server initialisation and shutdown.
 
     Servers are started once the mempool is synced after the block
     processor first catches up with the daemon.
@@ -127,8 +127,11 @@ class Controller(ServerBase):
             )
 
             # Test daemon authentication, and also ensure it has a cached
-            # height.  Do this before entering the task group.
+            # height. Do this before entering the task group.
             await daemon.height()
+
+            # Check if daemon is recent enough
+            await daemon.check_daemon_version()
 
             caught_up_event = Event()
             mempool_event = Event()

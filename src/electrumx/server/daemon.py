@@ -90,6 +90,21 @@ class Daemon:
     def connector(self):
         return None
 
+    async def check_daemon_version(self):
+        assert self.session is not None and self.coin is not None, f"{self.session=}, {self.coin=}"
+        if self.coin.MIN_REQUIRED_DAEMON_VERSION is None:
+            return
+
+        required_version = tuple(map(int, self.coin.MIN_REQUIRED_DAEMON_VERSION.split('.')))
+        network_info = await self.getnetworkinfo()
+        ni_version = network_info['version']
+        daemon_major = ni_version // 10_000
+        daemon_minor = (ni_version % 10_000) // 100
+        daemon_rev = ni_version % 100
+        daemon_version = (daemon_major, daemon_minor, daemon_rev)
+        if daemon_version < required_version:
+            raise RuntimeError(f"Bitcoin Core {daemon_version=} < {required_version=}.")
+
     def set_url(self, url):
         '''Set the URLS to the given list, and switch to the first one.'''
         urls = url.split(',')
@@ -134,7 +149,7 @@ class Daemon:
     async def _send(self, payload, processor):
         '''Send a payload to be converted to JSON.
 
-        Handles temporary connection issues.  Daemon response errors
+        Handles temporary connection issues. Daemon response errors
         are raise through DaemonError.
         '''
         def log_error(error):

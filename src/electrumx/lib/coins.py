@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from functools import partial
 from hashlib import sha256
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Optional
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import Base58, double_sha256, hash_to_hex_str
@@ -114,6 +114,7 @@ class Coin:
     RPC_PORT: int
     NAME: str
     NET: str
+    MIN_REQUIRED_DAEMON_VERSION: Optional[str] = None
 
     # only used for initial db sync ETAs:
     TX_COUNT_HEIGHT: int  # at a given snapshot of the chain,
@@ -306,6 +307,8 @@ class Bitcoin(BitcoinMixin, Coin):
     TX_COUNT_HEIGHT = 646855
     TX_PER_BLOCK = 2200
     CRASH_CLIENT_VER = (3, 2, 3)
+    # core version 28 introduced 1p1c package relay required for protocol 1.6
+    MIN_REQUIRED_DAEMON_VERSION = "28.0"
     BLACKLIST_URL = 'https://electrum.org/blacklist.json'
     PEERS = [
         'electrum.vom-stausee.de s t',
@@ -382,6 +385,7 @@ class BitcoinTestnet(BitcoinTestnetMixin, Coin):
     NAME = "Bitcoin"
     DESERIALIZER = lib_tx.DeserializerSegWit
     CRASH_CLIENT_VER = (3, 2, 3)
+    MIN_REQUIRED_DAEMON_VERSION = "28.0"
     PEERS = [
         'testnet.hsmiths.com t53011 s53012',
         'testnet.qtornado.com s t',

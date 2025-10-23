@@ -1355,10 +1355,10 @@ class ElectrumX(SessionBase):
 
     async def replaced_banner(self, banner):
         network_info = await self.daemon_request('getnetworkinfo')
-        ni_version = network_info['version']
-        major, minor = divmod(ni_version, 1000000)
-        minor, revision = divmod(minor, 10000)
-        revision //= 100
+        ni_version = network_info['version']  # e.g. 290100 (for /Satoshi:29.1.0/)
+        major = ni_version // 10_000
+        minor = (ni_version % 10_000) // 100
+        revision = ni_version % 100
         daemon_version = f'{major:d}.{minor:d}.{revision:d}'
         for pair in [
                 ('$SERVER_VERSION', electrumx.version_short),

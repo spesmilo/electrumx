@@ -29,19 +29,19 @@ if TYPE_CHECKING:
 
 @attr.s(slots=True)
 class MemPoolTx:
-    prevouts = attr.ib()  # type: Sequence[Tuple[bytes, int]]
+    prevouts = attr.ib()   # type: Sequence[Tuple[bytes, int]]  # (txid, txout_idx)
     # A pair is a (hashX, value) tuple
-    in_pairs = attr.ib()  # type: Optional[Sequence[Tuple[bytes, int]]]
-    out_pairs = attr.ib()  # type: Sequence[Tuple[bytes, int]]
-    fee = attr.ib()  # type: int
-    size = attr.ib()  # type: int
+    in_pairs = attr.ib()   # type: Optional[Sequence[Tuple[bytes, int]]]  # (hashX, value_in_sats)
+    out_pairs = attr.ib()  # type: Sequence[Tuple[bytes, int]]  # (hashX, value_in_sats)
+    fee = attr.ib()        # type: int  # in sats
+    size = attr.ib()       # type: int  # in vbytes
 
 
 @attr.s(slots=True)
 class MemPoolTxSummary:
-    hash = attr.ib()
-    fee = attr.ib()
-    has_unconfirmed_inputs = attr.ib()
+    hash = attr.ib()                    # type: bytes
+    fee = attr.ib()                     # type: int  # in sats
+    has_unconfirmed_inputs = attr.ib()  # type: bool
 
 
 class DBSyncError(Exception):

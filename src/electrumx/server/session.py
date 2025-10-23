@@ -1396,10 +1396,22 @@ class ElectrumX(SessionBase):
         return banner
 
     async def relayfee(self):
-        '''The minimum fee a low-priority tx must pay in order to be accepted
-        to the daemon's memory pool.'''
+        """The minimum fee required for a transaction to be relayed on by the daemon to the
+        bitcoin network. Doesn't guarantee mempool acceptance."""
         self.bump_cost(1.0)
         return await self.daemon_request('relayfee')
+
+    async def mempool_info(self) -> dict[str, float]:
+        """
+        mempool.get_info, introduced in protocol 1.6.
+        returns: {
+            "mempoolminfee": BTC/kvB,
+            "minrelaytxfee": BTC/kvB,
+            "incrementalrelayfee": BTC/kvB,
+        }
+        """
+        self.bump_cost(1.0)
+        return await self.daemon_request('mempool_info')
 
     async def estimatefee(self, number, mode=None):
         '''The estimated transaction fee per kilobyte to be paid for a
@@ -1636,7 +1648,6 @@ class ElectrumX(SessionBase):
             'blockchain.block.headers': self.block_headers,
             'blockchain.estimatefee': self.estimatefee,
             'blockchain.headers.subscribe': self.headers_subscribe,
-            'blockchain.relayfee': self.relayfee,
             'blockchain.scripthash.get_balance': self.scripthash_get_balance,
             'blockchain.scripthash.get_history': self.scripthash_get_history,
             'blockchain.scripthash.get_mempool': self.scripthash_get_mempool,
@@ -1659,8 +1670,11 @@ class ElectrumX(SessionBase):
         if ptuple >= (1, 4, 2):
             handlers['blockchain.scripthash.unsubscribe'] = self.scripthash_unsubscribe
 
-        # experimental:
-        handlers['blockchain.transaction.broadcast_package'] = self.package_broadcast
+        if ptuple >= (1, 6):
+            handlers['blockchain.transaction.broadcast_package'] = self.package_broadcast
+            handlers['mempool.get_info'] = self.mempool_info
+        else:
+            handlers['blockchain.relayfee'] = self.relayfee  # removed in 1.6
 
         self.request_handlers = handlers
 

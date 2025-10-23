@@ -256,6 +256,21 @@ async def test_relayfee(daemon):
 
 
 @pytest.mark.asyncio
+async def test_mempool_info(daemon):
+    bitcoin_per_kvb = 0.00002123
+    response = {
+        'mempoolminfee': bitcoin_per_kvb,
+        'minrelaytxfee': bitcoin_per_kvb,
+        'incrementalrelayfee': bitcoin_per_kvb,
+        'other': 'cruft',
+    }
+    daemon.session = ClientSessionGood(('getmempoolinfo', [], response))
+    expected_result = dict(response)
+    del expected_result['other']
+    assert await daemon.mempool_info() == expected_result
+
+
+@pytest.mark.asyncio
 async def test_mempool_hashes(daemon):
     hashes = ['hex_hash1', 'hex_hash2']
     daemon.session = ClientSessionGood(('getrawmempool', [], hashes))

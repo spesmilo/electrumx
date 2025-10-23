@@ -79,6 +79,9 @@ class Daemon:
         self._networkinfo_cache = (None, 0)
         self._networkinfo_lock = asyncio.Lock()
 
+        self._mempoolinfo_cache = (None, 0)
+        self._mempoolinfo_lock = asyncio.Lock()
+
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(connector=self.connector())
         return self
@@ -284,11 +287,35 @@ class Daemon:
             self._networkinfo_cache = (val, time.time())
             return val
 
+    async def getmempoolinfo(self):
+        """Return the result of the 'getmempoolinfo' RPC call."""
+        async with self._mempoolinfo_lock:
+            cache_val, cache_time = self._mempoolinfo_cache
+            if time.time() - cache_time < 60:  # seconds
+                return cache_val
+            val = await self._send_single('getmempoolinfo')
+            self._mempoolinfo_cache = (val, time.time())
+            return val
+
     async def relayfee(self):
-        '''The minimum fee a low-priority tx must pay in order to be accepted
-        to the daemon's memory pool.'''
+        """Same as getmempoolinfo['minrelaytxfee'].
+        The minimum fee required for a transaction to be relayed on by the daemon to the
+        bitcoin network. Doesn't guarantee mempool acceptance."""
         network_info = await self.getnetworkinfo()
         return network_info['relayfee']
+
+    async def mempool_info(self) -> dict[str, float]:
+        mempool_info = await self.getmempoolinfo()
+        return {
+            # Dynamic minimum fee rate in BTC/kvB for tx to be accepted.
+            # Is the maximum of minrelaytxfee and minimum mempool fee
+            'mempoolminfee': mempool_info['mempoolminfee'],
+            # Minimum relay fee for transactions in BTC/kvB, operator-configurable, static.
+            'minrelaytxfee': mempool_info['minrelaytxfee'],
+            # Minimum fee rate increment for mempool limiting or replacement in BTC/kvB,
+            # operator-configurable, static.
+            'incrementalrelayfee': mempool_info['incrementalrelayfee'],
+        }
 
     async def getrawtransaction(self, hex_hash, verbose=False):
         '''Return the serialized raw transaction with the given hash.'''
@@ -350,8 +377,8 @@ class FakeEstimateFeeDaemon(Daemon):
         return self.coin.ESTIMATE_FEE
 
     async def relayfee(self):
-        '''The minimum fee a low-priority tx must pay in order to be accepted
-        to the daemon's memory pool.'''
+        """The minimum fee required for a transaction to be relayed on by the server to the
+        bitcoin network. Doesn't guarantee mempool acceptance."""
         return self.coin.RELAY_FEE
 
 

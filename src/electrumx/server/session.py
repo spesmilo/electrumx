@@ -18,7 +18,7 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Iterable, Optional, TYPE_CHECKING, Sequence
+from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union
 
 import attr
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
@@ -1548,42 +1548,35 @@ class ElectrumX(SessionBase):
         raw_txs: a list of raw transactions as hexadecimal strings"""
         self.bump_cost(0.25 + sum(len(tx) / 5000 for tx in tx_package))
         try:
-            txids = [double_sha256(bytes.fromhex(tx)).hex() for tx in tx_package]
-        except ValueError:
-            self.logger.info(f"error calculating txids", exc_info=True)
-            raise RPCError(
-                BAD_REQUEST,
-                f'not a valid hex encoded transaction package: {tx_package}')
-        try:
             daemon_result = await self.session_mgr.broadcast_package(tx_package)
         except DaemonError as e:
             error, = e.args
             message = error['message']
             self.logger.info(f"error submitting package: {message}")
-            raise RPCError(BAD_REQUEST, 'the tx package was rejected by '
-                           f'network rules.\n\n{message}. Package txids: {txids}')
-        else:
-            self.txs_sent += len(tx_package)
-            self.logger.info(f'broadcasted package: {txids}')
-            if verbose:
-                return daemon_result
-            errors = []
-            for tx in daemon_result.get('tx-results', {}).values():
-                if tx.get('error'):
-                    error_msg = {
-                        'txid': tx.get('txid'),
-                        'error': tx['error']
-                    }
-                    errors.append(error_msg)
-            # check both, package_msg and package-msg due to ongoing discussion to change rpc
-            # https://github.com/bitcoin/bitcoin/pull/31900
-            package_msg = daemon_result.get('package_msg', daemon_result.get('package-msg'))
-            electrumx_result = {
-                'success': True if package_msg == 'success' else False
-            }
-            if errors:
-                electrumx_result['errors'] = errors
-            return electrumx_result
+            raise RPCError(
+                BAD_REQUEST,
+                f'the tx package was rejected by network rules.\n\n{message}.',
+            )
+
+        self.txs_sent += len(tx_package)
+        self.logger.info(f'broadcasted package: {len(tx_package)=}')
+        if verbose:
+            return daemon_result
+
+        response: dict[str, Union[bool, list]] = {
+            'success': daemon_result['package_msg'] == 'success',
+        }
+        errors = []
+        for tx in daemon_result.get('tx-results', {}).values():
+            if tx.get('error'):
+                error_msg = {
+                    'txid': tx.get('txid'),
+                    'error': tx['error']
+                }
+                errors.append(error_msg)
+        if errors:
+            response['errors'] = errors
+        return response
 
     async def transaction_get(self, tx_hash, verbose=False):
         '''Return the serialized raw transaction given its hash

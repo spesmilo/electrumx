@@ -35,7 +35,7 @@ import logging
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
-from typing import Set
+from typing import Set, Any
 
 import aiorpcx
 
@@ -311,6 +311,19 @@ def protocol_version(client_req, min_tuple, max_tuple):
         result = None
 
     return result, client_min
+
+
+def is_hex_str(text: Any) -> bool:
+    if not isinstance(text, str):
+        return False
+    try:
+        b = bytes.fromhex(text)
+    except Exception:
+        return False
+    # forbid whitespaces in text:
+    if len(text) != 2 * len(b):
+        return False
+    return True
 
 
 struct_le_i = Struct('<i')

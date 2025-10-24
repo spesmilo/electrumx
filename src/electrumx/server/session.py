@@ -18,7 +18,7 @@ import time
 from collections import defaultdict
 from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
-from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union
+from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any
 
 import attr
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
@@ -29,7 +29,7 @@ from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
 import electrumx
 import electrumx.lib.util as util
 from electrumx.lib.lrucache import LRUCache
-from electrumx.lib.util import OldTaskGroup
+from electrumx.lib.util import OldTaskGroup, is_hex_str
 from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
                                 hex_str_to_hash, sha256, double_sha256)
 from electrumx.lib.merkle import MerkleCache
@@ -92,6 +92,16 @@ def assert_tx_hash(value):
     except (ValueError, TypeError):
         pass
     raise RPCError(BAD_REQUEST, f'{value} should be a transaction hash')
+
+
+def assert_hex_str(value: Any) -> None:
+    if not is_hex_str(value):
+        raise RPCError(BAD_REQUEST, f'{value} should be a hex string')
+
+
+def assert_list_or_tuple(value: Any) -> None:
+    if not isinstance(value, (list, tuple)):
+        raise RPCError(BAD_REQUEST, f'{value} should be a list')
 
 
 @attr.s(slots=True)
@@ -1517,6 +1527,7 @@ class ElectrumX(SessionBase):
         '''Broadcast a raw transaction to the network.
 
         raw_tx: the raw transaction as a hexadecimal string'''
+        assert_hex_str(raw_tx)
         self.bump_cost(0.25 + len(raw_tx) / 5000)
         # This returns errors as JSON RPC errors, as is natural
         try:
@@ -1546,6 +1557,9 @@ class ElectrumX(SessionBase):
         and none of the parents may depend on one another.
 
         raw_txs: a list of raw transactions as hexadecimal strings"""
+        assert_list_or_tuple(tx_package)
+        for raw_tx in tx_package:
+            assert_hex_str(raw_tx)
         self.bump_cost(0.25 + sum(len(tx) / 5000 for tx in tx_package))
         try:
             daemon_result = await self.session_mgr.broadcast_package(tx_package)

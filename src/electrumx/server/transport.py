@@ -109,3 +109,10 @@ class PaddedRSTransport(RSTransport):
         super().connection_made(transport)
         coro = self.session.taskgroup.spawn(self._poll_sbuffer())
         self._sbuffer_task = self.loop.create_task(coro)
+
+    async def close(self, *args, **kwargs):
+        '''Close the connection and return when closed.'''
+        # Flush buffer before disconnecting. This makes ReplyAndDisconnect work:
+        self._force_send = True
+        self._maybe_consume_sbuffer()
+        await super().close(*args, **kwargs)

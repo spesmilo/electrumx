@@ -1423,6 +1423,7 @@ class ElectrumX(SessionBase):
         '''
         number = non_negative_integer(number)
         # use whitelist for mode, otherwise it would be easy to force a cache miss:
+        mode = mode.upper() if isinstance(mode, str) else None
         if mode not in self.coin.ESTIMATEFEE_MODES:
             raise RPCError(BAD_REQUEST, f'unknown estimatefee mode: {mode}')
         self.bump_cost(0.1)

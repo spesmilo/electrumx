@@ -1494,11 +1494,20 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.1)
         return None
 
-    async def server_version(self, client_name='', protocol_version=None):
+    async def server_version(
+            self,
+            client_name='',
+            protocol_version=None,
+            *extra_args,
+            **extra_kwargs,
+    ):
         '''Returns the server version as a string.
 
         client_name: a string identifying the client
         protocol_version: the protocol version spoken by the client
+
+        note: extraneous unknown args for 'server.version' MUST be tolerated
+              and ignored by the server, to allow for future extensions.
         '''
         self.bump_cost(0.5)
         if self.sv_seen:

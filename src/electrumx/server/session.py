@@ -964,6 +964,8 @@ class SessionBase(RPCSessionWithTaskGroup):
         self.env = session_mgr.env
         self.coin = self.env.coin
         self.client = 'unknown'
+        self.sv_seen = False  # has seen 'server.version' message?
+        self.sv_negotiated = asyncio.Event()  # done negotiating protocol version
         self.anon_logs = self.env.anon_logs
         self.txs_sent = 0
         self.log_me = SessionBase.log_new
@@ -1027,12 +1029,15 @@ class SessionBase(RPCSessionWithTaskGroup):
             handler = None
         method = 'invalid method' if handler is None else request.method
 
-        # If DROP_CLIENT_UNKNOWN is enabled, check if the client identified
-        # by calling server.version previously. If not, disconnect the session
-        if self.env.drop_client_unknown and method != 'server.version' and self.client == 'unknown':
-            self.logger.info(f'disconnecting because client is unknown')
+        # Version negotiation must happen before any other messages.
+        if not self.sv_seen and method != 'server.version':
+            self.logger.info(f'closing session: server.version must be first msg. got: {method}')
+            await self._do_crash_old_electrum_client()
             raise ReplyAndDisconnect(RPCError(
                 BAD_REQUEST, f'use server.version to identify client'))
+        # Wait for version negotiation to finish before processing other messages.
+        if method != 'server.version' and not self.sv_negotiated.is_set():
+            await self.sv_negotiated.wait()
 
         self.session_mgr._method_counts[method] += 1
         coro = handler_invocation(handler, request)()
@@ -1040,6 +1045,21 @@ class SessionBase(RPCSessionWithTaskGroup):
 
     def protocol_version_string(self) -> str:
         raise NotImplementedError()
+
+    async def maybe_crash_old_client(self, ptuple, crash_client_ver):
+        if crash_client_ver:
+            client_ver = util.protocol_tuple(self.client)
+            is_old_protocol = ptuple is None or ptuple <= (1, 2)
+            is_old_client = client_ver != (0,) and client_ver <= crash_client_ver
+            if is_old_protocol and is_old_client:
+                await self._do_crash_old_electrum_client()
+
+    async def _do_crash_old_electrum_client(self):
+        self.logger.info(f'attempting to crash old client with version {self.client}')
+        # this can crash electrum client 2.6 <= v < 3.1.2
+        await self.send_notification('blockchain.relayfee', ())
+        # this can crash electrum client (v < 2.8.2) UNION (3.0.0 <= v < 3.3.0)
+        await self.send_notification('blockchain.estimatefee', ())
 
 
 class ElectrumX(SessionBase):
@@ -1474,11 +1494,20 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.1)
         return None
 
-    async def server_version(self, client_name='', protocol_version=None):
+    async def server_version(
+            self,
+            client_name='',
+            protocol_version=None,
+            *extra_args,
+            **extra_kwargs,
+    ):
         '''Returns the server version as a string.
 
         client_name: a string identifying the client
         protocol_version: the protocol version spoken by the client
+
+        note: extraneous unknown args for 'server.version' MUST be tolerated
+              and ignored by the server, to allow for future extensions.
         '''
         self.bump_cost(0.5)
         if self.sv_seen:
@@ -1498,7 +1527,7 @@ class ElectrumX(SessionBase):
         ptuple, client_min = util.protocol_version(
             protocol_version, self.PROTOCOL_MIN, self.PROTOCOL_MAX)
 
-        await self.crash_old_client(ptuple, self.env.coin.CRASH_CLIENT_VER)
+        await self.maybe_crash_old_client(ptuple, self.env.coin.CRASH_CLIENT_VER)
 
         if ptuple is None:
             if client_min > self.PROTOCOL_MIN:
@@ -1509,19 +1538,8 @@ class ElectrumX(SessionBase):
                 BAD_REQUEST, f'unsupported protocol version: {protocol_version}'))
         self.set_request_handlers(ptuple)
 
+        self.sv_negotiated.set()
         return electrumx.version, self.protocol_version_string()
-
-    async def crash_old_client(self, ptuple, crash_client_ver):
-        if crash_client_ver:
-            client_ver = util.protocol_tuple(self.client)
-            is_old_protocol = ptuple is None or ptuple <= (1, 2)
-            is_old_client = client_ver != (0,) and client_ver <= crash_client_ver
-            if is_old_protocol and is_old_client:
-                self.logger.info(f'attempting to crash old client with version {self.client}')
-                # this can crash electrum client 2.6 <= v < 3.1.2
-                await self.send_notification('blockchain.relayfee', ())
-                # this can crash electrum client (v < 2.8.2) UNION (3.0.0 <= v < 3.3.0)
-                await self.send_notification('blockchain.estimatefee', ())
 
     async def transaction_broadcast(self, raw_tx):
         '''Broadcast a raw transaction to the network.
@@ -1695,6 +1713,8 @@ class LocalRPC(SessionBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.sv_seen = True
+        self.sv_negotiated.set()
         self.client = 'RPC'
         self.connection.max_response_size = 0
 

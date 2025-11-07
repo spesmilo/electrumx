@@ -1067,7 +1067,7 @@ class ElectrumX(SessionBase):
 
     PROTOCOL_MIN = (1, 4)
     # consider bumping Coin.MIN_REQUIRED_DAEMON_VERSION too when releasing a new protocol version
-    PROTOCOL_MAX = (1, 4, 3)
+    PROTOCOL_MAX = (1, 6, 0)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1208,7 +1208,7 @@ class ElectrumX(SessionBase):
 
         Status is a hex string, but must be None if there is no history.
         '''
-        # Note history is ordered and mempool unordered in electrum-server
+        # Note both confirmed history and mempool history are ordered
         # For mempool, height is -1 if it has unconfirmed inputs, otherwise 0
         db_history, cost = await self.session_mgr.limited_history(hashX)
         mempool = await self.mempool.transaction_summaries(hashX)
@@ -1278,7 +1278,7 @@ class ElectrumX(SessionBase):
         return await self.get_balance(hashX)
 
     async def unconfirmed_history(self, hashX):
-        # Note unconfirmed history is unordered in electrum-server
+        # Note both confirmed history and mempool history are ordered
         # height is -1 if it has unconfirmed inputs, otherwise 0
         result = [{'tx_hash': hash_to_hex_str(tx.hash),
                    'height': -tx.has_unconfirmed_inputs,
@@ -1288,7 +1288,7 @@ class ElectrumX(SessionBase):
         return result
 
     async def confirmed_and_unconfirmed_history(self, hashX):
-        # Note history is ordered but unconfirmed is unordered in e-s
+        # Note both confirmed history and mempool history are ordered
         history, cost = await self.session_mgr.limited_history(hashX)
         self.bump_cost(cost)
         conf = [{'tx_hash': hash_to_hex_str(tx_hash), 'height': height}
@@ -1357,6 +1357,8 @@ class ElectrumX(SessionBase):
         start_height and count must be non-negative integers.  At most
         MAX_CHUNK_SIZE headers will be returned.
         '''
+        if self.protocol_tuple >= (1, 6):
+            return await self.block_headers_array(start_height, count, cp_height)
         start_height = non_negative_integer(start_height)
         count = non_negative_integer(count)
         cp_height = non_negative_integer(cp_height)
@@ -1370,6 +1372,38 @@ class ElectrumX(SessionBase):
             cost += 1.0
             last_height = start_height + count - 1
             result.update(await self._merkle_proof(cp_height, last_height))
+        self.bump_cost(cost)
+        return result
+
+    async def block_headers_array(self, start_height, count, cp_height=0):
+        '''Return block headers in an array for the main chain;
+        starting at start_height.
+        start_height and count must be non-negative integers.  At most
+        MAX_CHUNK_SIZE headers will be returned.
+        '''
+        start_height = non_negative_integer(start_height)
+        count = non_negative_integer(count)
+        cp_height = non_negative_integer(cp_height)
+        cost = count / 50
+
+        max_size = self.MAX_CHUNK_SIZE
+        count = min(count, max_size)
+        headers, count = await self.db.read_headers(start_height, count)
+        result = {'count': count, 'max': max_size, 'headers': []}
+        if count and cp_height:
+            cost += 1.0
+            last_height = start_height + count - 1
+            result.update(await self._merkle_proof(cp_height, last_height))
+
+        cursor = 0
+        height = 0
+        while cursor < len(headers):
+            next_cursor = self.db.header_offset(height + 1)
+            header = headers[cursor:next_cursor]
+            result['headers'].append(header.hex())
+            cursor = next_cursor
+            height += 1
+
         self.bump_cost(cost)
         return result
 
@@ -1960,36 +1994,41 @@ class AuxPoWElectrumX(ElectrumX):
             return result
 
         # Covered by a checkpoint; truncate AuxPoW data
-        result['header'] = self.truncate_auxpow(result['header'], height)
+        result['header'] = self.truncate_auxpow_single(result['header'])
         return result
 
     async def block_headers(self, start_height, count, cp_height=0):
-        result = await super().block_headers(start_height, count, cp_height)
-
         # Older protocol versions don't truncate AuxPoW
         if self.protocol_tuple < (1, 4, 1):
-            return result
+            return await super().block_headers(start_height, count, cp_height)
 
         # Not covered by a checkpoint; return full AuxPoW data
         if cp_height == 0:
-            return result
+            return await super().block_headers(start_height, count, cp_height)
+
+        result = await super().block_headers_array(start_height, count, cp_height)
 
         # Covered by a checkpoint; truncate AuxPoW data
-        result['hex'] = self.truncate_auxpow(result['hex'], start_height)
+        result['headers'] = self.truncate_auxpow_headers(result['headers'])
+
+        # Return headers in array form
+        if self.protocol_tuple >= (1, 6):
+            return result
+
+        # Return headers in concatenated form
+        result['hex'] = ''.join(result['headers'])
+        del result['headers']
         return result
 
-    def truncate_auxpow(self, headers_full_hex, start_height):
-        height = start_height
-        headers_full = util.hex_to_bytes(headers_full_hex)
-        cursor = 0
-        headers = bytearray()
+    def truncate_auxpow_headers(self, headers):
+        result = []
+        for header in headers:
+            result.append(self.truncate_auxpow_single(header))
+        return result
 
-        while cursor < len(headers_full):
-            headers += headers_full[cursor:cursor+self.coin.TRUNCATED_HEADER_SIZE]
-            cursor += self.db.dynamic_header_len(height)
-            height += 1
-
-        return headers.hex()
+    def truncate_auxpow_single(self, header: str):
+        # 2 hex chars per byte
+        return header[:2*self.coin.TRUNCATED_HEADER_SIZE]
 
 
 class NameIndexElectrumX(ElectrumX):

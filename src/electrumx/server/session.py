@@ -1067,7 +1067,7 @@ class ElectrumX(SessionBase):
 
     PROTOCOL_MIN = (1, 4)
     # consider bumping Coin.MIN_REQUIRED_DAEMON_VERSION too when releasing a new protocol version
-    PROTOCOL_MAX = (1, 4, 3)
+    PROTOCOL_MAX = (1, 6, 0)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

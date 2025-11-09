@@ -118,7 +118,12 @@ live on an SSD::
 Process limits
 --------------
 
-You must ensure the ElectrumX process has a large open file limit.
+The ElectrumX process needs a large open file limit. On Linux systems,
+the default (:command:`ulimit -n`) (soft) open file limit is usually 1,024.
+ElectrumX tries to raise this automatically during startup to the hard limit,
+which is usually 100,000+. If that fails (which would get logged),
+you might have to manually increase the limit.
+
 During sync it should not need more than about 1,024 open files.  When
 serving it will use approximately 256 for LevelDB plus the number of
 incoming connections.  It is not unusual to have 1,000 to 2,000

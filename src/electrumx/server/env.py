@@ -82,6 +82,7 @@ class Env(EnvBase):
 
         self.max_send = self.integer('MAX_SEND', self.coin.DEFAULT_MAX_SEND)
         self.max_recv = self.integer('MAX_RECV', self.coin.DEFAULT_MAX_RECV)
+        self._try_raising_rlimit_nofile()  # do this before setting max_sessions
         self.max_sessions = self.sane_max_sessions()
         self.cost_soft_limit = self.integer('COST_SOFT_LIMIT', 1000)
         self.cost_hard_limit = self.integer('COST_HARD_LIMIT', 10000)
@@ -102,9 +103,28 @@ class Env(EnvBase):
             self.ssl_keyfile = self.required('SSL_KEYFILE')
         self.report_services = self.services_to_report()
 
+    def _try_raising_rlimit_nofile(self) -> None:
+        """Try raising the max num open file soft limit to the hard limit."""
+        try:
+            import resource
+        except ImportError:
+            return  # No resource module on Windows
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft >= hard:
+            return
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+        except (ValueError, OSError):
+            self.logger.warning(
+                f"error raising RLIMIT_NOFILE (ulimit -n) soft limit. Stuck with {soft}. "
+                f"You must ensure that electrumx has a large open file limit. See HOWTO in docs.")
+        else:
+            self.logger.info(
+                f"successfully raised RLIMIT_NOFILE (ulimit -n) soft limit from {soft} to {hard}")
+
     def sane_max_sessions(self):
         '''Return the maximum number of sessions to permit.  Normally this
-        is MAX_SESSIONS.  However, to prevent open file exhaustion, ajdust
+        is MAX_SESSIONS.  However, to prevent open file exhaustion, adjust
         downwards if running with a small open file rlimit.'''
         env_value = self.integer('MAX_SESSIONS', 1000)
         # No resource module on Windows

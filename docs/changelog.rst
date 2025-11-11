@@ -3,6 +3,34 @@
 ===========
 
 
+Version 1.19.0 (11 Nov 2025)
+=============================
+
+* protocol:
+   - new: implement electrum protocol version 1.6 (`spesmilo/electrumx#317`_, ...)
+     (`spesmilo/electrum-protocol#6`_).
+     The min supported protocol version remains 1.4, the max is now 1.6.
+* coins:
+   - changed: for `COIN=Bitcoin`, there is now a min required bitcoind version:
+     Bitcoin Core 28.0 (or Knots 28) (`spesmilo/electrumx#316`_).
+     This is due to protocol 1.6 requiring a bitcoind with working `submitpackage` RPC.
+* security:
+   - fix DOS vector: if MAX_SESSIONS was reached, when using python 3.12+, the server
+     stopped accepting new incoming sessions until full-restart (`spesmilo/electrumx#312`_)
+* session:
+   - changed: add warmup budget to PaddedRSTransport (`spesmilo/electrumx#323`_):
+     this is a small relaxation of the traffic analysis countermeasures added in 1.18,
+     where the first 1024 bytes we send are now exempt from buffering (and hence delays)
+   - fix ReplyAndDisconnect for PaddedRSTransport: flush message buffer (`spesmilo/electrumx#322`_)
+* env:
+   - rm DROP_CLIENT_UNKNOWN opt-in env var: this behaviour is now mandated by protocol 1.6
+     and we just always enforce it (~small breaking change, affected clients would have
+     already been considered misbehaving)
+* misc:
+   - new: try to raise `ulimit -n` open file limit automatically at startup
+     (`spesmilo/electrumx#326`_)
+
+
 Version 1.18.0 (14 June 2025)
 =============================
 
@@ -253,6 +281,12 @@ This fork maintained by:
 .. _spesmilo/electrumx#273:  https://github.com/spesmilo/electrumx/pull/273
 .. _spesmilo/electrumx#298:  https://github.com/spesmilo/electrumx/pull/298
 .. _spesmilo/electrumx#301:  https://github.com/spesmilo/electrumx/pull/301
+.. _spesmilo/electrumx#312:  https://github.com/spesmilo/electrumx/pull/312
+.. _spesmilo/electrumx#316:  https://github.com/spesmilo/electrumx/pull/316
+.. _spesmilo/electrumx#317:  https://github.com/spesmilo/electrumx/pull/317
+.. _spesmilo/electrumx#322:  https://github.com/spesmilo/electrumx/pull/322
+.. _spesmilo/electrumx#323:  https://github.com/spesmilo/electrumx/pull/323
+.. _spesmilo/electrumx#326:  https://github.com/spesmilo/electrumx/pull/326
 
 
 .. _4b3f6510:  https://github.com/spesmilo/electrumx/commit/4b3f6510e94670a013c1abe6247cdd2b0e7e6f8c
@@ -267,3 +301,7 @@ This fork maintained by:
 .. _5f4dd2cd:  https://github.com/spesmilo/electrumx/commit/5f4dd2cdb414464484407affbbaae6b7407696cb
 .. _f5582b29:  https://github.com/spesmilo/electrumx/commit/f5582b29792625e8cca7cf137a6718c2520bb9cb
 .. _0ba87447:  https://github.com/spesmilo/electrumx/commit/0ba87447cb293cfc4a8a26c1c27842b95666875a
+
+
+.. _spesmilo/electrum-protocol#6:  https://github.com/spesmilo/electrum-protocol/pull/6
+

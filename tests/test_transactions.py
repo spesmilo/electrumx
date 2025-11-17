@@ -48,6 +48,8 @@ def test_transaction_bitcoin(transaction_details_bitcoin):
     assert tx_info['txid'] == hash_to_hex_str(tx_hash)
     assert tx_info['hash'] == hash_to_hex_str(tx.wtxid)
 
+    assert tx_info['version'] == tx.version
+    assert tx_info['vsize'] == vsize
 
 ##########
 # Non-Bitcoin stuff goes below this line.
@@ -64,6 +66,8 @@ def test_transaction_alts(transaction_details_altcoin):
     tx = coin.DESERIALIZER(raw_tx, 0).read_tx()
     tx_hash = tx.txid
     assert tx_info['txid'] == hash_to_hex_str(tx_hash)
+    if expected_wtxid := tx_info.get('hash'):
+        assert expected_wtxid == hash_to_hex_str(tx.wtxid)
 
     vin = tx_info['vin']
     for i in range(len(vin)):

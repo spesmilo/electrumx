@@ -51,6 +51,22 @@ def test_transaction_bitcoin(transaction_details_bitcoin):
     assert tx_info['version'] == tx.version
     assert tx_info['vsize'] == vsize
 
+    vin = tx_info['vin']
+    for i in range(len(vin)):
+        assert vin[i]['txid'] == hash_to_hex_str(tx.inputs[i].prev_hash)
+        assert vin[i]['vout'] == tx.inputs[i].prev_idx
+        if "txinwitness" in vin[i] or (hasattr(tx, "witness") and tx.witness[i]):
+            assert vin[i]["txinwitness"] == [x.hex() for x in tx.witness[i]]
+
+    vout = tx_info['vout']
+    for i in range(len(vout)):
+        # value pk_script
+        assert vout[i]['value'] == tx.outputs[i].value / 10**8
+        spk = vout[i]['scriptPubKey']
+        tx_pks = tx.outputs[i].pk_script
+        assert spk['hex'] == tx_pks.hex()
+
+
 ##########
 # Non-Bitcoin stuff goes below this line.
 

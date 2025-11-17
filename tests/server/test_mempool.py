@@ -550,6 +550,33 @@ async def test_notifications(caplog):
 
 
 @pytest.mark.asyncio
+async def test_get_recently_added_txs():
+    mempool_size_target = 50
+    api = API()
+    api.initialize(mempool_size=mempool_size_target)
+    mempool = MemPool(coin, api, refresh_secs=0.001, log_status_secs=0)
+    event = Event()
+
+    raw_txs = api.raw_txs.copy()
+    txs = api.txs.copy()
+
+    async with OldTaskGroup() as group:
+        api.raw_txs = {}
+        api.txs = {}
+        await group.spawn(mempool.keep_synchronized, event)
+        for cur_size in range(mempool_size_target):
+            api.raw_txs = {hash: raw_txs[hash] for hash in api.ordered_adds[:cur_size]}
+            api.txs = {hash: txs[hash] for hash in api.ordered_adds[:cur_size]}
+            async with ignore_after(max(mempool.refresh_secs * 2, 0.5)):
+                await event.wait()
+            recent_txs = await mempool.get_recently_added_txs(count=10)
+            start_idx = max(0, cur_size-10)
+            recent_adds = api.ordered_adds[start_idx:cur_size]
+            assert [tx.hash for tx in recent_txs][::-1] == recent_adds
+        await group.cancel_remaining()
+
+
+@pytest.mark.asyncio
 async def test_dropped_txs(caplog):
     api = API()
     api.initialize()

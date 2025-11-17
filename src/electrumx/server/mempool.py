@@ -45,6 +45,13 @@ class MemPoolTxSummary:
     has_unconfirmed_inputs: bool
 
 
+@dataclass(slots=True, frozen=True, kw_only=True)
+class RecentMemPoolTx:
+    hash: bytes
+    fee: int      # in sats
+    vsize: int    # in vbytes
+
+
 class DBSyncError(Exception):
     pass
 
@@ -546,3 +553,12 @@ class MemPool:
             spender_txhash=spender_txhash,
             spender_height=spender_height,
         )
+
+    async def get_recently_added_txs(self, *, count: int) -> Sequence[RecentMemPoolTx]:
+        # note: inefficient for large "count"s
+        it = reversed(self.txs.items())
+        count = min(count, len(self.txs))
+        mempool_txs = [next(it) for _ in range(count)]
+        return [
+            RecentMemPoolTx(hash=hash, fee=mtx.fee, vsize=mtx.size)
+            for hash, mtx in mempool_txs]

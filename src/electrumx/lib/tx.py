@@ -127,8 +127,8 @@ class Deserializer:
 
     def __init__(self, binary, start=0):
         assert isinstance(binary, bytes)
-        self.binary = binary
-        self.binary_length = len(binary)
+        self.binary = binary  # note: this might be a full block or just a raw tx
+        self._binary_length = len(binary)
         self.cursor = start
 
     def read_tx(self) -> Tx:
@@ -153,7 +153,9 @@ class Deserializer:
 
     def _read_tx_parts(self) -> Tuple[Tx, int]:
         '''Return a (deserialized TX, vsize) tuple.'''
-        return self.read_tx(), self.binary_length
+        start = self.cursor
+        tx = self.read_tx()
+        return tx, self.cursor - start
 
     def read_tx_block(self) -> Sequence[Tx]:
         read = self.read_tx
@@ -190,7 +192,7 @@ class Deserializer:
     def _read_nbytes(self, n):
         cursor = self.cursor
         self.cursor = end = cursor + n
-        assert self.binary_length >= end
+        assert self._binary_length >= end
         return self.binary[cursor:end]
 
     def _read_varbytes(self):
@@ -260,11 +262,12 @@ class DeserializerSegWit(Deserializer):
 
     def _read_tx_parts(self) -> Tuple[Tx, int]:
         '''Return a (deserialized TX, vsize) tuple.'''
+        orig_start = self.cursor
         start = self.cursor
         marker = self.binary[self.cursor + 4]
         if marker:  # non-segwit
             tx = Deserializer.read_tx(self)
-            return tx, self.binary_length
+            return tx, self.cursor - orig_start
 
         # Ugh, this is tasty.
         version = self._read_le_int32()
@@ -278,16 +281,19 @@ class DeserializerSegWit(Deserializer):
         outputs = self._read_outputs()
         orig_ser += self.binary[start:self.cursor]
 
-        base_size = self.cursor - start
+        witness_start = self.cursor
         witness = self._read_witness(len(inputs))
+        witness_size = self.cursor - witness_start + 2  # +2 due to marker and flag bytes
 
         start = self.cursor
         locktime = self._read_le_uint32()
         orig_ser += self.binary[start:self.cursor]
-        vsize = (3 * base_size + self.binary_length) // 4
+        base_size = self.cursor - orig_start - witness_size
+        weight = 4 * base_size + witness_size
+        vsize = weight // 4 + (weight % 4 > 0)
 
         txid = self.TX_HASH_FN(orig_ser)
-        wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
 
         return TxSegWit(
             version=version,
@@ -324,11 +330,12 @@ class DeserializerLitecoin(DeserializerSegWit):
     interest to electrumx, and they vanish into the MWEB when mined.
     '''
     def _read_tx_parts(self):
+        orig_start = self.cursor
         start = self.cursor
         marker = self.binary[self.cursor + 4]
         if marker:  # non-segwit
             tx = Deserializer.read_tx(self)
-            return tx, self.binary_length
+            return tx, self.cursor - orig_start
 
         version = self._read_le_int32()
         orig_ser = self.binary[start:self.cursor]
@@ -350,9 +357,8 @@ class DeserializerLitecoin(DeserializerSegWit):
         outputs = self._read_outputs()
         orig_ser += self.binary[start:self.cursor]
 
-        base_size = self.cursor - start
-
         # https://github.com/litecoin-project/litecoin/blob/948e6257aec15b52ef68b4e1ee9d73f7c740fae3/src/primitives/transaction.h#L299
+        witness_start = self.cursor
         if flag & 1:  # witness flag
             witness = self._read_witness(len(inputs))
         else:
@@ -361,6 +367,7 @@ class DeserializerLitecoin(DeserializerSegWit):
             # should return a normal Tx here instead, but there is a flag byte
             # we should probably not just discard.
             witness = []
+        witness_size = self.cursor - witness_start + 2  # +2 due to marker and flag bytes
 
         if flag & 8:  # MWEB flag
             # If this transaction is in the main block, not the MW extension
@@ -389,10 +396,12 @@ class DeserializerLitecoin(DeserializerSegWit):
         start = self.cursor
         locktime = self._read_le_uint32()
         orig_ser += self.binary[start:self.cursor]
-        vsize = (3 * base_size + self.binary_length) // 4
+        base_size = self.cursor - orig_start - witness_size
+        weight = 4 * base_size + witness_size
+        vsize = weight // 4 + (weight % 4 > 0)
 
         txid = self.TX_HASH_FN(orig_ser)
-        wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
 
         return TxSegWit(
             version=version,
@@ -475,6 +484,7 @@ class DeserializerEquihashSegWit(DeserializerSegWit, DeserializerEquihash):
 
 class DeserializerZcash(DeserializerEquihash):
     def read_tx(self):
+        orig_start = self.cursor
         start = self.cursor
         header = self._read_le_uint32()
         overwintered = ((header >> 31) == 1)
@@ -520,7 +530,7 @@ class DeserializerZcash(DeserializerEquihash):
         if is_sapling_v4 and has_shielded:
             self.cursor += 64  # bindingSig
 
-        base_tx.txid = base_tx.wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        base_tx.txid = base_tx.wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
         return base_tx
 
 
@@ -543,6 +553,7 @@ class TxPIVX(Tx):
 
 class DeserializerPIVX(Deserializer):
     def read_tx(self):
+        orig_start = self.cursor
         start = self.cursor
         header = self._read_le_uint32()
         tx_type = header >> 16  # DIP2 tx type
@@ -576,7 +587,7 @@ class DeserializerPIVX(Deserializer):
             if (tx_type > 0):
                 self.cursor += 2  # extraPayload
 
-        base_tx.txid = base_tx.wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        base_tx.txid = base_tx.wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
         return base_tx
 
 
@@ -588,6 +599,7 @@ class TxTime(Tx):
 
 class DeserializerTxTime(Deserializer):
     def read_tx(self):
+        orig_start = self.cursor
         start = self.cursor
         tx = TxTime(
             version=self._read_le_int32(),
@@ -598,7 +610,7 @@ class DeserializerTxTime(Deserializer):
             txid=None,
             wtxid=None,
         )
-        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
         return tx
 
 
@@ -618,11 +630,12 @@ class DeserializerTxTimeSegWit(DeserializerTxTime):
         return [read_varbytes() for _ in range(self._read_varint())]
 
     def _read_tx_parts(self):
+        orig_start = self.cursor
         start = self.cursor
         marker = self.binary[self.cursor + 8]
         if marker:  # non-segwit
             tx = DeserializerTxTime.read_tx(self)
-            return tx, self.binary_length
+            return tx, self.cursor - orig_start
 
         version = self._read_le_int32()
         time = self._read_le_uint32()
@@ -636,16 +649,19 @@ class DeserializerTxTimeSegWit(DeserializerTxTime):
         outputs = self._read_outputs()
         orig_ser += self.binary[start:self.cursor]
 
-        base_size = self.cursor - start
+        witness_start = self.cursor
         witness = self._read_witness(len(inputs))
+        witness_size = self.cursor - witness_start + 2  # +2 due to marker and flag bytes
 
         start = self.cursor
         locktime = self._read_le_uint32()
         orig_ser += self.binary[start:self.cursor]
-        vsize = (3 * base_size + self.binary_length) // 4
+        base_size = self.cursor - orig_start - witness_size
+        weight = 4 * base_size + witness_size
+        vsize = weight // 4 + (weight % 4 > 0)
 
         txid = self.TX_HASH_FN(orig_ser)
-        wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
 
         tx = TxTimeSegWit(
             version=version,
@@ -696,11 +712,12 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
         )
 
     def _read_tx_parts(self):
+        orig_start = self.cursor
         start = self.cursor
         marker = self.binary[self.cursor + 8]
         if marker:  # non-segwit
             tx = self.read_tx_no_segwit()
-            return tx, self.binary_length
+            return tx, self.cursor - orig_start
 
         version = self._read_le_int32()
         time = self._read_le_uint32()
@@ -714,8 +731,9 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
         outputs = self._read_outputs()
         orig_ser += self.binary[start:self.cursor]
 
-        base_size = self.cursor - start
+        witness_start = self.cursor
         witness = self._read_witness(len(inputs))
+        witness_size = self.cursor - witness_start + 2  # +2 due to marker and flag bytes
 
         start = self.cursor
         locktime = self._read_le_uint32()
@@ -724,11 +742,13 @@ class DeserializerTxTimeSegWitNavCoin(DeserializerTxTime):
         if version >= 2:
             strDZeel = self._read_varbytes()
 
-        vsize = (3 * base_size + self.binary_length) // 4
+        base_size = self.cursor - orig_start - witness_size
+        weight = 4 * base_size + witness_size
+        vsize = weight // 4 + (weight % 4 > 0)
         orig_ser += self.binary[start:self.cursor]
 
         txid = self.TX_HASH_FN(orig_ser)
-        wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
         tx = TxTimeSegWit(
             version=version,
             time=time,
@@ -819,6 +839,7 @@ class DeserializerBlackcoin(Deserializer):
         return result
 
     def read_tx(self):
+        orig_start = self.cursor
         start = self.cursor
         version = self._get_version()
         if version < self.BLACKCOIN_TX_VERSION:
@@ -840,7 +861,7 @@ class DeserializerBlackcoin(Deserializer):
                 txid=None,
                 wtxid=None,
             )
-        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
         return tx
 
 
@@ -1185,6 +1206,7 @@ class TxBitcoinDiamondSegWit(TxSegWit):
 class DeserializerBitcoinDiamondSegWit(DeserializerBitcoinDiamond,
                                        DeserializerSegWit):
     def _read_tx_parts(self):
+        orig_start = self.cursor
         start = self.cursor
         tx_version = self._get_version()
         if tx_version == self.bitcoin_diamond_tx_version:
@@ -1194,7 +1216,7 @@ class DeserializerBitcoinDiamondSegWit(DeserializerBitcoinDiamond,
 
         if marker:  # non-segwit
             tx = DeserializerBitcoinDiamond.read_tx(self)
-            return tx, self.binary_length
+            return tx, self.cursor - orig_start
 
         # Ugh, this is nasty.
         version = self._read_le_int32()
@@ -1211,16 +1233,19 @@ class DeserializerBitcoinDiamondSegWit(DeserializerBitcoinDiamond,
         outputs = self._read_outputs()
         orig_ser += self.binary[start:self.cursor]
 
-        base_size = self.cursor - start
+        witness_start = self.cursor
         witness = self._read_witness(len(inputs))
+        witness_size = self.cursor - witness_start + 2  # +2 due to marker and flag bytes
 
         start = self.cursor
         locktime = self._read_le_uint32()
         orig_ser += self.binary[start:self.cursor]
-        vsize = (3 * base_size + self.binary_length) // 4
+        base_size = self.cursor - orig_start - witness_size
+        weight = 4 * base_size + witness_size
+        vsize = weight // 4 + (weight % 4 > 0)
 
         txid = self.TX_HASH_FN(orig_ser)
-        wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
 
         if present_block_hash is not None:
             return TxBitcoinDiamondSegWit(
@@ -1263,6 +1288,7 @@ class DeserializerElectra(Deserializer):
         return result
 
     def read_tx(self):
+        orig_start = self.cursor
         start = self.cursor
         version = self._get_version()
         if version != self.ELECTRA_TX_VERSION:
@@ -1284,12 +1310,13 @@ class DeserializerElectra(Deserializer):
                 txid=None,
                 wtxid=None,
             )
-        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
         return tx
 
 
 class DeserializerECCoin(Deserializer):
     def read_tx(self):
+        orig_start = self.cursor
         start = self.cursor
         tx_version = self._read_le_int32()
         tx = TxTime(
@@ -1305,7 +1332,7 @@ class DeserializerECCoin(Deserializer):
         if tx_version > 1:
             self.cursor += 32
 
-        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
         return tx
 
 
@@ -1374,6 +1401,7 @@ class DeserializerSimplicity(Deserializer):
         return result
 
     def read_tx(self):
+        orig_start = self.cursor
         start = self.cursor
         version = self._get_version()
         if version < self.SIMPLICITY_TX_VERSION:
@@ -1395,7 +1423,7 @@ class DeserializerSimplicity(Deserializer):
                 txid=None,
                 wtxid=None,
             )
-        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[start:self.cursor])
+        tx.txid = tx.wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
         return tx
 
 

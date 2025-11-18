@@ -20,30 +20,70 @@ TRANSACTION_DIR = os.path.join(
 
 # Find out which db engines to test
 # Those that are not installed will be skipped
-transactions = []
+transactions_bitcoin = []
+transactions_alts = []
 
 for name in os.listdir(TRANSACTION_DIR):
+    name_parts = name.split("_")
+    tx_list = transactions_bitcoin if name_parts[0] == "bitcoin" else transactions_alts
     try:
-        name_parts = name.split("_")
         coinFound = Coin.lookup_coin_class(name_parts[0], name_parts[1])
         with open(os.path.join(TRANSACTION_DIR, name)) as f:
-            transactions.append((coinFound, json.load(f)))
+            tx_list.append((coinFound, json.load(f)))
     except Exception as e:
-        transactions.append(pytest.fail(name))
+        tx_list.append(pytest.fail(name))
 
 
-@pytest.fixture(params=transactions)
-def transaction_details(request):
+@pytest.fixture(params=transactions_bitcoin)
+def transaction_details_bitcoin(request):
     return request.param
 
 
-def test_transaction(transaction_details):
-    coin, tx_info = transaction_details
+def test_transaction_bitcoin(transaction_details_bitcoin):
+    coin, tx_info = transaction_details_bitcoin
+
+    raw_tx = unhexlify(tx_info['hex'])
+    tx, vsize = coin.DESERIALIZER(raw_tx, 0).read_tx_and_vsize()
+    tx_hash = tx.txid
+    assert tx_info['txid'] == hash_to_hex_str(tx_hash)
+    assert tx_info['hash'] == hash_to_hex_str(tx.wtxid)
+
+    assert tx_info['version'] == tx.version
+    assert tx_info['vsize'] == vsize
+
+    vin = tx_info['vin']
+    for i in range(len(vin)):
+        assert vin[i]['txid'] == hash_to_hex_str(tx.inputs[i].prev_hash)
+        assert vin[i]['vout'] == tx.inputs[i].prev_idx
+        if "txinwitness" in vin[i] or (hasattr(tx, "witness") and tx.witness[i]):
+            assert vin[i]["txinwitness"] == [x.hex() for x in tx.witness[i]]
+
+    vout = tx_info['vout']
+    for i in range(len(vout)):
+        # value pk_script
+        assert vout[i]['value'] == tx.outputs[i].value / 10**8
+        spk = vout[i]['scriptPubKey']
+        tx_pks = tx.outputs[i].pk_script
+        assert spk['hex'] == tx_pks.hex()
+
+
+##########
+# Non-Bitcoin stuff goes below this line.
+
+@pytest.fixture(params=transactions_alts)
+def transaction_details_altcoin(request):
+    return request.param
+
+
+def test_transaction_alts(transaction_details_altcoin):
+    coin, tx_info = transaction_details_altcoin
 
     raw_tx = unhexlify(tx_info['hex'])
     tx = coin.DESERIALIZER(raw_tx, 0).read_tx()
     tx_hash = tx.txid
     assert tx_info['txid'] == hash_to_hex_str(tx_hash)
+    if expected_wtxid := tx_info.get('hash'):
+        assert expected_wtxid == hash_to_hex_str(tx.wtxid)
 
     vin = tx_info['vin']
     for i in range(len(vin)):

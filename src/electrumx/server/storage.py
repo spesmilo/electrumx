@@ -91,42 +91,44 @@ class LevelDB(Storage):
 
 
 class RocksDB(Storage):
-    '''RocksDB database engine.'''
+    '''RocksDB database engine (using rocksdict).'''
 
     @classmethod
     def import_module(cls):
-        import rocksdb
-        cls.module = rocksdb
+        import rocksdict
+        cls.module = rocksdict
 
     def open(self, name, create):
         mof = 512 if self.for_sync else 128
-        # Use snappy compression (the default)
-        options = self.module.Options(create_if_missing=create,
-                                      use_fsync=True,
-                                      target_file_size_base=33554432,
-                                      max_open_files=mof)
-        self.db = self.module.DB(name, options)
+        if create:
+            options = self.module.Options(raw_mode=True)
+            options.create_if_missing(True)
+            options.set_max_open_files(mof)
+            self.db = self.module.Rdict(name, options=options)
+        else:
+            # Open existing DB without explicit Options so rocksdict
+            # auto-detects the comparator and compression from the
+            # existing OPTIONS file.
+            self.db = self.module.Rdict(name)
         self.get = self.db.get
         self.put = self.db.put
 
     def close(self):
-        # PyRocksDB doesn't provide a close method; hopefully this is enough
+        self.db.close()
         self.db = self.get = self.put = None
-        import gc
-        gc.collect()
 
     def write_batch(self):
-        return RocksDBWriteBatch(self.db)
+        return RocksDictWriteBatch(self.db)
 
     def iterator(self, prefix=b'', reverse=False):
-        return RocksDBIterator(self.db, prefix, reverse)
+        return RocksDictIterator(self.db, prefix, reverse)
 
 
-class RocksDBWriteBatch:
-    '''A write batch for RocksDB.'''
+class RocksDictWriteBatch:
+    '''A write batch for RocksDB via rocksdict.'''
 
     def __init__(self, db):
-        self.batch = RocksDB.module.WriteBatch()
+        self.batch = RocksDB.module.WriteBatch(raw_mode=True)
         self.db = db
 
     def __enter__(self):
@@ -137,31 +139,36 @@ class RocksDBWriteBatch:
             self.db.write(self.batch)
 
 
-class RocksDBIterator:
-    '''An iterator for RocksDB.'''
+class RocksDictIterator:
+    '''An iterator for RocksDB via rocksdict.'''
 
     def __init__(self, db, prefix, reverse):
         self.prefix = prefix
+        self.reverse = reverse
+        self.it = db.iter()
         if reverse:
-            self.iterator = reversed(db.iteritems())
             nxt_prefix = util.increment_byte_string(prefix)
             if nxt_prefix:
-                self.iterator.seek(nxt_prefix)
-                try:
-                    next(self.iterator)
-                except StopIteration:
-                    self.iterator.seek(nxt_prefix)
+                self.it.seek_for_prev(nxt_prefix)
+                # If we landed exactly on nxt_prefix, step back
+                if self.it.valid() and self.it.key() >= nxt_prefix:
+                    self.it.prev()
             else:
-                self.iterator.seek_to_last()
+                self.it.seek_to_last()
         else:
-            self.iterator = db.iteritems()
-            self.iterator.seek(prefix)
+            self.it.seek(prefix)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        k, v = next(self.iterator)
+        if not self.it.valid():
+            raise StopIteration
+        k, v = self.it.key(), self.it.value()
         if not k.startswith(self.prefix):
             raise StopIteration
+        if self.reverse:
+            self.it.prev()
+        else:
+            self.it.next()
         return k, v

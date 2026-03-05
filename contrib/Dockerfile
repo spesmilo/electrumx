@@ -13,21 +13,18 @@ WORKDIR /usr/src/app
 # Install the libs needed by leveldb (including development headers)
 RUN apt-get update \
     && apt-get -y --no-install-recommends install \
-        build-essential git libleveldb-dev libsnappy-dev \
+        build-essential git libleveldb-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv venv \
     && venv/bin/pip install --no-cache-dir \
-        "e-x[rapidjson,leveldb] @ git+https://github.com/spesmilo/electrumx.git@1.19.0"
+        "e-x @ git+https://github.com/spesmilo/electrumx.git@1.19.0"
 
 
 FROM python:3.14.3-slim-trixie
 
 # Install the libs needed by leveldb (no development headers or statics)
-RUN apt-get update \
-    && apt-get -y --no-install-recommends install \
-        libleveldb1d libsnappy1v5 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get -y --no-install-recommends install libleveldb1d && rm -rf /var/lib/apt/lists/*
 
 ENV SERVICES="tcp://:50001"
 ENV COIN=Bitcoin

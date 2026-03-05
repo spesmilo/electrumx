@@ -39,7 +39,6 @@ unittests_task:
     - pip install pycryptodomex
     - pip install git+https://github.com/Electra-project/nist5_hash
     - pip install x16rv2_hash
-    - pip install git+https://github.com/VerusCoin/verushashpy
   script:
     - pytest --cov=electrumx
   #coveralls_script:

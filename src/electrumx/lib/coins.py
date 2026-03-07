@@ -720,6 +720,10 @@ class Verge(Coin):
     GENESIS_HASH = ('00000fc63692467faeb20cdb3b53200d'
                     'c601d75bdfa1001463304cc790d77278')
     RPC_PORT = 20102
+    PEERS = [
+        'electrumx-verge.cloud s50002 t50001',
+        'electrum-verge.cloud s50002 t50001',
+    ]
     TX_COUNT = 500000
     TX_COUNT_HEIGHT = 3082138
     TX_PER_BLOCK = 1

@@ -86,3 +86,59 @@ def address(request):
 def test_address_to_hashX(address):
     coin, addr, _, hashX = address
     assert coin.address_to_hashX(addr).hex() == hashX
+
+
+# SegWit and Taproot address tests
+segwit_addresses = [
+    # Bitcoin P2WPKH (SegWit v0, 20-byte)
+    (coins.Bitcoin, "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+     "0014751e76e8199196d454941c45d1b3a323f1433bd6"),
+    # Bitcoin P2WSH (SegWit v0, 32-byte)
+    (coins.Bitcoin, "bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3",
+     "00201863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262"),
+    # Bitcoin P2TR (Taproot, SegWit v1)
+    (coins.Bitcoin, "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
+     "512079be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"),
+    # Litecoin P2WPKH
+    (coins.Litecoin, "ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9",
+     "0014751e76e8199196d454941c45d1b3a323f1433bd6"),
+]
+
+
+@pytest.fixture(params=segwit_addresses)
+def segwit_address(request):
+    return request.param
+
+
+def test_segwit_address_to_script(segwit_address):
+    coin, addr, expected_script_hex = segwit_address
+    script = coin.pay_to_address_script(addr)
+    assert script.hex() == expected_script_hex
+
+
+def test_segwit_address_to_hashX(segwit_address):
+    coin, addr, expected_script_hex = segwit_address
+    # hashX is SHA256 of the script, truncated to 11 bytes
+    import hashlib
+    expected_script = bytes.fromhex(expected_script_hex)
+    expected_hashX = hashlib.sha256(expected_script).digest()[:11]
+    assert coin.address_to_hashX(addr) == expected_hashX
+
+
+def test_bitcoin_p2tr_address():
+    # Test a specific Taproot address
+    addr = "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0"
+    script = coins.Bitcoin.pay_to_address_script(addr)
+    # Should be OP_1 (0x51) + push 32 bytes (0x20) + 32-byte key
+    assert script[0] == 0x51  # OP_1
+    assert script[1] == 0x20  # 32 bytes
+    assert len(script) == 34
+
+
+def test_invalid_bech32_hrp():
+    # Bitcoin address with wrong HRP should fail
+    import pytest
+    from electrumx.lib.coins import CoinError
+    with pytest.raises(CoinError):
+        # This is a valid bech32m but with HRP "tb" (testnet) on Bitcoin mainnet
+        coins.Bitcoin.pay_to_address_script("tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c")

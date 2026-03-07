@@ -77,6 +77,7 @@ class Env(EnvBase):
         self.reorg_limit = self.integer('REORG_LIMIT', self.coin.REORG_LIMIT)
         self.daemon_poll_interval_blocks_msec = self.integer('DAEMON_POLL_INTERVAL_BLOCKS', 5000)
         self.daemon_poll_interval_mempool_msec = self.integer('DAEMON_POLL_INTERVAL_MEMPOOL', 5000)
+        self.daemon_has_txindex = self.boolean('DAEMON_HAS_TXINDEX', True)
 
         # Server limits to help prevent DoS
 

@@ -692,16 +692,24 @@ class SessionManager:
                 await group.spawn(self._manage_servers())
         finally:
             # Stop listening on servers, so no new sessions can be created
+            self.logger.info(f'stop listening on servers, so no new sessions can be created')
             await self._stop_servers(self.servers.keys())
-            # Then close sessions
+            # Then close sessions.
+            # note: only best-effort. sessions that are still doing early-handshake are not yet put
+            #       into the sessions dict.
             self.logger.info(f'closing {len(self.sessions):,d} active sessions')
             async with OldTaskGroup() as group:
                 for session in list(self.sessions):
                     await group.spawn(session.close(force_after=1))
             # Finally, wait for servers to be cleaned up and remove servers
             self.logger.info(f"waiting for all server's resources to close")
-            for server in self.servers.values():
-                await server.wait_closed()
+            try:
+                async with timeout_after(3):
+                    async with OldTaskGroup() as group:
+                        for server in self.servers.values():
+                            await group.spawn(server.wait_closed())
+            except TaskTimeout:
+                self.logger.warning('timed out waiting for server resources to close')
             servers_to_remove = list(self.servers.keys())
             self._remove_servers(servers_to_remove)
 
@@ -901,9 +909,24 @@ class SessionManager:
 class RPCSessionWithTaskGroup(RPCSession):
     def __init__(self, *args, manager_taskgroup: OldTaskGroup, **kwargs):
         RPCSession.__init__(self, *args, **kwargs)
+        self._manager_taskgroup = manager_taskgroup
         self.taskgroup = OldTaskGroup()
         asyncio.get_event_loop().create_task(
-            manager_taskgroup.spawn(self.main_loop()))
+            self._start_main_loop())
+
+    async def _start_main_loop(self) -> None:
+        if self._manager_taskgroup.joined:  # this can happen during shutdown
+            self.logger.warning(
+                f"manager_taskgroup already terminated. closing session during its init.")
+            await self.close(force_after=1.0)
+            return
+        try:
+            await self._manager_taskgroup.spawn(self.main_loop())
+        except RuntimeError:
+            if self._manager_taskgroup.joined:
+                pass  # race: task group terminated just after we checked it before spawning
+            else:
+                raise
 
     async def main_loop(self):
         """Manages taskgroup tied to this session.

@@ -117,6 +117,40 @@ class ScriptPubKey:
                 + Script.push_data(hash160)
                 + bytes((OpCodes.OP_EQUALVERIFY, OpCodes.OP_CHECKSIG)))
 
+    @classmethod
+    def P2WPKH_script(cls, hash160):
+        '''Create a P2WPKH (SegWit v0 pubkey hash) script.'''
+        # OP_0 <20-byte-hash>
+        return bytes((OpCodes.OP_0, 20)) + hash160
+
+    @classmethod
+    def P2WSH_script(cls, hash256):
+        '''Create a P2WSH (SegWit v0 script hash) script.'''
+        # OP_0 <32-byte-hash>
+        return bytes((OpCodes.OP_0, 32)) + hash256
+
+    @classmethod
+    def P2TR_script(cls, output_key):
+        '''Create a P2TR (Taproot, SegWit v1) script.'''
+        # OP_1 <32-byte-key>
+        return bytes((OpCodes.OP_1, 32)) + output_key
+
+    @classmethod
+    def witness_program_script(cls, version, program):
+        '''Create a witness program script for any version.
+
+        version: 0-16
+        program: witness program bytes (length varies by version)
+        '''
+        if version < 0 or version > 16:
+            raise ScriptError(f'invalid witness version: {version}')
+        # OP_0 is 0x00, OP_1 through OP_16 are 0x51 through 0x60
+        if version == 0:
+            version_op = OpCodes.OP_0
+        else:
+            version_op = OpCodes.OP_1 + (version - 1)
+        return bytes((version_op, len(program))) + program
+
 
 class Script:
 

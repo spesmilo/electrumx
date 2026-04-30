@@ -2,8 +2,8 @@
 ElectrumX
 =========
 
-.. image:: https://api.cirrus-ci.com/github/spesmilo/electrumx.svg?branch=master
-    :target: https://cirrus-ci.com/github/spesmilo/electrumx
+.. image:: https://github.com/spesmilo/electrumx/actions/workflows/ci.yml/badge.svg?branch=master
+    :target: https://github.com/spesmilo/electrumx/actions/workflows/ci.yml
 .. image:: https://coveralls.io/repos/github/spesmilo/electrumx/badge.svg
     :target: https://coveralls.io/github/spesmilo/electrumx
 
@@ -22,8 +22,8 @@ Source Code
 ===========
 
 The project is hosted on `GitHub
-<https://github.com/spesmilo/electrumx/>`_.  and uses `Cirrus CI
-<https://cirrus-ci.com/github/spesmilo/electrumx>`_ for Continuous
+<https://github.com/spesmilo/electrumx/>`_.  and uses `GitHub Actions
+<https://github.com/spesmilo/electrumx/actions>`_ for Continuous
 Integration.
 
 Please submit an issue on the `bug tracker

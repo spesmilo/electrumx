@@ -1270,7 +1270,10 @@ class ElectrumX(SessionBase):
                     if status != old_status:
                         changed[alias] = status
 
-            method = 'blockchain.scripthash.subscribe'
+            if self.protocol_tuple >= (1, 7):
+                method = 'blockchain.scriptpubkey.subscribe'
+            else:
+                method = 'blockchain.scripthash.subscribe'
             for alias, status in changed.items():
                 await self.send_notification(method, (alias, status))
             num_hashx_notifs_sent = len(changed)
@@ -1295,7 +1298,7 @@ class ElectrumX(SessionBase):
             for tx_hash, txout_idx in touched_outpoints:
                 spend_status = txo_to_status[(tx_hash, txout_idx)]
                 tx_hash_hex = hash_to_hex_str(tx_hash)
-                await self.send_notification(method, ((tx_hash_hex, txout_idx), spend_status))
+                await self.send_notification(method, (tx_hash_hex, txout_idx, spend_status))
             num_txo_notifs_sent = len(touched_outpoints)
 
         if num_hashx_notifs_sent + num_txo_notifs_sent > 0:
@@ -1418,7 +1421,7 @@ class ElectrumX(SessionBase):
     async def hashX_subscribe(self, hashX, alias):
         # Store the subscription only after address_status succeeds
         result = await self.address_status(hashX)
-        self.hashX_subs[hashX] = alias
+        self.hashX_subs[hashX] = alias  # TODO rename alias to scripthash
         return result
 
     async def get_balance(self, hashX):

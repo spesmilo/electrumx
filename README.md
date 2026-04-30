@@ -8,7 +8,7 @@ Language: Python (>= 3.10)
 ```
 
 [![Latest PyPI package](https://badge.fury.io/py/e_x.svg)](https://pypi.org/project/e-x/)
-[![Build Status](https://api.cirrus-ci.com/github/spesmilo/electrumx.svg?branch=master)](https://cirrus-ci.com/github/spesmilo/electrumx)
+[![Build Status](https://github.com/spesmilo/electrumx/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/spesmilo/electrumx/actions/workflows/ci.yml)
 [![Test coverage statistics](https://coveralls.io/repos/github/spesmilo/electrumx/badge.svg?branch=master)](https://coveralls.io/github/spesmilo/electrumx)
 
 This project is a fork of [kyuupichan/electrumx](https://github.com/kyuupichan/electrumx).

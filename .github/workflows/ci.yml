@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:  # https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # if a PR gets force pushed, cancel the current run and run the new one
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unittests:
+    name: unittests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install system packages
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -yq libsnappy-dev zlib1g-dev libbz2-dev libgflags-dev liblz4-dev librocksdb-dev libleveldb-dev libboost-all-dev libsodium-dev
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Log Python version and Git tag
+        run: |
+          python3 --version
+          git tag
+
+      - name: Install Python deps
+        run: |
+          # test framework -related deps
+          pip install pycodestyle
+          pip install pytest-asyncio
+          pip install pytest-cov
+          pip install Sphinx
+          # hacks for rocksdb
+          pip install 'Cython<3.0'
+          pip install git+https://github.com/jansegre/python-rocksdb.git@314572c02e7204464a5c3e3475c79d57870a9a03
+          # e-x itself
+          pip install .
+          # hashes and other altcoin-specific stuff
+          pip install tribushashm
+          pip install blake256
+          pip install dash_hash
+          pip install git+https://github.com/bitcoinplusorg/x13-hash
+          pip install xevan_hash
+          pip install quark_hash
+          pip install groestlcoin_hash
+          pip install x16r_hash
+          pip install pycryptodomex
+          pip install git+https://github.com/Electra-project/nist5_hash
+          pip install x16rv2_hash
+
+      - name: Run pytest
+        run: pytest --cov=electrumx
+
+  pycodestyle:
+    name: pycodestyle
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+
+      - name: Install pycodestyle
+        run: pip install pycodestyle
+
+      - name: Run pycodestyle
+        run: pycodestyle --max-line-length=100 src
+
+  build_docs:
+    name: build_docs
+    runs-on: ubuntu-24.04
+    env:
+      LC_ALL: "C"
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+          cache-dependency-path: 'docs/requirements-docs.txt'
+
+      - name: Install docs deps
+        run: pip install -r docs/requirements-docs.txt
+
+      - name: Build docs
+        run: |
+          cd docs
+          make html

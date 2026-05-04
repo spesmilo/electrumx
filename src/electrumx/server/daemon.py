@@ -361,6 +361,12 @@ class Daemon:
         """Broadcast a package of transactions to the network using 'submitpackage'."""
         return await self._send_single('submitpackage', (raw_txs, ))
 
+    async def testmempoolaccept(self, raw_txs: Sequence[str]):
+        """Query the daemon to test mempool acceptance of txs,
+        without adding them to the mempool or broadcasting them.
+        """
+        return await self._send_single('testmempoolaccept', (raw_txs, ))
+
     async def height(self):
         '''Query the daemon for its current height.'''
         self._height = await self._send_single('getblockcount')

@@ -1888,6 +1888,37 @@ class ElectrumX(SessionBase):
             response['errors'] = errors
         return response
 
+    async def transaction_testmempoolaccept(self, raw_txs: Sequence[str]) -> Sequence[dict]:
+        """Returns result of mempool acceptance tests indicating if txs would be accepted by mempool.
+
+        raw_txs: a list of raw transactions as hexadecimal strings
+        """
+        assert_list_or_tuple(raw_txs)
+        for raw_tx in raw_txs:
+            assert_hex_str(raw_tx)
+        self.bump_cost(0.25 + sum(len(tx) / 5000 for tx in raw_txs))
+        daemon_result = await self.daemon_request("testmempoolaccept", raw_txs)
+
+        response: list[dict] = []
+        for orig_item in daemon_result:  # one item for each tx
+            new_item = {
+                "txid": orig_item["txid"],
+                "wtxid": orig_item["wtxid"],
+            }
+            # optional: "allowed" field
+            if orig_item.get("allowed") in (True, False):
+                new_item["allowed"] = orig_item["allowed"]
+            # optional: "reason" field
+            reason_str = (
+                    orig_item.get("package-error")
+                    or orig_item.get("reject-details")
+                    or orig_item.get("reject-reason")
+                    or None)
+            if reason_str is not None:
+                new_item["reason"] = reason_str
+            response.append(new_item)
+        return response
+
     async def transaction_get(self, tx_hash: str, verbose=False):
         '''Return the serialized raw transaction given its hash
 
@@ -2048,6 +2079,7 @@ class ElectrumX(SessionBase):
 
         # experimental:
         if ptuple >= (1, 7):
+            handlers['blockchain.transaction.testmempoolaccept'] = self.transaction_testmempoolaccept
             handlers['blockchain.outpoint.subscribe'] = self.txoutpoint_subscribe
             handlers['blockchain.outpoint.get_status'] = self.txoutpoint_get_status
             handlers['blockchain.outpoint.unsubscribe'] = self.txoutpoint_unsubscribe

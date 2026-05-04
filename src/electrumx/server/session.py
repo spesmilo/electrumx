@@ -1285,13 +1285,13 @@ class ElectrumX(SessionBase):
             method = 'blockchain.outpoint.subscribe'
             txo_to_status = {}
             for prevout in touched_outpoints:
-                txo_to_status[prevout] = await self.txoutpoint_status(*prevout)
+                txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)
 
             # Check mempool TXOs - the status is a function of the confirmed state of
             # other transactions. (this is to detect if height changed from -1 to 0)
             mempool_txoutpoint_statuses = self.mempool_txoutpoint_statuses.copy()
             for prevout, old_status in mempool_txoutpoint_statuses.items():
-                status = await self.txoutpoint_status(*prevout)
+                status = await self.txoutpoint_status_for_notif(*prevout)
                 if status != old_status:
                     txo_to_status[prevout] = status
 
@@ -1332,6 +1332,7 @@ class ElectrumX(SessionBase):
         '''Returns an address status.
 
         Status is a hex string, but must be None if there is no history.
+        Side-effect: updates client-last-seen status, used by notifications.
         '''
         # Note both confirmed history and mempool history are ordered
         # For mempool, height is -1 if it has unconfirmed inputs, otherwise 0
@@ -1353,6 +1354,7 @@ class ElectrumX(SessionBase):
         else:
             status = None
 
+        # update status last sent to client
         if mempool:
             self.mempool_hashX_statuses[hashX] = status
         else:
@@ -1369,7 +1371,7 @@ class ElectrumX(SessionBase):
             self.unsubscribe_hashX(hashX)
             return None
 
-    async def txoutpoint_status(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
+    async def _calc_txoutpoint_status(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
         self.bump_cost(0.2)
         spend_status = await self.db.spender_for_txo(prev_txhash, txout_idx)
         if spend_status.spender_height is not None:
@@ -1393,14 +1395,20 @@ class ElectrumX(SessionBase):
                 assert spend_status.spender_height is not None
                 status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txhash)
                 status['spender_height'] = spend_status.spender_height
+        return status
 
+    async def txoutpoint_status_for_notif(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
+        """Side-effect: updates client-last-seen status, used by notifications."""
+        status = await self._calc_txoutpoint_status(prev_txhash=prev_txhash, txout_idx=txout_idx)
+        # update status last sent to client
         prevout = (prev_txhash, txout_idx)
-        if ((spend_status.prev_height is not None and spend_status.prev_height <= 0)
-                or (spend_status.spender_height is not None and spend_status.spender_height <= 0)):
+        prev_height = status.get('height')  # type: Optional[int]
+        spender_height = status.get('spender_height')  # type: Optional[int]
+        if ((prev_height is not None and prev_height <= 0)
+                or (spender_height is not None and spender_height <= 0)):
             self.mempool_txoutpoint_statuses[prevout] = status
         else:
             self.mempool_txoutpoint_statuses.pop(prevout, None)
-
         return status
 
     async def hashX_listunspent(self, hashX):
@@ -1506,6 +1514,20 @@ class ElectrumX(SessionBase):
         scripthash = spk_to_scripthash(spk)
         return self.scripthash_unsubscribe(scripthash)
 
+    async def txoutpoint_get_status(self, tx_hash, txout_idx, spk_hint=None):
+        '''Return the status of an outpoint, without subscribing.
+
+        spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
+                  other servers, but we don't need and hence ignore it.
+        '''
+        tx_hash = assert_tx_hash(tx_hash)
+        txout_idx = non_negative_integer(txout_idx)
+        if spk_hint is not None:
+            assert_hex_str(spk_hint)
+        # calc status (but do not side-effect client-last-seen status)
+        spend_status = await self._calc_txoutpoint_status(tx_hash, txout_idx)
+        return spend_status
+
     async def txoutpoint_subscribe(self, tx_hash, txout_idx, spk_hint=None):
         '''Subscribe to an outpoint.
 
@@ -1516,7 +1538,8 @@ class ElectrumX(SessionBase):
         txout_idx = non_negative_integer(txout_idx)
         if spk_hint is not None:
             assert_hex_str(spk_hint)
-        spend_status = await self.txoutpoint_status(tx_hash, txout_idx)
+        # calc status, update client-last-seen status, and sub to outpoint
+        spend_status = await self.txoutpoint_status_for_notif(tx_hash, txout_idx)
         self.txoutpoint_subs.add((tx_hash, txout_idx))
         return spend_status
 
@@ -2026,6 +2049,7 @@ class ElectrumX(SessionBase):
         # experimental:
         if ptuple >= (1, 7):
             handlers['blockchain.outpoint.subscribe'] = self.txoutpoint_subscribe
+            handlers['blockchain.outpoint.get_status'] = self.txoutpoint_get_status
             handlers['blockchain.outpoint.unsubscribe'] = self.txoutpoint_unsubscribe
             handlers['blockchain.scriptpubkey.get_balance'] = self.scriptpubkey_get_balance
             handlers['blockchain.scriptpubkey.get_history'] = self.scriptpubkey_get_history

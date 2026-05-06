@@ -332,11 +332,16 @@ class Daemon:
             'incrementalrelayfee': mempool_info['incrementalrelayfee'],
         }
 
-    async def getrawtransaction(self, hex_hash, verbose=False):
+    async def getrawtransaction(self, hex_hash, verbose=False, blockhash=None):
         '''Return the serialized raw transaction with the given hash.'''
         # Cast to int because some coin daemons are old and require it
-        return await self._send_single('getrawtransaction',
-                                       (hex_hash, int(verbose)))
+        verbose = int(verbose)
+        if blockhash is None:
+            return await self._send_single('getrawtransaction', (hex_hash, verbose))
+        else:
+            # given a blockhash, modern bitcoind can lookup the tx even without txindex:
+            # https://github.com/bitcoin/bitcoin/pull/10275
+            return await self._send_single('getrawtransaction', (hex_hash, verbose, blockhash))
 
     async def getrawtransactions(self, hex_hashes, replace_errs=True):
         '''Return the serialized raw transactions with the given hashes.
@@ -355,6 +360,12 @@ class Daemon:
     async def broadcast_package(self, raw_txs: Sequence[str]):
         """Broadcast a package of transactions to the network using 'submitpackage'."""
         return await self._send_single('submitpackage', (raw_txs, ))
+
+    async def testmempoolaccept(self, raw_txs: Sequence[str]):
+        """Query the daemon to test mempool acceptance of txs,
+        without adding them to the mempool or broadcasting them.
+        """
+        return await self._send_single('testmempoolaccept', (raw_txs, ))
 
     async def height(self):
         '''Query the daemon for its current height.'''

@@ -37,7 +37,6 @@ Repository = "https://github.com/spesmilo/electrumx"
 [project.scripts]
 electrumx_server = "electrumx.cli.electrumx_server:main"
 electrumx_rpc = "electrumx.cli.electrumx_rpc:main"
-electrumx_compact_history = "electrumx.cli.electrumx_compact_history:main"
 
 [tool.setuptools.dynamic]
 version = { attr = 'electrumx.__version__' }

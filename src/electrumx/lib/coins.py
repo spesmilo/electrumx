@@ -281,8 +281,9 @@ class Bitcoin(Coin):
     DESERIALIZER = lib_tx.DeserializerSegWit
     CRASH_CLIENT_VER = (3, 2, 3)
     # core version 28 introduced 1p1c package relay required for protocol 1.6
-    MIN_REQUIRED_DAEMON_VERSION = "28.0"
-    REQUIRED_DAEMON_INDEXES = ("txindex", )
+    # core version 31 introduced "txospenderindex", required for protocol 1.7
+    MIN_REQUIRED_DAEMON_VERSION = "31.0"
+    REQUIRED_DAEMON_INDEXES = ("txindex", "txospenderindex",)
 
     @classmethod
     def warn_old_client_on_tx_broadcast(cls, client_ver):

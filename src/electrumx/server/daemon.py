@@ -108,6 +108,20 @@ class Daemon:
         if daemon_version < required_version:
             raise RuntimeError(f"Bitcoin Core {daemon_version=} < {required_version=}.")
 
+    async def check_daemon_indexes(self):
+        assert self.session is not None and self.coin is not None, f"{self.session=}, {self.coin=}"
+        if not self.coin.REQUIRED_DAEMON_INDEXES:
+            return
+        index_info = await self.getindexinfo()
+        for req_index in self.coin.REQUIRED_DAEMON_INDEXES:
+            if req_index not in index_info:
+                raise RuntimeError(
+                    f"bitcoind missing required index: {req_index}. "
+                    f"You should set {req_index}=1 in your bitcoin.conf config file, and reindex.")
+            if not index_info[req_index]["synced"]:
+                # Should we raise? Not raising allows syncing a fresh bitcoind and e-x "in parallel".
+                self.logger.warning(f"bitcoind required index {req_index!r} is still syncing!")
+
     def set_url(self, url):
         '''Set the URLS to the given list, and switch to the first one.'''
         urls = url.split(',')
@@ -311,6 +325,11 @@ class Daemon:
             val = await self._send_single('getmempoolinfo')
             self._mempoolinfo_cache = (val, time.time())
             return val
+
+    async def getindexinfo(self):
+        """Return the result of the 'getindexinfo' RPC call."""
+        # note: not cached as it's not exposed to client sessions
+        return await self._send_single('getindexinfo')
 
     async def relayfee(self):
         """Same as getmempoolinfo['minrelaytxfee'].

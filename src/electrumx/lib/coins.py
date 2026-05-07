@@ -109,6 +109,7 @@ class Coin:
     NAME: str
     NET: str | None
     MIN_REQUIRED_DAEMON_VERSION: Optional[str] = None
+    REQUIRED_DAEMON_INDEXES: Sequence[str] = tuple()
 
     # only used for initial db sync ETAs:
     TX_COUNT_HEIGHT: int  # at a given snapshot of the chain,
@@ -281,6 +282,7 @@ class Bitcoin(Coin):
     CRASH_CLIENT_VER = (3, 2, 3)
     # core version 28 introduced 1p1c package relay required for protocol 1.6
     MIN_REQUIRED_DAEMON_VERSION = "28.0"
+    REQUIRED_DAEMON_INDEXES = ("txindex", )
 
     @classmethod
     def warn_old_client_on_tx_broadcast(cls, client_ver):

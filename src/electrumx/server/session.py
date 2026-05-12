@@ -1191,7 +1191,7 @@ class ElectrumX(SessionBase):
             'services': [str(service) for service in env.report_services],
         }
 
-    async def server_features_async(self) -> dict[str, Any]:
+    async def phandle_server_features_async(self) -> dict[str, Any]:
         self.bump_cost(0.2)
         return self.server_features(self.env)
 
@@ -1322,19 +1322,19 @@ class ElectrumX(SessionBase):
         '''The result of a header subscription or notification.'''
         return self.session_mgr.hsub_results
 
-    async def headers_subscribe(self):
+    async def phandle_headers_subscribe(self):
         '''Subscribe to get raw headers of new blocks.'''
         self.subscribe_headers = True
         self.bump_cost(0.25)
         return await self.subscribe_headers_result()
 
-    async def add_peer(self, features: dict[str, Any] | Any):
+    async def phandle_add_peer(self, features: dict[str, Any] | Any):
         '''Add a peer (but only if the peer resolves to the source).'''
         self.is_peer = True
         self.bump_cost(100.0)
         return await self.peer_mgr.on_add_peer(features, self.remote_address())
 
-    async def peers_subscribe(self):
+    async def phandle_peers_subscribe(self):
         '''Return the server peers as a list of (ip, host, details) tuples.'''
         self.bump_cost(1.0)
         return self.peer_mgr.on_peers_subscribe(self.is_tor())
@@ -1507,7 +1507,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0 + len(utxos) / 50)
         return {'confirmed': confirmed, 'unconfirmed': unconfirmed}
 
-    async def scripthash_get_balance(self, scripthash: str | Any) -> dict[str, Any]:
+    async def phandle_scripthash_get_balance(self, scripthash: str | Any) -> dict[str, Any]:
         '''Return the confirmed and unconfirmed balance of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.get_balance(hashX)
@@ -1530,59 +1530,59 @@ class ElectrumX(SessionBase):
                 for txid_rev, height in history]
         return conf + await self.unconfirmed_history(hashX)
 
-    async def scripthash_get_history(self, scripthash: str | Any) -> list[dict[str, Any]]:
+    async def phandle_scripthash_get_history(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the confirmed and unconfirmed history of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.confirmed_and_unconfirmed_history(hashX)
 
-    async def scripthash_get_mempool(self, scripthash: str | Any) -> list[dict[str, Any]]:
+    async def phandle_scripthash_get_mempool(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the mempool transactions touching a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.unconfirmed_history(hashX)
 
-    async def scripthash_listunspent(self, scripthash: str | Any) -> Sequence[dict[str, Any]]:
+    async def phandle_scripthash_listunspent(self, scripthash: str | Any) -> Sequence[dict[str, Any]]:
         '''Return the list of UTXOs of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.hashX_listunspent(hashX)
 
-    async def scripthash_subscribe(self, scripthash: str | Any) -> Optional[str]:
+    async def phandle_scripthash_subscribe(self, scripthash: str | Any) -> Optional[str]:
         '''Subscribe to a script hash.
 
         scripthash: the SHA256 hash of the script to subscribe to'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.hashX_subscribe(hashX, scripthash)
 
-    async def scripthash_unsubscribe(self, scripthash: str | Any):
+    async def phandle_scripthash_unsubscribe(self, scripthash: str | Any):
         '''Unsubscribe from a script hash.'''
         self.bump_cost(0.1)
         hashX = scripthash_to_hashX(scripthash)
         return self.unsubscribe_hashX(hashX) is not None
 
-    def scriptpubkey_get_balance(self, spk: str) -> collections.abc.Awaitable[dict]:
+    def phandle_scriptpubkey_get_balance(self, spk: str) -> collections.abc.Awaitable[dict]:
         scripthash = spk_to_scripthash(spk)
-        return self.scripthash_get_balance(scripthash)
+        return self.phandle_scripthash_get_balance(scripthash)
 
-    def scriptpubkey_get_history(self, spk: str) -> collections.abc.Awaitable[list]:
+    def phandle_scriptpubkey_get_history(self, spk: str) -> collections.abc.Awaitable[list]:
         scripthash = spk_to_scripthash(spk)
-        return self.scripthash_get_history(scripthash)
+        return self.phandle_scripthash_get_history(scripthash)
 
-    def scriptpubkey_get_mempool(self, spk: str) -> collections.abc.Awaitable[list]:
+    def phandle_scriptpubkey_get_mempool(self, spk: str) -> collections.abc.Awaitable[list]:
         scripthash = spk_to_scripthash(spk)
-        return self.scripthash_get_mempool(scripthash)
+        return self.phandle_scripthash_get_mempool(scripthash)
 
-    def scriptpubkey_listunspent(self, spk: str) -> collections.abc.Awaitable[list]:
+    def phandle_scriptpubkey_listunspent(self, spk: str) -> collections.abc.Awaitable[list]:
         scripthash = spk_to_scripthash(spk)
-        return self.scripthash_listunspent(scripthash)
+        return self.phandle_scripthash_listunspent(scripthash)
 
-    def scriptpubkey_subscribe(self, spk: str) -> collections.abc.Awaitable[Optional[str]]:
+    def phandle_scriptpubkey_subscribe(self, spk: str) -> collections.abc.Awaitable[Optional[str]]:
         scripthash = spk_to_scripthash(spk)
-        return self.scripthash_subscribe(scripthash)
+        return self.phandle_scripthash_subscribe(scripthash)
 
-    def scriptpubkey_unsubscribe(self, spk: str) -> collections.abc.Awaitable[bool]:
+    def phandle_scriptpubkey_unsubscribe(self, spk: str) -> collections.abc.Awaitable[bool]:
         scripthash = spk_to_scripthash(spk)
-        return self.scripthash_unsubscribe(scripthash)
+        return self.phandle_scripthash_unsubscribe(scripthash)
 
-    async def txoutpoint_get_status(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint=None) -> dict[str, Any]:
+    async def phandle_txoutpoint_get_status(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint=None) -> dict[str, Any]:
         '''Return the status of an outpoint, without subscribing.
 
         spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
@@ -1596,7 +1596,7 @@ class ElectrumX(SessionBase):
         spend_status = await self._calc_txoutpoint_status(txid_rev, txout_idx)
         return spend_status
 
-    async def txoutpoint_subscribe(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint=None) -> dict[str, Any]:
+    async def phandle_txoutpoint_subscribe(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint=None) -> dict[str, Any]:
         '''Subscribe to an outpoint.
 
         spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
@@ -1611,7 +1611,7 @@ class ElectrumX(SessionBase):
         self.txoutpoint_subs.add((txid_rev, txout_idx))
         return spend_status
 
-    async def txoutpoint_unsubscribe(self, tx_hash: str | Any, txout_idx: int | Any) -> bool:
+    async def phandle_txoutpoint_unsubscribe(self, tx_hash: str | Any, txout_idx: int | Any) -> bool:
         '''Unsubscribe from an outpoint.'''
         txid_rev = assert_txid_hum(tx_hash)
         txout_idx = non_negative_integer(txout_idx)
@@ -1636,7 +1636,7 @@ class ElectrumX(SessionBase):
             'root': hash_to_hex_str(root),
         }
 
-    async def block_header(self, height: int, cp_height: int = 0) -> dict[str, Any]:
+    async def phandle_block_header(self, height: int, cp_height: int = 0) -> dict[str, Any]:
         '''Return a raw block header as a hexadecimal string, or as a
         dictionary with a merkle proof.'''
         height = non_negative_integer(height)
@@ -1649,7 +1649,7 @@ class ElectrumX(SessionBase):
         result.update(await self._merkle_proof(cp_height, height))
         return result
 
-    async def block_headers(self, start_height: int, count: int, cp_height: int = 0) -> dict[str, Any]:
+    async def phandle_block_headers(self, start_height: int, count: int, cp_height: int = 0) -> dict[str, Any]:
         '''Return count concatenated block headers as hex for the main chain;
         starting at start_height.
 
@@ -1734,12 +1734,12 @@ class ElectrumX(SessionBase):
             banner = banner.replace(*pair)
         return banner
 
-    async def donation_address(self) -> str:
+    async def phandle_donation_address(self) -> str:
         '''Return the donation address as a string, empty if there is none.'''
         self.bump_cost(0.1)
         return self.env.donation_address
 
-    async def banner(self) -> str:
+    async def phandle_banner(self) -> str:
         '''Return the server banner text.'''
         banner = f'You are connected to an {electrumx.version} server.'
         self.bump_cost(0.5)
@@ -1759,13 +1759,13 @@ class ElectrumX(SessionBase):
 
         return banner
 
-    async def relayfee(self):
+    async def phandle_relayfee(self):
         """The minimum fee required for a transaction to be relayed on by the daemon to the
         bitcoin network. Doesn't guarantee mempool acceptance."""
         self.bump_cost(1.0)
         return await self.daemon_request('relayfee')
 
-    async def mempool_info(self) -> dict[str, float]:
+    async def phandle_mempool_info(self) -> dict[str, float]:
         """
         mempool.get_info, introduced in protocol 1.6.
         returns: {
@@ -1777,7 +1777,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         return await self.daemon_request('mempool_info')
 
-    async def mempool_recent(self) -> list[dict[str, Any]]:
+    async def phandle_mempool_recent(self) -> list[dict[str, Any]]:
         """
         mempool.recent, introduced in protocol 1.6.1.
         Return a list of the last 10 transactions to enter the mempool.
@@ -1790,7 +1790,7 @@ class ElectrumX(SessionBase):
             "vsize": tx.vsize,
         } for tx in recent_txs]
 
-    async def estimatefee(self, number: int | Any, mode=None):
+    async def phandle_estimatefee(self, number: int | Any, mode=None):
         '''The estimated transaction fee per kilobyte to be paid for a
         transaction to be included within a certain number of blocks.
 
@@ -1833,7 +1833,7 @@ class ElectrumX(SessionBase):
             cache[(number, mode)] = (blockhash, feerate, lock)
             return feerate
 
-    async def ping(self, pong_len=0, data=""):
+    async def phandle_ping(self, pong_len=0, data=""):
         '''Serves as a connection keep-alive mechanism and for the client to
         confirm the server is still responding. It can also be used to obfuscate
         traffic patterns.
@@ -1848,12 +1848,12 @@ class ElectrumX(SessionBase):
         pong_data = pong_len * "0"
         return {"data": pong_data}
 
-    async def on_ping_notification(self, data=""):
+    async def phandle_on_ping_notification(self, data=""):
         self.bump_cost(0.1)  # note: the bw cost for receiving 'data' has already been incurred
         assert_hex_str(data)
         # nothing to do
 
-    async def server_version(
+    async def phandle_server_version(
             self,
             client_name='',
             protocol_version=None,
@@ -1900,7 +1900,7 @@ class ElectrumX(SessionBase):
         self.sv_negotiated.set()
         return electrumx.version, self.protocol_version_string()
 
-    async def transaction_broadcast(self, raw_tx: str | Any) -> str:
+    async def phandle_transaction_broadcast(self, raw_tx: str | Any) -> str:
         '''Broadcast a raw transaction to the network.
 
         raw_tx: the raw transaction as a hexadecimal string'''
@@ -1928,7 +1928,7 @@ class ElectrumX(SessionBase):
             self.logger.info(f'sent tx: {txid_hum}')
             return txid_hum
 
-    async def package_broadcast(self, raw_txs: Sequence[str] | Any, verbose: bool = False) -> dict[str, Any]:
+    async def phandle_package_broadcast(self, raw_txs: Sequence[str] | Any, verbose: bool = False) -> dict[str, Any]:
         """Broadcast a package of raw transactions to the network (submitpackage).
         The package must consist of a child with its parents,
         and none of the parents may depend on one another.
@@ -1969,7 +1969,7 @@ class ElectrumX(SessionBase):
             response['errors'] = errors
         return response
 
-    async def transaction_testmempoolaccept(self, raw_txs: Sequence[str]) -> Sequence[dict]:
+    async def phandle_transaction_testmempoolaccept(self, raw_txs: Sequence[str]) -> Sequence[dict]:
         """Returns result of mempool acceptance tests indicating if txs would be accepted by mempool.
 
         raw_txs: a list of raw transactions as hexadecimal strings
@@ -2000,7 +2000,7 @@ class ElectrumX(SessionBase):
             response.append(new_item)
         return response
 
-    async def transaction_get(self, tx_hash: str | Any, verbose=False):
+    async def phandle_transaction_get(self, tx_hash: str | Any, verbose=False):
         '''Return the serialized raw transaction given its hash
 
         tx_hash: the transaction hash as a hexadecimal string
@@ -2013,7 +2013,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         return await self.daemon_request('getrawtransaction', tx_hash, verbose)
 
-    async def transaction_merkle(self, tx_hash: str | Any, height: int | Any) -> dict[str, Any]:
+    async def phandle_transaction_merkle(self, tx_hash: str | Any, height: int | Any) -> dict[str, Any]:
         '''Return the merkle branch to a confirmed transaction given its hash
         and height.
 
@@ -2035,7 +2035,7 @@ class ElectrumX(SessionBase):
             "pos": tx_pos,
         }
 
-    async def transaction_id_from_pos(self, height, tx_pos, merkle=False):
+    async def phandle_transaction_id_from_pos(self, height, tx_pos, merkle=False):
         '''Return the txid and optionally a merkle proof, given
         a block height and position in the block.
         '''
@@ -2060,7 +2060,7 @@ class ElectrumX(SessionBase):
             txid_hum = hash_to_hex_str(txid_rev)
             return txid_hum
 
-    async def compact_fee_histogram(self) -> Sequence[tuple[float, int]]:
+    async def phandle_compact_fee_histogram(self) -> Sequence[tuple[float, int]]:
         self.bump_cost(1.0)
         return await self.mempool.compact_fee_histogram()
 
@@ -2068,55 +2068,55 @@ class ElectrumX(SessionBase):
         self.protocol_tuple = ptuple
 
         handlers = {
-            'blockchain.block.header': self.block_header,
-            'blockchain.block.headers': self.block_headers,
-            'blockchain.estimatefee': self.estimatefee,
-            'blockchain.headers.subscribe': self.headers_subscribe,
-            'blockchain.transaction.broadcast': self.transaction_broadcast,
-            'blockchain.transaction.get': self.transaction_get,
-            'blockchain.transaction.get_merkle': self.transaction_merkle,
-            'blockchain.transaction.id_from_pos': self.transaction_id_from_pos,
-            'mempool.get_fee_histogram': self.compact_fee_histogram,
-            'server.add_peer': self.add_peer,
-            'server.banner': self.banner,
-            'server.donation_address': self.donation_address,
-            'server.features': self.server_features_async,
-            'server.peers.subscribe': self.peers_subscribe,
-            'server.ping': self.ping,
-            'server.version': self.server_version,
+            'blockchain.block.header': self.phandle_block_header,
+            'blockchain.block.headers': self.phandle_block_headers,
+            'blockchain.estimatefee': self.phandle_estimatefee,
+            'blockchain.headers.subscribe': self.phandle_headers_subscribe,
+            'blockchain.transaction.broadcast': self.phandle_transaction_broadcast,
+            'blockchain.transaction.get': self.phandle_transaction_get,
+            'blockchain.transaction.get_merkle': self.phandle_transaction_merkle,
+            'blockchain.transaction.id_from_pos': self.phandle_transaction_id_from_pos,
+            'mempool.get_fee_histogram': self.phandle_compact_fee_histogram,
+            'server.add_peer': self.phandle_add_peer,
+            'server.banner': self.phandle_banner,
+            'server.donation_address': self.phandle_donation_address,
+            'server.features': self.phandle_server_features_async,
+            'server.peers.subscribe': self.phandle_peers_subscribe,
+            'server.ping': self.phandle_ping,
+            'server.version': self.phandle_server_version,
         }
         notif_handlers = {}
 
         if ptuple < (1, 7):
-            handlers['blockchain.scripthash.get_balance'] = self.scripthash_get_balance
-            handlers['blockchain.scripthash.get_history'] = self.scripthash_get_history
-            handlers['blockchain.scripthash.get_mempool'] = self.scripthash_get_mempool
-            handlers['blockchain.scripthash.listunspent'] = self.scripthash_listunspent
-            handlers['blockchain.scripthash.subscribe'] = self.scripthash_subscribe
+            handlers['blockchain.scripthash.get_balance'] = self.phandle_scripthash_get_balance
+            handlers['blockchain.scripthash.get_history'] = self.phandle_scripthash_get_history
+            handlers['blockchain.scripthash.get_mempool'] = self.phandle_scripthash_get_mempool
+            handlers['blockchain.scripthash.listunspent'] = self.phandle_scripthash_listunspent
+            handlers['blockchain.scripthash.subscribe'] = self.phandle_scripthash_subscribe
 
         if (1, 4, 2) <= ptuple < (1, 7):
-            handlers['blockchain.scripthash.unsubscribe'] = self.scripthash_unsubscribe
+            handlers['blockchain.scripthash.unsubscribe'] = self.phandle_scripthash_unsubscribe
 
         if ptuple >= (1, 6):
-            handlers['blockchain.transaction.broadcast_package'] = self.package_broadcast
-            handlers['mempool.get_info'] = self.mempool_info
+            handlers['blockchain.transaction.broadcast_package'] = self.phandle_package_broadcast
+            handlers['mempool.get_info'] = self.phandle_mempool_info
         else:
-            handlers['blockchain.relayfee'] = self.relayfee  # removed in 1.6
+            handlers['blockchain.relayfee'] = self.phandle_relayfee  # removed in 1.6
 
         # experimental:
         if ptuple >= (1, 7):
-            handlers['blockchain.transaction.testmempoolaccept'] = self.transaction_testmempoolaccept
-            handlers['blockchain.outpoint.subscribe'] = self.txoutpoint_subscribe
-            handlers['blockchain.outpoint.get_status'] = self.txoutpoint_get_status
-            handlers['blockchain.outpoint.unsubscribe'] = self.txoutpoint_unsubscribe
-            handlers['blockchain.scriptpubkey.get_balance'] = self.scriptpubkey_get_balance
-            handlers['blockchain.scriptpubkey.get_history'] = self.scriptpubkey_get_history
-            handlers['blockchain.scriptpubkey.get_mempool'] = self.scriptpubkey_get_mempool
-            handlers['blockchain.scriptpubkey.listunspent'] = self.scriptpubkey_listunspent
-            handlers['blockchain.scriptpubkey.subscribe'] = self.scriptpubkey_subscribe
-            handlers['blockchain.scriptpubkey.unsubscribe'] = self.scriptpubkey_unsubscribe
-            handlers['mempool.recent'] = self.mempool_recent
-            notif_handlers['server.ping'] = self.on_ping_notification
+            handlers['blockchain.transaction.testmempoolaccept'] = self.phandle_transaction_testmempoolaccept
+            handlers['blockchain.outpoint.subscribe'] = self.phandle_txoutpoint_subscribe
+            handlers['blockchain.outpoint.get_status'] = self.phandle_txoutpoint_get_status
+            handlers['blockchain.outpoint.unsubscribe'] = self.phandle_txoutpoint_unsubscribe
+            handlers['blockchain.scriptpubkey.get_balance'] = self.phandle_scriptpubkey_get_balance
+            handlers['blockchain.scriptpubkey.get_history'] = self.phandle_scriptpubkey_get_history
+            handlers['blockchain.scriptpubkey.get_mempool'] = self.phandle_scriptpubkey_get_mempool
+            handlers['blockchain.scriptpubkey.listunspent'] = self.phandle_scriptpubkey_listunspent
+            handlers['blockchain.scriptpubkey.subscribe'] = self.phandle_scriptpubkey_subscribe
+            handlers['blockchain.scriptpubkey.unsubscribe'] = self.phandle_scriptpubkey_unsubscribe
+            handlers['mempool.recent'] = self.phandle_mempool_recent
+            notif_handlers['server.ping'] = self.phandle_on_ping_notification
 
         self.request_handlers = handlers
         self.notification_handlers = notif_handlers
@@ -2157,12 +2157,11 @@ class DashElectrumX(ElectrumX):
     def set_request_handlers(self, ptuple):
         super().set_request_handlers(ptuple)
         self.request_handlers.update({
-            'masternode.announce.broadcast':
-            self.masternode_announce_broadcast,
-            'masternode.subscribe': self.masternode_subscribe,
-            'masternode.list': self.masternode_list,
-            'protx.diff': self.protx_diff,
-            'protx.info': self.protx_info,
+            'masternode.announce.broadcast': self.phandle_masternode_announce_broadcast,
+            'masternode.subscribe': self.phandle_masternode_subscribe,
+            'masternode.list': self.phandle_masternode_list,
+            'protx.diff': self.phandle_protx_diff,
+            'protx.info': self.phandle_protx_info,
         })
 
     async def _notify_inner(
@@ -2185,7 +2184,7 @@ class DashElectrumX(ElectrumX):
                                          (mn, status.get(mn)))
 
     # Masternode command handlers
-    async def masternode_announce_broadcast(self, signmnb):
+    async def phandle_masternode_announce_broadcast(self, signmnb):
         '''Pass through the masternode announce message to be broadcast
         by the daemon.
 
@@ -2200,7 +2199,7 @@ class DashElectrumX(ElectrumX):
             raise RPCError(BAD_REQUEST, 'the masternode broadcast was '
                            f'rejected.\n\n{message}\n[{signmnb}]')
 
-    async def masternode_subscribe(self, collateral):
+    async def phandle_masternode_subscribe(self, collateral):
         '''Returns the status of masternode.
 
         collateral: masternode collateral.
@@ -2212,7 +2211,7 @@ class DashElectrumX(ElectrumX):
             return result.get(collateral)
         return None
 
-    async def masternode_list(self, payees):
+    async def phandle_masternode_list(self, payees):
         '''
         Returns the list of masternodes.
 
@@ -2309,7 +2308,7 @@ class DashElectrumX(ElectrumX):
         else:
             return cache
 
-    async def protx_diff(self, base_height, height):
+    async def phandle_protx_diff(self, base_height, height):
         '''
         Calculates a diff between two deterministic masternode lists.
         The result also contains proof data.
@@ -2331,7 +2330,7 @@ class DashElectrumX(ElectrumX):
         return await self.daemon_request('protx',
                                          ('diff', base_height, height))
 
-    async def protx_info(self, protx_hash):
+    async def phandle_protx_info(self, protx_hash):
         '''
         Returns detailed information about a deterministic masternode.
 
@@ -2352,18 +2351,18 @@ class SmartCashElectrumX(DashElectrumX):
     def set_request_handlers(self, ptuple):
         super().set_request_handlers(ptuple)
         self.request_handlers.update({
-            'smartrewards.current': self.smartrewards_current,
-            'smartrewards.check': self.smartrewards_check
+            'smartrewards.current': self.phandle_smartrewards_current,
+            'smartrewards.check': self.phandle_smartrewards_check
         })
 
-    async def smartrewards_current(self):
+    async def phandle_smartrewards_current(self):
         '''Returns the current smartrewards info.'''
         result = await self.daemon_request('smartrewards', ('current',))
         if result is not None:
             return result
         return None
 
-    async def smartrewards_check(self, addr):
+    async def phandle_smartrewards_check(self, addr):
         '''
         Returns the status of an address
 
@@ -2376,8 +2375,8 @@ class SmartCashElectrumX(DashElectrumX):
 
 
 class AuxPoWElectrumX(ElectrumX):
-    async def block_header(self, height, cp_height=0):
-        result = await super().block_header(height, cp_height)
+    async def phandle_block_header(self, height, cp_height=0):
+        result = await super().phandle_block_header(height, cp_height)
 
         # Older protocol versions don't truncate AuxPoW
         if self.protocol_tuple < (1, 4, 1):
@@ -2391,14 +2390,14 @@ class AuxPoWElectrumX(ElectrumX):
         result['header'] = self.truncate_auxpow_single(result['header'])
         return result
 
-    async def block_headers(self, start_height, count, cp_height=0):
+    async def phandle_block_headers(self, start_height, count, cp_height=0):
         # Older protocol versions don't truncate AuxPoW
         if self.protocol_tuple < (1, 4, 1):
-            return await super().block_headers(start_height, count, cp_height)
+            return await super().phandle_block_headers(start_height, count, cp_height)
 
         # Not covered by a checkpoint; return full AuxPoW data
         if cp_height == 0:
-            return await super().block_headers(start_height, count, cp_height)
+            return await super().phandle_block_headers(start_height, count, cp_height)
 
         result = await super().block_headers_array(start_height, count, cp_height)
 
@@ -2430,10 +2429,10 @@ class NameIndexElectrumX(ElectrumX):
         super().set_request_handlers(ptuple)
 
         if ptuple >= (1, 4, 3):
-            self.request_handlers['blockchain.name.get_value_proof'] = self.name_get_value_proof
+            self.request_handlers['blockchain.name.get_value_proof'] = self.phandle_name_get_value_proof
 
-    async def name_get_value_proof(self, scripthash, cp_height=0):
-        history = await self.scripthash_get_history(scripthash)
+    async def phandle_name_get_value_proof(self, scripthash, cp_height=0):
+        history = await self.phandle_scripthash_get_history(scripthash)
 
         trimmed_history = []
         prev_height = None
@@ -2447,16 +2446,16 @@ class NameIndexElectrumX(ElectrumX):
                     and height < prev_height - self.coin.NAME_EXPIRATION):
                 break
 
-            tx = await self.transaction_get(txid)
+            tx = await self.phandle_transaction_get(txid)
             update['tx'] = tx
             del update['tx_hash']
 
-            tx_merkle = await self.transaction_merkle(txid, height)
+            tx_merkle = await self.phandle_transaction_merkle(txid, height)
             del tx_merkle['block_height']
             update['tx_merkle'] = tx_merkle
 
             if height <= cp_height:
-                header = await self.block_header(height, cp_height)
+                header = await self.phandle_block_header(height, cp_height)
                 update['header'] = header
 
             trimmed_history.append(update)

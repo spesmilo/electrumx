@@ -12,10 +12,10 @@ import time
 from abc import ABC, abstractmethod
 from asyncio import Lock
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict, Optional, Set
 import math
 
-import attr
 from aiorpcx import run_in_thread, sleep
 
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
@@ -27,21 +27,21 @@ if TYPE_CHECKING:
     from electrumx.lib.coins import Coin
 
 
-@attr.s(slots=True)
+@dataclass(slots=True)
 class MemPoolTx:
-    prevouts = attr.ib()   # type: Sequence[Tuple[bytes, int]]  # (txid, txout_idx)
+    prevouts: Sequence[tuple[bytes, int]]  # (txid, txout_idx)
     # A pair is a (hashX, value) tuple
-    in_pairs = attr.ib()   # type: Optional[Sequence[Tuple[bytes, int]]]  # (hashX, value_in_sats)
-    out_pairs = attr.ib()  # type: Sequence[Tuple[bytes, int]]  # (hashX, value_in_sats)
-    fee = attr.ib()        # type: int  # in sats
-    size = attr.ib()       # type: int  # in vbytes
+    in_pairs: Optional[Sequence[tuple[bytes, int]]]  # (hashX, value_in_sats)
+    out_pairs: Sequence[tuple[bytes, int]]  # (hashX, value_in_sats)
+    fee: int  # in sats
+    size: int  # in vbytes
 
 
-@attr.s(slots=True)
+@dataclass(slots=True)
 class MemPoolTxSummary:
-    hash = attr.ib()                    # type: bytes
-    fee = attr.ib()                     # type: int  # in sats
-    has_unconfirmed_inputs = attr.ib()  # type: bool
+    hash: bytes
+    fee: int  # in sats
+    has_unconfirmed_inputs: bool
 
 
 class DBSyncError(Exception):

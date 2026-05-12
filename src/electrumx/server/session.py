@@ -9,6 +9,7 @@
 
 import asyncio
 import codecs
+from dataclasses import dataclass
 import datetime
 import itertools
 import math
@@ -20,7 +21,6 @@ from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any
 
-import attr
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession, Service,
                      handler_invocation, serve_rs, serve_ws, sleep,
@@ -104,12 +104,12 @@ def assert_list_or_tuple(value: Any) -> None:
         raise RPCError(BAD_REQUEST, f'{value} should be a list')
 
 
-@attr.s(slots=True)
+@dataclass(slots=True)
 class SessionGroup:
-    name = attr.ib()
-    weight = attr.ib()
-    sessions = attr.ib()
-    retained_cost = attr.ib()
+    name: str
+    weight: float
+    sessions: set['SessionBase']
+    retained_cost: float
 
     def session_cost(self):
         return sum(session.cost for session in self.sessions)
@@ -118,13 +118,13 @@ class SessionGroup:
         return self.retained_cost + self.session_cost()
 
 
-@attr.s(slots=True)
+@dataclass(slots=True)
 class SessionReferences:
     # All attributes are sets but groups is a list
-    sessions = attr.ib()
-    groups = attr.ib()
-    specials = attr.ib()    # Lower-case strings
-    unknown = attr.ib()     # Strings
+    sessions: set['SessionBase']
+    groups: Sequence['SessionGroup']
+    specials: set[str]  # Lower-case strings
+    unknown: set[str]
 
 
 class SessionManager:

@@ -23,6 +23,7 @@ from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any, Tuple, Set, Dict, Mapping
 from typing import Callable
 
+import aiorpcx
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
                      ReplyAndDisconnect, Request, RPCError, RPCSession, Service,
                      handler_invocation, serve_rs, serve_ws, sleep,
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     from electrumx.server.daemon import Daemon
     from electrumx.server.mempool import MemPool
     from electrumx.server.peers import PeerManager
+    from electrumx.server.controller import Controller, Notifications
 
 
 BAD_REQUEST = 1
@@ -72,7 +74,7 @@ def spk_to_scripthash(spk: str) -> str:
     return h[::-1].hex()
 
 
-def non_negative_integer(value):
+def non_negative_integer(value: Any | int) -> int:
     '''Return param value it is or can be converted to a non-negative
     integer, otherwise raise an RPCError.'''
     try:
@@ -85,17 +87,17 @@ def non_negative_integer(value):
                    f'{value} should be a non-negative integer')
 
 
-def assert_boolean(value):
+def assert_boolean(value: Any | bool) -> bool:
     '''Return param value it is boolean otherwise raise an RPCError.'''
     if value in (False, True):
         return value
     raise RPCError(BAD_REQUEST, f'{value} should be a boolean value')
 
 
-def assert_tx_hash(value):
-    '''Raise an RPCError if the value is not a valid hexadecimal transaction hash.
+def assert_txid_hum(value: Any | str) -> bytes:
+    '''Raise an RPCError if the value is not a valid hexadecimal txid_hum.
 
-    If it is valid, return it as 32-byte binary hash.
+    If it is valid, return it as 32-byte binary txid_rev.
     '''
     try:
         raw_hash = hex_str_to_hash(value)
@@ -106,7 +108,7 @@ def assert_tx_hash(value):
     raise RPCError(BAD_REQUEST, f'{value} should be a transaction hash')
 
 
-def assert_hex_str(value: Any) -> None:
+def assert_hex_str(value: Any | str) -> None:
     if not is_hex_str(value):
         raise RPCError(BAD_REQUEST, f'{value} should be a hex string')
 
@@ -123,10 +125,10 @@ class SessionGroup:
     sessions: set['SessionBase']
     retained_cost: float
 
-    def session_cost(self):
+    def session_cost(self) -> float:
         return sum(session.cost for session in self.sessions)
 
-    def cost(self):
+    def cost(self) -> float:
         return self.retained_cost + self.session_cost()
 
 
@@ -162,19 +164,22 @@ class SessionManager:
         self.peer_mgr = PeerManager(env, db)
         self.shutdown_event = shutdown_event
         self.logger = util.class_logger(__name__, self.__class__.__name__)
-        self.servers = {}           # service->server
-        self.sessions = {}          # type: Dict[ElectrumX, Iterable[SessionGroup]]
+        self.servers = {}           # type: Dict[Service, asyncio.Server]
+        self.sessions = {}          # type: Dict[SessionBase, Iterable[SessionGroup]]
         self.session_groups = {}    # type: Dict[str, SessionGroup]
         self.txs_sent = 0
         # Would use monotonic time, but aiorpcx sessions use Unix time:
         self.start_time = time.time()
         self._method_counts = defaultdict(int)
         self._reorg_count = 0
-        self._history_cache = LRUCache(maxsize=1000)
-        self._txids_cache = LRUCache(maxsize=1000)
+        self._history_cache = LRUCache(maxsize=1000)  # type: LRUCache[bytes, Sequence[tuple[bytes, int]] | RPCError]
+        self._txids_cache = LRUCache(maxsize=1000)  # type: LRUCache[int, Sequence[bytes]]
         # Really a MerkleCache cache
-        self._merkle_txid_cache = LRUCache(maxsize=1000)
-        self.estimatefee_cache = LRUCache(maxsize=1000)
+        self._merkle_txid_cache = LRUCache(maxsize=1000)  # type: LRUCache[int, MerkleCache]
+        self.estimatefee_cache : LRUCache[
+            tuple[int, str | None],
+            tuple[bytes | None, float | None, asyncio.Lock]
+        ] = LRUCache(maxsize=1000)
         self.notified_height = None
         self.hsub_results = None
         self._task_group = OldTaskGroup()
@@ -190,13 +195,13 @@ class SessionManager:
         LocalRPC.request_handlers = {cmd: getattr(self, 'rpc_' + cmd)
                                      for cmd in cmds}
 
-    def _ssl_context(self):
+    def _ssl_context(self) -> ssl.SSLContext:
         if self._sslc is None:
             self._sslc = ssl.SSLContext(ssl.PROTOCOL_TLS)
             self._sslc.load_cert_chain(self.env.ssl_certfile, keyfile=self.env.ssl_keyfile)
         return self._sslc
 
-    async def _start_servers(self, services):
+    async def _start_servers(self, services: Iterable[Service]) -> None:
         for service in services:
             kind = service.protocol.upper()
             if service.protocol in self.env.SSL_PROTOCOLS:
@@ -241,7 +246,7 @@ class SessionManager:
                                   if service.protocol != 'rpc')
         self.server_listening.set()
 
-    async def _stop_servers(self, services):
+    async def _stop_servers(self, services: Iterable[Service]):
         '''Stop the servers of the given protocols.'''
         for service in services:
             self.logger.info(f'closing down server for {service}')
@@ -252,7 +257,7 @@ class SessionManager:
         for service in services:
             del self.servers[service]
 
-    async def _manage_servers(self):
+    async def _manage_servers(self) -> None:
         paused = False
         max_sessions = self.env.max_sessions
         low_watermark = max_sessions * 19 // 20
@@ -275,7 +280,7 @@ class SessionManager:
                 await self._start_external_servers()
                 paused = False
 
-    async def _log_sessions(self):
+    async def _log_sessions(self) -> None:
         '''Periodically log sessions.'''
         log_interval = self.env.log_sessions
         if log_interval:
@@ -286,14 +291,16 @@ class SessionManager:
                     self.logger.info(line)
                 self.logger.info(util.json_serialize(self._get_info()))
 
-    async def _disconnect_sessions(self, sessions, reason, *, force_after=1.0):
+    async def _disconnect_sessions(
+            self, sessions: Sequence['SessionBase'], reason: str, *, force_after: float = 1.0,
+    ) -> None:
         if sessions:
             session_ids = ', '.join(str(session.session_id) for session in sessions)
             self.logger.info(f'{reason} session ids {session_ids}')
             for session in sessions:
                 await self._task_group.spawn(session.close(force_after=force_after))
 
-    async def _clear_stale_sessions(self):
+    async def _clear_stale_sessions(self) -> None:
         '''Cut off sessions that haven't done anything for 10 minutes.'''
         while True:
             await sleep(60)
@@ -303,17 +310,17 @@ class SessionManager:
             await self._disconnect_sessions(stale_sessions, 'closing stale')
             del stale_sessions
 
-    async def _handle_chain_reorgs(self):
+    async def _handle_chain_reorgs(self) -> None:
         '''Clear certain caches on chain reorgs.'''
         while True:
             await self.bp.backed_up_event.wait()
-            self.logger.info(f'reorg signalled; clearing tx_hashes and merkle caches')
+            self.logger.info(f'reorg signalled; clearing txids and merkle caches')
             self._reorg_count += 1
             # not: history_cache is cleared in _notify_sessions
             self._txids_cache.clear()
             self._merkle_txid_cache.clear()
 
-    async def _recalc_concurrency(self):
+    async def _recalc_concurrency(self) -> None:
         '''Periodically recalculate session concurrency.'''
         session_class = self.env.coin.SESSIONCLS
         period = 300
@@ -339,7 +346,7 @@ class SessionManager:
                 session.cost_decay_per_sec = hard_limit / (10000 + 5 * session.sub_count_total())
                 session.recalc_concurrency()
 
-    def _get_info(self):
+    def _get_info(self) -> dict[str, Any]:
         '''A summary of server state.'''
         def cache_fmt(cache: LRUCache):
             return f"{cache.num_lookups} lookups, {cache.num_hits} hits, {len(cache)} entries"
@@ -373,7 +380,7 @@ class SessionManager:
             'version': electrumx.version,
         }
 
-    def _session_data(self, for_log):
+    def _session_data(self, for_log: bool):
         '''Returned to the RPC 'sessions' call.'''
         now = time.time()
         sessions = sorted(self.sessions, key=lambda s: s.start_time)
@@ -411,7 +418,7 @@ class SessionManager:
                            ])
         return result
 
-    async def _refresh_hsub_results(self, height):
+    async def _refresh_hsub_results(self, height: int) -> None:
         '''Refresh the cached header subscription responses to be for height,
         and record that as notified_height.
         '''
@@ -421,7 +428,7 @@ class SessionManager:
         self.hsub_results = {'hex': raw.hex(), 'height': height}
         self.notified_height = height
 
-    def _session_references(self, items, special_strings):
+    def _session_references(self, items: Iterable[str] | Any, special_strings):
         '''Return a SessionReferences object.'''
         if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
             raise RPCError(BAD_REQUEST, 'expected a list of session IDs')
@@ -456,7 +463,7 @@ class SessionManager:
 
     # --- LocalRPC command handlers
 
-    async def rpc_add_peer(self, real_name):
+    async def rpc_add_peer(self, real_name: str) -> str:
         '''Add a peer.
 
         real_name: "bch.electrumx.cash t50001 s50002" for example
@@ -464,7 +471,7 @@ class SessionManager:
         await self.peer_mgr.add_localRPC_peer(real_name)
         return f"peer '{real_name}' added"
 
-    async def rpc_disconnect(self, session_ids):
+    async def rpc_disconnect(self, session_ids: Iterable[str] | Any) -> Sequence[str]:
         '''Disconnect sesssions.
 
         session_ids: array of session IDs
@@ -486,7 +493,7 @@ class SessionManager:
         await self._disconnect_sessions(sessions, 'local RPC request to disconnect')
         return result
 
-    async def rpc_log(self, session_ids):
+    async def rpc_log(self, session_ids: Iterable[str] | Any) -> Sequence[str]:
         '''Toggle logging of sesssions.
 
         session_ids: array of session or group IDs, or 'all', 'none', 'new'
@@ -524,7 +531,7 @@ class SessionManager:
         result.extend(f'unknown: {item}' for item in refs.unknown)
         return result
 
-    async def rpc_daemon_url(self, daemon_url):
+    async def rpc_daemon_url(self, daemon_url: str):
         '''Replace the daemon URL.'''
         daemon_url = daemon_url or self.env.daemon_url
         try:
@@ -587,16 +594,16 @@ class SessionManager:
                 continue
             n = None
             history = await db.limited_history(hashX, limit=limit)
-            for n, (tx_hash, height) in enumerate(history):
+            for n, (txid_rev, height) in enumerate(history):
                 lines.append(f'History #{n:,d}: height {height:,d} '
-                             f'tx_hash {hash_to_hex_str(tx_hash)}')
+                             f'txid {hash_to_hex_str(txid_rev)}')
             if n is None:
                 lines.append('No history found')
             n = None
             utxos = await db.all_utxos(hashX)
             for n, utxo in enumerate(utxos, start=1):
-                lines.append(f'UTXO #{n:,d}: tx_hash '
-                             f'{hash_to_hex_str(utxo.tx_hash)} '
+                lines.append(f'UTXO #{n:,d}: txid '
+                             f'{hash_to_hex_str(utxo.txid_rev)} '
                              f'tx_pos {utxo.tx_pos:,d} height '
                              f'{utxo.height:,d} value {utxo.value:,d}')
                 if n == limit:
@@ -614,7 +621,7 @@ class SessionManager:
         '''Return statistics about connected sessions.'''
         return self._session_data(for_log=False)
 
-    async def rpc_reorg(self, count):
+    async def rpc_reorg(self, count: int) -> str:
         '''Force a reorg of the given number of blocks.
 
         count: number of blocks to reorg
@@ -659,7 +666,7 @@ class SessionManager:
 
     # --- External Interface
 
-    async def serve(self, notifications, event):
+    async def serve(self, notifications: 'Notifications', event: asyncio.Event) -> None:
         '''Start the RPC server if enabled.  When the event is triggered,
         start TCP and SSL servers.'''
         try:
@@ -728,7 +735,7 @@ class SessionManager:
             servers_to_remove = list(self.servers.keys())
             self._remove_servers(servers_to_remove)
 
-    def extra_cost(self, session):
+    def extra_cost(self, session: 'SessionBase') -> float:
         # Note there is no guarantee that session is still in self.sessions.  Example traceback:
         # notify_sessions->notify->address_status->bump_cost->recalc_concurrency->extra_cost
         # during which there are many places the sesssion could be removed
@@ -737,90 +744,94 @@ class SessionManager:
             return 0
         return sum((group.cost() - session.cost) * group.weight for group in groups)
 
-    async def _merkle_branch(self, height, tx_hashes, tx_pos):
-        tx_hash_count = len(tx_hashes)
-        cost = tx_hash_count
+    async def _merkle_branch(
+            self, height: int, txids_rev: Sequence[bytes], tx_pos: int,
+    ) -> tuple[Sequence[str], float]:
+        tx_count = len(txids_rev)
+        cost = tx_count
 
-        if tx_hash_count >= 200:
+        if tx_count >= 200:
             self._merkle_txid_cache.num_lookups += 1
             merkle_cache = self._merkle_txid_cache.get(height)
             if merkle_cache:
                 self._merkle_txid_cache.num_hits += 1
-                cost = 10 * math.sqrt(tx_hash_count)
+                cost = 10 * math.sqrt(tx_count)
             else:
                 async def tx_hashes_func(start, count):
-                    return tx_hashes[start: start + count]
+                    return txids_rev[start: start + count]
 
                 merkle_cache = MerkleCache(self.db.merkle, tx_hashes_func)
                 self._merkle_txid_cache[height] = merkle_cache
-                await merkle_cache.initialize(len(tx_hashes))
-            branch, _root = await merkle_cache.branch_and_root(tx_hash_count, tx_pos)
+                await merkle_cache.initialize(len(txids_rev))
+            branch, _root = await merkle_cache.branch_and_root(tx_count, tx_pos)
         else:
-            branch, _root = self.db.merkle.branch_and_root(tx_hashes, tx_pos)
+            branch, _root = self.db.merkle.branch_and_root(txids_rev, tx_pos)
 
         branch = [hash_to_hex_str(hash) for hash in branch]
         return branch, cost / 2500
 
-    async def merkle_branch_for_tx_hash(
-            self, *, tx_hash: bytes, height: int,
+    async def merkle_branch_for_txid(
+            self, *, txid_rev: bytes, height: int,
     ) -> Tuple[Sequence[str], int, bytes, float]:
         '''Return (branch, tx_pos, block_header, cost).'''
         block_header = await self.raw_header(height)
-        tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height)
+        txids_rev, txids_cost = await self.txids_rev_at_blockheight(height)
         try:
-            tx_pos = tx_hashes.index(tx_hash)
+            tx_pos = txids_rev.index(txid_rev)
         except ValueError:
             raise RPCError(BAD_REQUEST,
-                           f'tx {hash_to_hex_str(tx_hash)} not in block at height {height:,d}')
-        branch, merkle_cost = await self._merkle_branch(height, tx_hashes, tx_pos)
+                           f'tx {hash_to_hex_str(txid_rev)} not in block at height {height:,d}')
+        branch, merkle_cost = await self._merkle_branch(height, txids_rev, tx_pos)
         if block_header != await self.raw_header(height):
             # there was a reorg while processing the request... TODO maybe retry?
             raise RPCError(BAD_REQUEST,
-                           f'tx {hash_to_hex_str(tx_hash)} was reorged while processing request')
-        return branch, tx_pos, block_header, tx_hashes_cost + merkle_cost
+                           f'tx {hash_to_hex_str(txid_rev)} was reorged while processing request')
+        return branch, tx_pos, block_header, txids_cost + merkle_cost
 
-    async def merkle_branch_for_tx_pos(self, height, tx_pos):
-        '''Return a triple (branch, tx_hash_hex, cost).'''
-        tx_hashes, tx_hashes_cost = await self.tx_hashes_at_blockheight(height)
+    async def merkle_branch_for_tx_pos(self, height: int, tx_pos: int) -> tuple[Sequence[str], str, float]:
+        '''Return a triple (branch, txid_hum, cost).'''
+        txids_rev, txids_cost = await self.txids_rev_at_blockheight(height)
         try:
-            tx_hash = tx_hashes[tx_pos]
+            txid_rev = txids_rev[tx_pos]
         except IndexError:
             raise RPCError(BAD_REQUEST,
                            f'no tx at position {tx_pos:,d} in block at height {height:,d}')
-        branch, merkle_cost = await self._merkle_branch(height, tx_hashes, tx_pos)
-        return branch, hash_to_hex_str(tx_hash), tx_hashes_cost + merkle_cost
+        branch, merkle_cost = await self._merkle_branch(height, txids_rev, tx_pos)
+        txid_hum = hash_to_hex_str(txid_rev)
+        cost = txids_cost + merkle_cost
+        return branch, txid_hum, cost
 
-    async def tx_hashes_at_blockheight(self, height):
-        '''Returns a pair (tx_hashes, cost).
+    async def txids_rev_at_blockheight(self, height: int) -> tuple[Sequence[bytes], float]:
+        '''Returns a pair (txids_rev, cost).
 
-        tx_hashes is an ordered list of binary hashes, cost is an estimated cost of
+        txids_rev is an ordered list of binary hashes, cost is an estimated cost of
         getting the hashes; cheaper if in-cache.  Raises RPCError.
         '''
         self._txids_cache.num_lookups += 1
-        tx_hashes = self._txids_cache.get(height)
-        if tx_hashes:
+        txids_rev = self._txids_cache.get(height)
+        if txids_rev:
             self._txids_cache.num_hits += 1
-            return tx_hashes, 0.1
+            return txids_rev, 0.1
 
-        # Ensure the tx_hashes are fresh before placing in the cache
+        # Ensure the txids_rev are fresh before placing in the cache
         while True:
             reorg_count = self._reorg_count
             try:
-                tx_hashes = await self.db.tx_hashes_at_blockheight(height)
+                txids_rev = await self.db.txids_rev_at_blockheight(height)
             except self.db.DBError as e:
                 raise RPCError(BAD_REQUEST, f'db error: {e!r}')
             if reorg_count == self._reorg_count:
                 break
 
-        self._txids_cache[height] = tx_hashes
+        self._txids_cache[height] = txids_rev
 
-        return tx_hashes, 0.25 + len(tx_hashes) * 0.0001
+        return txids_rev, 0.25 + len(txids_rev) * 0.0001
 
     def session_count(self):
         '''The number of connections that we've sent something to.'''
         return len(self.sessions)
 
-    async def daemon_request(self, method, *args):
+    async def daemon_request(self, method: str, *args):
         '''Catch a DaemonError and convert it to an RPCError.'''
         try:
             return await getattr(self.daemon, method)(*args)
@@ -835,20 +846,20 @@ class SessionManager:
             raise RPCError(BAD_REQUEST, f'height {height:,d} '
                            'out of range') from None
 
-    async def broadcast_transaction(self, raw_tx):
-        hex_hash = await self.daemon.broadcast_transaction(raw_tx)
+    async def broadcast_transaction(self, raw_tx: str) -> str:
+        txid_hum = await self.daemon.broadcast_transaction(raw_tx)
         self.txs_sent += 1
-        return hex_hash
+        return txid_hum
 
     async def broadcast_package(self, tx_package: Sequence[str]) -> dict:
         result = await self.daemon.broadcast_package(tx_package)
         self.txs_sent += len(tx_package)
         return result
 
-    async def limited_history(self, hashX):
+    async def limited_history(self, hashX: bytes) -> tuple[Sequence[tuple[bytes, int]], float]:
         '''Returns a pair (history, cost).
 
-        History is a sorted list of (tx_hash, height) tuples, or an RPCError.'''
+        History is a sorted list of (txid_rev, height) tuples, or an RPCError.'''
         # History DoS limit.  Each element of history is about 99 bytes when encoded
         # as JSON.
         limit = self.env.max_send // 99
@@ -864,6 +875,7 @@ class SessionManager:
                 result = RPCError(BAD_REQUEST, f'history too large', cost=cost)
             self._history_cache[hashX] = result
 
+        assert result is not None
         if isinstance(result, Exception):
             raise result
         return result, cost
@@ -874,7 +886,7 @@ class SessionManager:
             touched_hashxs: Set[bytes],
             touched_outpoints: Set[Tuple[bytes, int]],
             height: int,
-    ):
+    ) -> None:
         '''Notify sessions about height changes and touched addresses.'''
         height_changed = height != self.notified_height
         if height_changed:
@@ -919,7 +931,7 @@ class SessionManager:
             self.session_groups[name] = group
         return group
 
-    def add_session(self, session):
+    def add_session(self, session: 'SessionBase') -> None:
         self.session_event.set()
         # Return the session groups
         groups = (
@@ -930,7 +942,7 @@ class SessionManager:
         for group in groups:
             group.sessions.add(session)
 
-    def remove_session(self, session):
+    def remove_session(self, session: 'SessionBase') -> None:
         '''Remove a session from our sessions list if there.'''
         self.session_event.set()
         groups = self.sessions.pop(session)
@@ -961,7 +973,7 @@ class RPCSessionWithTaskGroup(RPCSession):
             else:
                 raise
 
-    async def main_loop(self):
+    async def main_loop(self) -> None:
         """Manages taskgroup tied to this session.
         The session and the taskgroup share a lifecycle, either dying will kill the other.
         This method must not raise, to avoid killing the manager_taskgroup.
@@ -1027,7 +1039,7 @@ class SessionBase(RPCSessionWithTaskGroup):
         self.anon_logs = self.env.anon_logs
         self.txs_sent = 0
         self.log_me = SessionBase.log_new
-        self.session_id = None
+        self.session_id = None  # type: int
         self.daemon_request = self.session_mgr.daemon_request
         self.session_id = next(self.session_counter)
         context = {'conn_id': f'{self.session_id}'}
@@ -1044,20 +1056,20 @@ class SessionBase(RPCSessionWithTaskGroup):
             touched_hashxs: Set[bytes],
             touched_outpoints: Set[Tuple[bytes, int]],
             height_changed: bool,
-    ):
+    ) -> None:
         pass
 
     def default_framer(self):
         return NewlineFramer(max_size=self.env.max_recv)
 
-    def remote_address_string(self, *, for_log=True):
+    def remote_address_string(self, *, for_log: bool = True) -> str:
         '''Returns the peer's IP address and port as a human-readable
         string, respecting anon logs if the output is for a log.'''
         if for_log and self.anon_logs:
             return 'xx.xx.xx.xx:xx'
         return str(self.remote_address())
 
-    def flags(self):
+    def flags(self) -> str:
         '''Status flags.'''
         status = self.kind[0]
         if self.is_closing():
@@ -1080,13 +1092,13 @@ class SessionBase(RPCSessionWithTaskGroup):
             msg = 'disconnected' + msg
             self.logger.info(msg)
 
-    def sub_count_scripthashes(self):
+    def sub_count_scripthashes(self) -> int:
         return 0
 
-    def sub_count_txoutpoints(self):
+    def sub_count_txoutpoints(self) -> int:
         return 0
 
-    def sub_count_total(self):
+    def sub_count_total(self) -> int:
         return self.sub_count_scripthashes() + self.sub_count_txoutpoints()
 
     async def handle_request(self, request: SingleRequest):
@@ -1115,7 +1127,9 @@ class SessionBase(RPCSessionWithTaskGroup):
     def protocol_version_string(self) -> str:
         raise NotImplementedError()
 
-    async def maybe_crash_old_client(self, ptuple, crash_client_ver):
+    async def maybe_crash_old_client(
+            self, ptuple: Optional[tuple[int, ...]], crash_client_ver: Optional[tuple[int, ...]],
+    ) -> None:
         if crash_client_ver:
             client_ver = util.protocol_tuple(self.client)
             is_old_protocol = ptuple is None or ptuple <= (1, 2)
@@ -1142,8 +1156,8 @@ class ElectrumX(SessionBase):
         super().__init__(*args, **kwargs)
         self.subscribe_headers = False
         self.connection.max_response_size = self.env.max_send
-        self.hashX_subs = {}  # type: Dict[bytes, bytes]  # hashX -> scripthash
-        self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]
+        self.hashX_subs = {}  # type: Dict[bytes, str]  # hashX -> scripthash
+        self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]  # (txid_rev, txout_idx)
         self.mempool_hashX_statuses = {}  # type: Dict[bytes, str]
         self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], Mapping[str, Any]]
         self.set_request_handlers(self.PROTOCOL_MIN)
@@ -1151,12 +1165,13 @@ class ElectrumX(SessionBase):
         self.cost = 5.0   # Connection cost
 
     @classmethod
-    def protocol_min_max_strings(cls):
-        return [util.version_string(ver)
-                for ver in (cls.PROTOCOL_MIN, cls.PROTOCOL_MAX)]
+    def protocol_min_max_strings(cls) -> tuple[str, str]:
+        return tuple(
+            util.version_string(ver)
+            for ver in (cls.PROTOCOL_MIN, cls.PROTOCOL_MAX))
 
     @classmethod
-    def server_features(cls, env):
+    def server_features(cls, env: 'Env') -> dict[str, Any]:
         '''Return the server features dictionary.'''
         hosts_dict = {}
         for service in env.report_services:
@@ -1176,7 +1191,7 @@ class ElectrumX(SessionBase):
             'services': [str(service) for service in env.report_services],
         }
 
-    async def server_features_async(self):
+    async def server_features_async(self) -> dict[str, Any]:
         self.bump_cost(0.2)
         return self.server_features(self.env)
 
@@ -1188,7 +1203,7 @@ class ElectrumX(SessionBase):
     def protocol_version_string(self):
         return util.version_string(self.protocol_tuple)
 
-    def extra_cost(self):
+    def extra_cost(self) -> float:
         return self.session_mgr.extra_cost(self)
 
     def on_disconnect_due_to_excessive_session_cost(self):
@@ -1204,7 +1219,7 @@ class ElectrumX(SessionBase):
     def sub_count_txoutpoints(self):
         return len(self.txoutpoint_subs)
 
-    def unsubscribe_hashX(self, hashX):
+    def unsubscribe_hashX(self, hashX: bytes) -> Optional[str]:
         self.mempool_hashX_statuses.pop(hashX, None)
         return self.hashX_subs.pop(hashX, None)
 
@@ -1235,7 +1250,7 @@ class ElectrumX(SessionBase):
             touched_hashxs: Set[bytes],
             touched_outpoints: Set[Tuple[bytes, int]],
             height_changed: bool,
-    ):
+    ) -> None:
         '''Notify the client about changes to touched addresses (from mempool
         updates or new blocks) and height.
         '''
@@ -1248,7 +1263,7 @@ class ElectrumX(SessionBase):
         num_hashx_notifs_sent = 0
         touched_hashxs = touched_hashxs.intersection(self.hashX_subs)
         if touched_hashxs or (height_changed and self.mempool_hashX_statuses):
-            changed = {}
+            changed = {}  # type: dict[str, Optional[str]]
 
             for hashX in touched_hashxs:
                 alias = self.hashX_subs.get(hashX)
@@ -1313,7 +1328,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.25)
         return await self.subscribe_headers_result()
 
-    async def add_peer(self, features):
+    async def add_peer(self, features: dict[str, Any] | Any):
         '''Add a peer (but only if the peer resolves to the source).'''
         self.is_peer = True
         self.bump_cost(100.0)
@@ -1338,7 +1353,7 @@ class ElectrumX(SessionBase):
         status = ''.join(f'{hash_to_hex_str(tx_hash)}:'
                          f'{height:d}:'
                          for tx_hash, height in db_history)
-        status += ''.join(f'{hash_to_hex_str(tx.hash)}:'
+        status += ''.join(f'{hash_to_hex_str(tx.txid_rev)}:'
                           f'{-tx.has_unconfirmed_inputs:d}:'
                           for tx in mempool)
 
@@ -1358,7 +1373,7 @@ class ElectrumX(SessionBase):
 
         return status
 
-    async def subscription_address_status(self, hashX):
+    async def subscription_address_status(self, hashX: bytes) -> Optional[str]:
         '''As for address_status, but if it can't be calculated the subscription is
         discarded.'''
         try:
@@ -1367,7 +1382,7 @@ class ElectrumX(SessionBase):
             self.unsubscribe_hashX(hashX)
             return None
 
-    async def _spender_for_txo(self, prev_txhash: bytes, txout_idx: int) -> 'TXOSpendStatus':
+    async def _spender_for_txo(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         """For an outpoint, returns its spend-status (ignoring mempool events).
 
         Uses daemon (bitcoind) to find the spender_txhash, requiring "txospenderindex=1".
@@ -1375,19 +1390,19 @@ class ElectrumX(SessionBase):
         using only the daemon. Instead, our own mempool data (as opposed to bitcoind's) can be used
         separately to enrich the return value.
         """
-        prev_txid = hash_to_hex_str(prev_txhash)
+        prev_txid_hum = hash_to_hex_str(prev_txid_rev)
         # 1. call bitcoind "getrawtransaction" to see if prevtx exists/is_mined
         self.bump_cost(1)
         try:
-            prevtx_item = await self.session_mgr.daemon.getrawtransaction(prev_txid, verbose=True)  # verbose=int(1)
+            prevtx_item = await self.session_mgr.daemon.getrawtransaction(prev_txid_hum, verbose=True)  # verbose=int(1)
         except DaemonError as e:
             error, = e.args
             ecode = error['code']
             if ecode == -5:  # "No such mempool or blockchain transaction."
                 return TXOSpendStatus(prev_height=None)  # utxo never existed
-            self.logger.debug(f"getrawtransaction errored. {prev_txid=}. {error=}")
+            self.logger.debug(f"getrawtransaction errored. {prev_txid_hum=}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None  # TODO some callers do not expect this
-        assert prevtx_item.get("txid") == prev_txid, f"{prevtx_item.get('txid')=} != {prev_txid=}"
+        assert prevtx_item.get("txid") == prev_txid_hum, f"{prevtx_item.get('txid')=} != {prev_txid_hum=}"
         funder_bhash = prevtx_item.get("blockhash")
         funder_bheight = None  # type: Optional[int]
         if funder_bhash is not None:
@@ -1403,12 +1418,12 @@ class ElectrumX(SessionBase):
         # 2. call bitcoind "gettxspendingprevout"
         self.bump_cost(1)
         try:
-            spender_item = await self.session_mgr.daemon.gettxspendingprevout(prev_txid, txout_idx)
+            spender_item = await self.session_mgr.daemon.gettxspendingprevout(prev_txid_hum, txout_idx)
         except DaemonError as e:
             error, = e.args
-            self.logger.debug(f"gettxspendingprevout errored. txo={prev_txid}:{txout_idx}. {error=}")
+            self.logger.debug(f"gettxspendingprevout errored. txo={prev_txid_hum}:{txout_idx}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None  # TODO some callers do not expect this
-        assert spender_item.get("txid") == prev_txid, f"{spender_item.get('txid')=} != {prev_txid=}"
+        assert spender_item.get("txid") == prev_txid_hum, f"{spender_item.get('txid')=} != {prev_txid_hum=}"
         spender_bhash = spender_item.get("blockhash")
         spender_bheight = None
         if spender_bhash is not None:
@@ -1420,41 +1435,41 @@ class ElectrumX(SessionBase):
         # utxo funded, and spent (in-chain)
         return TXOSpendStatus(
             prev_height=funder_bheight,
-            spender_txhash=hex_str_to_hash(spender_txid),
+            spender_txid_rev=hex_str_to_hash(spender_txid),
             spender_height=spender_bheight,
         )
 
-    async def _calc_txoutpoint_status(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
+    async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> Dict[str, Any]:
         self.bump_cost(0.2)
-        spend_status = await self._spender_for_txo(prev_txhash, txout_idx)
+        spend_status = await self._spender_for_txo(prev_txid_rev, txout_idx)
         if spend_status.spender_height is not None:
             # TXO was created, was mined, was spent, and spend was mined.
             assert spend_status.prev_height > 0
             assert spend_status.spender_height > 0
-            assert spend_status.spender_txhash is not None
+            assert spend_status.spender_txid_rev is not None
         else:
-            mp_spend_status = await self.mempool.spender_for_txo(prev_txhash, txout_idx)
+            mp_spend_status = await self.mempool.spender_for_txo(prev_txid_rev, txout_idx)
             if mp_spend_status.prev_height is not None:
                 spend_status.prev_height = mp_spend_status.prev_height
             if mp_spend_status.spender_height is not None:
                 spend_status.spender_height = mp_spend_status.spender_height
-            if mp_spend_status.spender_txhash is not None:
-                spend_status.spender_txhash = mp_spend_status.spender_txhash
+            if mp_spend_status.spender_txid_rev is not None:
+                spend_status.spender_txid_rev = mp_spend_status.spender_txid_rev
         # convert to json dict the client expects
         status = {}
         if spend_status.prev_height is not None:
             status['height'] = spend_status.prev_height
-            if spend_status.spender_txhash is not None:
+            if spend_status.spender_txid_rev is not None:
                 assert spend_status.spender_height is not None
-                status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txhash)
+                status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txid_rev)
                 status['spender_height'] = spend_status.spender_height
         return status
 
-    async def txoutpoint_status_for_notif(self, prev_txhash: bytes, txout_idx: int) -> Dict[str, Any]:
+    async def txoutpoint_status_for_notif(self, prev_txid_rev: bytes, txout_idx: int) -> Dict[str, Any]:
         """Side-effect: updates client-last-seen status, used by notifications."""
-        status = await self._calc_txoutpoint_status(prev_txhash=prev_txhash, txout_idx=txout_idx)
+        status = await self._calc_txoutpoint_status(prev_txid_rev=prev_txid_rev, txout_idx=txout_idx)
         # update status last sent to client
-        prevout = (prev_txhash, txout_idx)
+        prevout = (prev_txid_rev, txout_idx)
         prev_height = status.get('height')  # type: Optional[int]
         spender_height = status.get('spender_height')  # type: Optional[int]
         if ((prev_height is not None and prev_height <= 0)
@@ -1464,7 +1479,7 @@ class ElectrumX(SessionBase):
             self.mempool_txoutpoint_statuses.pop(prevout, None)
         return status
 
-    async def hashX_listunspent(self, hashX):
+    async def hashX_listunspent(self, hashX: bytes) -> Sequence[dict[str, Any]]:
         '''Return the list of UTXOs of a script hash, including mempool
         effects.'''
         utxos = await self.db.all_utxos(hashX)
@@ -1473,71 +1488,71 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0 + len(utxos) / 50)
         spends = await self.mempool.potential_spends(hashX)
 
-        return [{'tx_hash': hash_to_hex_str(utxo.tx_hash),
+        return [{'tx_hash': hash_to_hex_str(utxo.txid_rev),
                  'tx_pos': utxo.tx_pos,
                  'height': utxo.height, 'value': utxo.value}
                 for utxo in utxos
-                if (utxo.tx_hash, utxo.tx_pos) not in spends]
+                if (utxo.txid_rev, utxo.tx_pos) not in spends]
 
-    async def hashX_subscribe(self, hashX, alias):
+    async def hashX_subscribe(self, hashX: bytes, alias: str) -> Optional[str]:
         # Store the subscription only after address_status succeeds
         result = await self.address_status(hashX)
         self.hashX_subs[hashX] = alias  # TODO rename alias to scripthash
         return result
 
-    async def get_balance(self, hashX):
+    async def get_balance(self, hashX: bytes) -> dict[str, Any]:
         utxos = await self.db.all_utxos(hashX)
         confirmed = sum(utxo.value for utxo in utxos)
         unconfirmed = await self.mempool.balance_delta(hashX)
         self.bump_cost(1.0 + len(utxos) / 50)
         return {'confirmed': confirmed, 'unconfirmed': unconfirmed}
 
-    async def scripthash_get_balance(self, scripthash):
+    async def scripthash_get_balance(self, scripthash: str | Any) -> dict[str, Any]:
         '''Return the confirmed and unconfirmed balance of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.get_balance(hashX)
 
-    async def unconfirmed_history(self, hashX):
+    async def unconfirmed_history(self, hashX: bytes) -> list[dict[str, Any]]:
         # Note both confirmed history and mempool history are ordered
         # height is -1 if it has unconfirmed inputs, otherwise 0
-        result = [{'tx_hash': hash_to_hex_str(tx.hash),
+        result = [{'tx_hash': hash_to_hex_str(tx.txid_rev),
                    'height': -tx.has_unconfirmed_inputs,
                    'fee': tx.fee}
                   for tx in await self.mempool.transaction_summaries(hashX)]
         self.bump_cost(0.25 + len(result) / 50)
         return result
 
-    async def confirmed_and_unconfirmed_history(self, hashX):
+    async def confirmed_and_unconfirmed_history(self, hashX: bytes) -> list[dict[str, Any]]:
         # Note both confirmed history and mempool history are ordered
         history, cost = await self.session_mgr.limited_history(hashX)
         self.bump_cost(cost)
-        conf = [{'tx_hash': hash_to_hex_str(tx_hash), 'height': height}
-                for tx_hash, height in history]
+        conf = [{'tx_hash': hash_to_hex_str(txid_rev), 'height': height}
+                for txid_rev, height in history]
         return conf + await self.unconfirmed_history(hashX)
 
-    async def scripthash_get_history(self, scripthash):
+    async def scripthash_get_history(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the confirmed and unconfirmed history of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.confirmed_and_unconfirmed_history(hashX)
 
-    async def scripthash_get_mempool(self, scripthash):
+    async def scripthash_get_mempool(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the mempool transactions touching a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.unconfirmed_history(hashX)
 
-    async def scripthash_listunspent(self, scripthash):
+    async def scripthash_listunspent(self, scripthash: str | Any) -> Sequence[dict[str, Any]]:
         '''Return the list of UTXOs of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.hashX_listunspent(hashX)
 
-    async def scripthash_subscribe(self, scripthash):
+    async def scripthash_subscribe(self, scripthash: str | Any) -> Optional[str]:
         '''Subscribe to a script hash.
 
         scripthash: the SHA256 hash of the script to subscribe to'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.hashX_subscribe(hashX, scripthash)
 
-    async def scripthash_unsubscribe(self, scripthash):
+    async def scripthash_unsubscribe(self, scripthash: str | Any):
         '''Unsubscribe from a script hash.'''
         self.bump_cost(0.1)
         hashX = scripthash_to_hashX(scripthash)
@@ -1567,47 +1582,47 @@ class ElectrumX(SessionBase):
         scripthash = spk_to_scripthash(spk)
         return self.scripthash_unsubscribe(scripthash)
 
-    async def txoutpoint_get_status(self, tx_hash, txout_idx, spk_hint=None):
+    async def txoutpoint_get_status(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint=None) -> dict[str, Any]:
         '''Return the status of an outpoint, without subscribing.
 
         spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
                   other servers, but we don't need and hence ignore it.
         '''
-        tx_hash = assert_tx_hash(tx_hash)
+        txid_rev = assert_txid_hum(tx_hash)
         txout_idx = non_negative_integer(txout_idx)
         if spk_hint is not None:
             assert_hex_str(spk_hint)
         # calc status (but do not side-effect client-last-seen status)
-        spend_status = await self._calc_txoutpoint_status(tx_hash, txout_idx)
+        spend_status = await self._calc_txoutpoint_status(txid_rev, txout_idx)
         return spend_status
 
-    async def txoutpoint_subscribe(self, tx_hash, txout_idx, spk_hint=None):
+    async def txoutpoint_subscribe(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint=None) -> dict[str, Any]:
         '''Subscribe to an outpoint.
 
         spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
                   other servers, but we don't need and hence ignore it.
         '''
-        tx_hash = assert_tx_hash(tx_hash)
+        txid_rev = assert_txid_hum(tx_hash)
         txout_idx = non_negative_integer(txout_idx)
         if spk_hint is not None:
             assert_hex_str(spk_hint)
         # calc status, update client-last-seen status, and sub to outpoint
-        spend_status = await self.txoutpoint_status_for_notif(tx_hash, txout_idx)
-        self.txoutpoint_subs.add((tx_hash, txout_idx))
+        spend_status = await self.txoutpoint_status_for_notif(txid_rev, txout_idx)
+        self.txoutpoint_subs.add((txid_rev, txout_idx))
         return spend_status
 
-    async def txoutpoint_unsubscribe(self, tx_hash, txout_idx):
+    async def txoutpoint_unsubscribe(self, tx_hash: str | Any, txout_idx: int | Any) -> bool:
         '''Unsubscribe from an outpoint.'''
-        tx_hash = assert_tx_hash(tx_hash)
+        txid_rev = assert_txid_hum(tx_hash)
         txout_idx = non_negative_integer(txout_idx)
         self.bump_cost(0.1)
-        prevout = (tx_hash, txout_idx)
+        prevout = (txid_rev, txout_idx)
         was_subscribed = prevout in self.txoutpoint_subs
         self.txoutpoint_subs.discard(prevout)
         self.mempool_txoutpoint_statuses.pop(prevout, None)
         return was_subscribed
 
-    async def _merkle_proof(self, cp_height, height):
+    async def _merkle_proof(self, cp_height: int, height: int) -> dict[str, Any]:
         max_height = self.db.db_height
         if not height <= cp_height <= max_height:
             raise RPCError(BAD_REQUEST,
@@ -1621,7 +1636,7 @@ class ElectrumX(SessionBase):
             'root': hash_to_hex_str(root),
         }
 
-    async def block_header(self, height, cp_height=0):
+    async def block_header(self, height: int, cp_height: int = 0) -> dict[str, Any]:
         '''Return a raw block header as a hexadecimal string, or as a
         dictionary with a merkle proof.'''
         height = non_negative_integer(height)
@@ -1634,7 +1649,7 @@ class ElectrumX(SessionBase):
         result.update(await self._merkle_proof(cp_height, height))
         return result
 
-    async def block_headers(self, start_height, count, cp_height=0):
+    async def block_headers(self, start_height: int, count: int, cp_height: int = 0) -> dict[str, Any]:
         '''Return count concatenated block headers as hex for the main chain;
         starting at start_height.
 
@@ -1659,7 +1674,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(cost)
         return result
 
-    async def block_headers_array(self, start_height, count, cp_height=0):
+    async def block_headers_array(self, start_height: int, count: int, cp_height: int = 0) -> dict[str, Any]:
         '''Return block headers in an array for the main chain;
         starting at start_height.
         start_height and count must be non-negative integers.  At most
@@ -1691,7 +1706,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(cost)
         return result
 
-    def is_tor(self):
+    def is_tor(self) -> bool:
         '''Try to detect if the connection is to a tor hidden service we are
         running.'''
         proxy_address = self.peer_mgr.proxy_address()
@@ -1702,7 +1717,7 @@ class ElectrumX(SessionBase):
             return False
         return remote_addr.host == proxy_address.host
 
-    async def replaced_banner(self, banner):
+    async def replaced_banner(self, banner: str) -> str:
         network_info = await self.daemon_request('getnetworkinfo')
         ni_version = network_info['version']  # e.g. 290100 (for /Satoshi:29.1.0/)
         major = ni_version // 10_000
@@ -1719,12 +1734,12 @@ class ElectrumX(SessionBase):
             banner = banner.replace(*pair)
         return banner
 
-    async def donation_address(self):
+    async def donation_address(self) -> str:
         '''Return the donation address as a string, empty if there is none.'''
         self.bump_cost(0.1)
         return self.env.donation_address
 
-    async def banner(self):
+    async def banner(self) -> str:
         '''Return the server banner text.'''
         banner = f'You are connected to an {electrumx.version} server.'
         self.bump_cost(0.5)
@@ -1770,12 +1785,12 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         recent_txs = await self.mempool.get_recently_added_txs(count=10)
         return [{
-            "txid": hash_to_hex_str(tx.hash),
+            "txid": hash_to_hex_str(tx.txid_rev),
             "fee": tx.fee,
             "vsize": tx.vsize,
         } for tx in recent_txs]
 
-    async def estimatefee(self, number, mode=None):
+    async def estimatefee(self, number: int | Any, mode=None):
         '''The estimated transaction fee per kilobyte to be paid for a
         transaction to be included within a certain number of blocks.
 
@@ -1885,7 +1900,7 @@ class ElectrumX(SessionBase):
         self.sv_negotiated.set()
         return electrumx.version, self.protocol_version_string()
 
-    async def transaction_broadcast(self, raw_tx):
+    async def transaction_broadcast(self, raw_tx: str | Any) -> str:
         '''Broadcast a raw transaction to the network.
 
         raw_tx: the raw transaction as a hexadecimal string'''
@@ -1893,7 +1908,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.25 + len(raw_tx) / 5000)
         # This returns errors as JSON RPC errors, as is natural
         try:
-            hex_hash = await self.session_mgr.broadcast_transaction(raw_tx)
+            txid_hum = await self.session_mgr.broadcast_transaction(raw_tx)
         except DaemonError as e:
             error, = e.args
             message = error['message']
@@ -1906,14 +1921,14 @@ class ElectrumX(SessionBase):
             if client_ver != (0, ):
                 msg = self.coin.warn_old_client_on_tx_broadcast(client_ver)
                 if msg:
-                    self.logger.info(f'sent tx: {hex_hash}. and warned user to upgrade their '
+                    self.logger.info(f'sent tx: {txid_hum}. and warned user to upgrade their '
                                      f'client from {self.client}')
                     return msg
 
-            self.logger.info(f'sent tx: {hex_hash}')
-            return hex_hash
+            self.logger.info(f'sent tx: {txid_hum}')
+            return txid_hum
 
-    async def package_broadcast(self, raw_txs: Sequence[str], verbose: bool = False) -> dict:
+    async def package_broadcast(self, raw_txs: Sequence[str] | Any, verbose: bool = False) -> dict[str, Any]:
         """Broadcast a package of raw transactions to the network (submitpackage).
         The package must consist of a child with its parents,
         and none of the parents may depend on one another.
@@ -1985,37 +2000,37 @@ class ElectrumX(SessionBase):
             response.append(new_item)
         return response
 
-    async def transaction_get(self, tx_hash, verbose=False):
+    async def transaction_get(self, tx_hash: str | Any, verbose=False):
         '''Return the serialized raw transaction given its hash
 
         tx_hash: the transaction hash as a hexadecimal string
         verbose: passed on to the daemon
         '''
-        assert_tx_hash(tx_hash)
+        assert_txid_hum(tx_hash)
         if verbose not in (True, False):
             raise RPCError(BAD_REQUEST, '"verbose" must be a boolean')
 
         self.bump_cost(1.0)
         return await self.daemon_request('getrawtransaction', tx_hash, verbose)
 
-    async def transaction_merkle(self, tx_hash, height):
+    async def transaction_merkle(self, tx_hash: str | Any, height: int | Any) -> dict[str, Any]:
         '''Return the merkle branch to a confirmed transaction given its hash
         and height.
 
         tx_hash: the transaction hash as a hexadecimal string
         height: the height of the block it is in
         '''
-        tx_hash = assert_tx_hash(tx_hash)
+        txid_rev = assert_txid_hum(tx_hash)
         height = non_negative_integer(height)
 
-        branch, tx_pos, block_header, cost = await self.session_mgr.merkle_branch_for_tx_hash(
-            tx_hash=tx_hash, height=height)
+        branch, tx_pos, block_header, cost = await self.session_mgr.merkle_branch_for_txid(
+            txid_rev=txid_rev, height=height)
         self.bump_cost(cost)
-        blockhash = hash_to_hex_str(self.coin.header_hash(block_header))
+        blockhash_hum = hash_to_hex_str(self.coin.header_hash_rev(block_header))
 
         return {
             "block_height": height,
-            "block_hash": blockhash,
+            "block_hash": blockhash_hum,
             "merkle": branch,
             "pos": tx_pos,
         }
@@ -2030,21 +2045,22 @@ class ElectrumX(SessionBase):
             raise RPCError(BAD_REQUEST, '"merkle" must be a boolean')
 
         if merkle:
-            branch, tx_hash, cost = await self.session_mgr.merkle_branch_for_tx_pos(
+            branch, txid_hum, cost = await self.session_mgr.merkle_branch_for_tx_pos(
                 height, tx_pos)
             self.bump_cost(cost)
-            return {"tx_hash": tx_hash, "merkle": branch}
+            return {"tx_hash": txid_hum, "merkle": branch}
         else:
-            tx_hashes, cost = await self.session_mgr.tx_hashes_at_blockheight(height)
+            txids_rev, cost = await self.session_mgr.txids_rev_at_blockheight(height)
             try:
-                tx_hash = tx_hashes[tx_pos]
+                txid_rev = txids_rev[tx_pos]
             except IndexError:
                 raise RPCError(BAD_REQUEST,
                                f'no tx at position {tx_pos:,d} in block at height {height:,d}')
             self.bump_cost(cost)
-            return hash_to_hex_str(tx_hash)
+            txid_hum = hash_to_hex_str(txid_rev)
+            return txid_hum
 
-    async def compact_fee_histogram(self):
+    async def compact_fee_histogram(self) -> Sequence[tuple[float, int]]:
         self.bump_cost(1.0)
         return await self.mempool.compact_fee_histogram()
 

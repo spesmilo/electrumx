@@ -37,26 +37,26 @@ _hmac_digest = hmac.digest
 HASHX_LEN = 11
 
 
-def sha256(x):
+def sha256(x: bytes) -> bytes:
     '''Simple wrapper of hashlib sha256.'''
     return _sha256(x).digest()
 
 
-def double_sha256(x):
+def double_sha256(x: bytes) -> bytes:
     '''SHA-256 of SHA-256, as used extensively in bitcoin.'''
     return sha256(sha256(x))
 
 
-def hash_to_hex_str(x):
-    '''Convert a big-endian binary hash to displayed hex string.
+def hash_to_hex_str(x: bytes) -> str:
+    '''Convert a big-endian binary hash to displayed hex string. (rev-to-hum)
 
     Display form of a binary hash is reversed and converted to hex.
     '''
     return bytes(reversed(x)).hex()
 
 
-def hex_str_to_hash(x):
-    '''Convert a displayed hex string to a binary hash.'''
+def hex_str_to_hash(x: str) -> bytes:
+    '''Convert a displayed hex string to a binary hash. (hum-to-rev)'''
     return bytes(reversed(hex_to_bytes(x)))
 
 

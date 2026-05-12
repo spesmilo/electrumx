@@ -271,10 +271,10 @@ async def test_mempool_info(daemon):
 
 
 @pytest.mark.asyncio
-async def test_mempool_hashes(daemon):
+async def test_mempool_txids_hum(daemon):
     hashes = ['hex_hash1', 'hex_hash2']
     daemon.session = ClientSessionGood(('getrawmempool', [], hashes))
-    assert await daemon.mempool_hashes() == hashes
+    assert await daemon.mempool_txids_hum() == hashes
 
 
 @pytest.mark.asyncio

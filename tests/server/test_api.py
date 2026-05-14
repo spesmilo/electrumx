@@ -4,7 +4,7 @@ from unittest import mock
 from aiorpcx import RPCError
 from electrumx import Controller, Env
 
-loop = asyncio.get_event_loop()
+loop = asyncio.new_event_loop()
 
 
 def set_env():

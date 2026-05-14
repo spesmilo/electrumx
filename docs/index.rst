@@ -4,8 +4,6 @@ ElectrumX
 
 .. image:: https://github.com/spesmilo/electrumx/actions/workflows/ci.yml/badge.svg?branch=master
     :target: https://github.com/spesmilo/electrumx/actions/workflows/ci.yml
-.. image:: https://coveralls.io/repos/github/spesmilo/electrumx/badge.svg
-    :target: https://coveralls.io/github/spesmilo/electrumx
 
 This project is a fork of `kyuupichan/electrumx <https://github.com/kyuupichan/electrumx>`_.
 The original author dropped support for Bitcoin, which we intend to keep.

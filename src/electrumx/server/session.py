@@ -22,6 +22,7 @@ from functools import partial
 from ipaddress import IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any, Tuple, Set, Dict, Mapping
 from typing import Callable
+import random
 
 import aiorpcx
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
@@ -108,8 +109,8 @@ def assert_txid_hum(value: Any | str) -> bytes:
     raise RPCError(BAD_REQUEST, f'{value} should be a transaction hash')
 
 
-def assert_hex_str(value: Any | str) -> None:
-    if not is_hex_str(value):
+def assert_hex_str(value: Any | str, *, allow_odd_len: bool = False) -> None:
+    if not is_hex_str(value, allow_odd_len=allow_odd_len):
         raise RPCError(BAD_REQUEST, f'{value} should be a hex string')
 
 
@@ -1254,10 +1255,12 @@ class ElectrumX(SessionBase):
         '''Notify the client about changes to touched addresses (from mempool
         updates or new blocks) and height.
         '''
+        cnt_sent = 0
         # block headers
         if height_changed and self.subscribe_headers:
             args = (await self.subscribe_headers_result(), )
             await self.send_notification('blockchain.headers.subscribe', args)
+            cnt_sent += 1
 
         # hashXs
         num_hashx_notifs_sent = 0
@@ -1287,6 +1290,7 @@ class ElectrumX(SessionBase):
                 method = 'blockchain.scripthash.subscribe'
             for alias, status in changed.items():
                 await self.send_notification(method, (alias, status))
+                cnt_sent += 1
             num_hashx_notifs_sent = len(changed)
 
         # tx outpoints
@@ -1310,6 +1314,7 @@ class ElectrumX(SessionBase):
                 spend_status = txo_to_status[(tx_hash, txout_idx)]
                 tx_hash_hex = hash_to_hex_str(tx_hash)
                 await self.send_notification(method, (tx_hash_hex, txout_idx, spend_status))
+                cnt_sent += 1
             num_txo_notifs_sent = len(touched_outpoints)
 
         if num_hashx_notifs_sent + num_txo_notifs_sent > 0:
@@ -1317,6 +1322,18 @@ class ElectrumX(SessionBase):
             s2 = '' if num_txo_notifs_sent == 1 else 's'
             self.logger.info(f'notified of {num_hashx_notifs_sent:,d} address{es1} and '
                              f'{num_txo_notifs_sent:,d} outpoint{s2}')
+
+        # maybe send some noise
+        if self.protocol_tuple >= (1, 7):
+            if height_changed:  # on block
+                if cnt_sent < 2:
+                    await self.send_ping_notification_to_client(data_len=128)  # similar len to bc.spk.sub
+                while random.random() < 0.1:
+                    await self.send_ping_notification_to_client(data_len=128)
+            else:  # on mempool
+                once_per_10_minutes = self.mempool.refresh_secs / 600
+                if random.random() < once_per_10_minutes:
+                    await self.send_ping_notification_to_client(data_len=128)
 
     async def subscribe_headers_result(self):
         '''The result of a header subscription or notification.'''
@@ -1841,17 +1858,26 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.1)
         if self.protocol_tuple < (1, 7):
             return None
-        assert_hex_str(data)
+        assert_hex_str(data, allow_odd_len=True)
         pong_len = non_negative_integer(pong_len)
         if pong_len > self.env.max_send:
             raise RPCError(BAD_REQUEST, f'pong_len value too high')
         pong_data = pong_len * "0"
-        return {"data": pong_data}
+        ret = {"data": pong_data}
+        return ret
 
     async def phandle_on_ping_notification(self, data=""):
         self.bump_cost(0.1)  # note: the bw cost for receiving 'data' has already been incurred
-        assert_hex_str(data)
-        # nothing to do
+        assert_hex_str(data, allow_odd_len=True)
+        # nothing to do.
+        # note: we could probabilistically send back a ping notif to the client, as noise,
+        #       but we don't. Leave such logic to the client: if they wanted a response,
+        #       they would have sent "server.ping" as a request instead of a notification.
+
+    async def send_ping_notification_to_client(self, data_len: int) -> None:
+        assert isinstance(data_len, int) and data_len >= 0, repr(data_len)
+        data = "0" * data_len
+        await self.send_notification("server.ping", (data,))
 
     async def phandle_server_version(
             self,

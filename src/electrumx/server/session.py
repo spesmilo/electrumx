@@ -1189,13 +1189,16 @@ class ElectrumX(SessionBase):
             'protocol_min': min_str,
             'protocol_max': max_str,
             'genesis_hash': env.coin.GENESIS_HASH,
-            'hash_function': 'sha256',
+            'hash_function': 'sha256',  # FIXME should only be present for proto < 1.7
             'services': [str(service) for service in env.report_services],
         }
 
     async def phandle_server_features_async(self) -> dict[str, Any]:
         self.bump_cost(0.2)
-        return self.server_features(self.env)
+        features = self.server_features(self.env)
+        if self.protocol_tuple >= (1, 7):
+            features.pop('hash_function', None)
+        return features
 
     @classmethod
     def server_version_args(cls):

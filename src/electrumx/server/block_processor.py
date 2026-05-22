@@ -401,8 +401,9 @@ class BlockProcessor:
         db_deletes_size = len(self.db_deletes) * 57
         hist_cache_size = self.db.history.unflushed_memsize()
         # Roughly ntxs * 32 + nblocks * 42
-        txids_size = ((self.tx_count - self.db.fs_tx_count) * 32
-                        + (self.height - self.db.fs_height) * 42)
+        txids_size = (
+                (self.tx_count - self.db.fs_tx_count) * 32
+                + (self.height - self.db.fs_height) * 42)
         utxo_MB = (db_deletes_size + utxo_cache_size) // one_MB
         hist_MB = (hist_cache_size + txids_size) // one_MB
 

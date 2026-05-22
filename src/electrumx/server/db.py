@@ -31,6 +31,7 @@ from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
     History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
+    DBTooOldForMigrations,
 )
 
 if TYPE_CHECKING:
@@ -630,13 +631,9 @@ class DB:
                 raise self.DBError('failed reading state from DB')
             self.db_version = state['db_version']
             if self.db_version not in self.DB_VERSIONS:
-                raise self.DBError(f'your UTXO DB version is {self.db_version} '
-                                   f'but this software only handles versions '
-                                   f'{self.DB_VERSIONS}')
-            # backwards compat
+                raise DBTooOldForMigrations(
+                    db_name="UTXO", db_version=self.db_version, supported_versions=self.DB_VERSIONS)
             genesis_hash = state['genesis']
-            if isinstance(genesis_hash, bytes):
-                genesis_hash = genesis_hash.decode()
             if genesis_hash != self.coin.GENESIS_HASH:
                 raise self.DBError(f'DB genesis hash {genesis_hash} does not '
                                    f'match coin {self.coin.GENESIS_HASH}')
@@ -653,7 +650,7 @@ class DB:
 
         # Upgrade DB
         if self.db_version != max(self.DB_VERSIONS):
-            pass  # call future upgrade logic here
+            raise Exception("missing db upgrade")  # call future upgrade logic here
 
         # Log some stats
         self.logger.info(f'UTXO DB version: {self.db_version:d}')

@@ -2057,7 +2057,7 @@ class ElectrumX(SessionBase):
 
         return {
             "block_height": height,
-            "block_hash": blockhash_hum,
+            #"block_hash": blockhash_hum,
             "merkle": branch,
             "pos": tx_pos,
         }

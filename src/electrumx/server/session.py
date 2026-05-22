@@ -56,6 +56,7 @@ if TYPE_CHECKING:
 
 BAD_REQUEST = 1
 DAEMON_ERROR = 2
+RPC_ERROR_HISTORY_TOO_LONG = 10_001
 
 
 def scripthash_to_hashX(scripthash: str) -> bytes:
@@ -873,7 +874,7 @@ class SessionManager:
             result = await self.db.limited_history(hashX, limit=limit)
             cost += 0.1 + len(result) * 0.001
             if len(result) >= limit:
-                result = RPCError(BAD_REQUEST, f'history too large', cost=cost)
+                result = RPCError(RPC_ERROR_HISTORY_TOO_LONG, f'history too large', cost=cost)
             self._history_cache[hashX] = result
 
         assert result is not None

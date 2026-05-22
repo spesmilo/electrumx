@@ -13,7 +13,7 @@ import bisect
 import time
 from array import array
 from collections import defaultdict
-from typing import TYPE_CHECKING, Type, Optional
+from typing import TYPE_CHECKING, Type, Optional, Sequence
 
 import electrumx.lib.util as util
 from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
@@ -38,6 +38,17 @@ def unpack_txnum(tx_numb: bytes) -> int:
 
 def pack_txnum(tx_num: int) -> bytes:
     return pack_be_uint64(tx_num)[-TXNUM_LEN:]
+
+
+class DBTooOldForMigrations(RuntimeError):
+    def __init__(self, *, db_name: str, db_version: int, supported_versions: Sequence[int]):
+        cmd = 'rm -rf DB_DIRECTORY/{hist,meta,utxo}'
+        super().__init__(
+            f'Your {db_name} DB version is {db_version} but this software only handles versions {supported_versions}. '
+            f'Manually delete your database (e.g. `{cmd}`, and start again. '
+            f'Then, your DB will be rebuilt from genesis, likely taking several hours. '
+            f"If you don't have time for this now, you can temporarily downgrade the software."
+        )
 
 
 class History:
@@ -88,12 +99,10 @@ class History:
             self.hist_db_tx_count_next = self.hist_db_tx_count
 
         if self.db_version not in self.DB_VERSIONS:
-            msg = (f'your history DB version is {self.db_version} but '
-                   f'this software only handles DB versions {self.DB_VERSIONS}')
-            self.logger.error(msg)
-            raise RuntimeError(msg)
+            raise DBTooOldForMigrations(
+                db_name="history", db_version=self.db_version, supported_versions=self.DB_VERSIONS)
         if self.db_version != max(self.DB_VERSIONS):
-            pass  # call future upgrade logic here
+            raise Exception("missing db upgrade")  # call future upgrade logic here
         self.logger.info(f'history DB version: {self.db_version}')
 
     def clear_excess(self, utxo_db_tx_count: int) -> None:

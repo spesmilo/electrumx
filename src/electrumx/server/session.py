@@ -178,7 +178,7 @@ class SessionManager:
         self._txids_cache = LRUCache(maxsize=1000)  # type: LRUCache[int, Sequence[bytes]]
         # Really a MerkleCache cache
         self._merkle_txid_cache = LRUCache(maxsize=1000)  # type: LRUCache[int, MerkleCache]
-        self.estimatefee_cache : LRUCache[
+        self.estimatefee_cache: LRUCache[
             tuple[int, str | None],
             tuple[bytes | None, float | None, asyncio.Lock]
         ] = LRUCache(maxsize=1000)
@@ -2060,7 +2060,7 @@ class ElectrumX(SessionBase):
 
         return {
             "block_height": height,
-            #"block_hash": blockhash_hum,
+            # "block_hash": blockhash_hum,
             "merkle": branch,
             "pos": tx_pos,
         }

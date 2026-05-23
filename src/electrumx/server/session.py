@@ -1479,7 +1479,7 @@ class ElectrumX(SessionBase):
         # convert to json dict the client expects
         status = {}
         if spend_status.prev_height is not None:
-            status['height'] = spend_status.prev_height
+            status['funder_height'] = spend_status.prev_height
             if spend_status.spender_txid_rev is not None:
                 assert spend_status.spender_height is not None
                 status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txid_rev)
@@ -1491,7 +1491,7 @@ class ElectrumX(SessionBase):
         status = await self._calc_txoutpoint_status(prev_txid_rev=prev_txid_rev, txout_idx=txout_idx)
         # update status last sent to client
         prevout = (prev_txid_rev, txout_idx)
-        prev_height = status.get('height')  # type: Optional[int]
+        prev_height = status.get('funder_height')  # type: Optional[int]
         spender_height = status.get('spender_height')  # type: Optional[int]
         if ((prev_height is not None and prev_height <= 0)
                 or (spender_height is not None and spender_height <= 0)):

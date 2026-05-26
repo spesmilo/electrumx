@@ -1603,7 +1603,7 @@ class ElectrumX(SessionBase):
         scripthash = spk_to_scripthash(spk)
         return self.phandle_scripthash_unsubscribe(scripthash)
 
-    async def phandle_txoutpoint_get_status(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint=None) -> dict[str, Any]:
+    async def phandle_txoutpoint_get_status(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint: str | Any) -> dict[str, Any]:
         '''Return the status of an outpoint, without subscribing.
 
         spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
@@ -1611,13 +1611,12 @@ class ElectrumX(SessionBase):
         '''
         txid_rev = assert_txid_hum(tx_hash)
         txout_idx = non_negative_integer(txout_idx)
-        if spk_hint is not None:
-            assert_hex_str(spk_hint)
+        assert_hex_str(spk_hint)
         # calc status (but do not side-effect client-last-seen status)
         spend_status = await self._calc_txoutpoint_status(txid_rev, txout_idx)
         return spend_status
 
-    async def phandle_txoutpoint_subscribe(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint=None) -> dict[str, Any]:
+    async def phandle_txoutpoint_subscribe(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint: str | Any) -> dict[str, Any]:
         '''Subscribe to an outpoint.
 
         spk_hint: scriptPubKey corresponding to the outpoint. Might be used by
@@ -1625,8 +1624,7 @@ class ElectrumX(SessionBase):
         '''
         txid_rev = assert_txid_hum(tx_hash)
         txout_idx = non_negative_integer(txout_idx)
-        if spk_hint is not None:
-            assert_hex_str(spk_hint)
+        assert_hex_str(spk_hint)
         # calc status, update client-last-seen status, and sub to outpoint
         spend_status = await self.txoutpoint_status_for_notif(txid_rev, txout_idx)
         self.txoutpoint_subs.add((txid_rev, txout_idx))

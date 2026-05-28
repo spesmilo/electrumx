@@ -31,6 +31,7 @@ from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
     History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
+    pack_txoutidx, unpack_txoutidx,
     DBTooOldForMigrations,
 )
 
@@ -688,7 +689,7 @@ class DB:
             # Value: the UTXO value as a 64-bit unsigned integer
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN-TXOUTIDX_LEN:-TXNUM_LEN] + TXOUTIDX_PADDING)
+                txout_idx = unpack_txoutidx(db_key[-TXNUM_LEN-TXOUTIDX_LEN:-TXNUM_LEN])
                 tx_num = unpack_txnum(db_key[-TXNUM_LEN:])
                 value, = unpack_le_uint64(db_value)
                 txid_rev, height = self.fs_txid_rev(tx_num)
@@ -714,7 +715,7 @@ class DB:
             for each prevout.
             '''
             def lookup_hashX(txid_rev: bytes, tx_idx: int) -> tuple[Optional[bytes], Optional[bytes]]:
-                idx_packed = pack_le_uint32(tx_idx)[:TXOUTIDX_LEN]
+                idx_packed = pack_txoutidx(tx_idx)
 
                 # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
                 # Value: hashX

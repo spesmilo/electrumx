@@ -32,6 +32,7 @@ from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
     History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
     pack_txoutidx, unpack_txoutidx, pack_satoshis_val, unpack_satoshis_val,
+    pack_block_height, unpack_block_height, BHEIGHT_LEN,
     DBTooOldForMigrations,
 )
 
@@ -549,7 +550,7 @@ class DB:
 
     def undo_key(self, height: int) -> bytes:
         '''DB key for undo information at the given height.'''
-        return b'U' + pack_be_uint32(height)
+        return b'U' + pack_block_height(height)
 
     def read_undo_info(self, height: int) -> bytes:
         '''Read undo information from a file for the current height.'''
@@ -591,7 +592,7 @@ class DB:
         min_height = self.min_undo_height(self.db_height)
         keys = []
         for key, _hist in self.utxo_db.iterator(prefix=prefix):
-            height, = unpack_be_uint32(key[-4:])
+            height = unpack_block_height(key[-BHEIGHT_LEN:])
             if height >= min_height:
                 break
             keys.append(key)

@@ -20,6 +20,7 @@ from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
 from electrumx.lib.util import (
     pack_le_uint32, unpack_le_uint32,
     pack_le_uint64, unpack_le_uint64,
+    pack_be_uint32, unpack_be_uint32,
     pack_be_uint64, unpack_be_uint64,
 )
 
@@ -31,6 +32,7 @@ TXNUM_LEN = 5
 TXNUM_PADDING = bytes(8 - TXNUM_LEN)
 TXOUTIDX_LEN = 3
 TXOUTIDX_PADDING = bytes(4 - TXOUTIDX_LEN)
+BHEIGHT_LEN = 4
 
 
 def unpack_txnum(tx_numb: bytes) -> int:
@@ -55,6 +57,15 @@ def unpack_satoshis_val(sats: bytes) -> int:
 
 def pack_satoshis_val(sats: int) -> bytes:
     return pack_le_uint64(sats)
+
+
+def unpack_block_height(bheight: bytes) -> int:
+    return unpack_be_uint32(bheight)[0]
+
+
+def pack_block_height(bheight: int) -> bytes:
+    return pack_be_uint32(bheight)
+
 
 
 class DBTooOldForMigrations(RuntimeError):

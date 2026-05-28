@@ -26,7 +26,7 @@ from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
 from electrumx.server.history import (
     TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
-    pack_txoutidx, unpack_txoutidx,
+    pack_txoutidx, unpack_txoutidx, pack_satoshis_val, unpack_satoshis_val,
 )
 
 if TYPE_CHECKING:
@@ -467,8 +467,8 @@ class BlockProcessor:
         add_touched_outpoint = self.touched_outpoints.add
         hashXs_by_tx = []
         append_hashXs = hashXs_by_tx.append
-        to_le_uint32 = pack_le_uint32
-        to_le_uint64 = pack_le_uint64
+        _pack_txoutidx = pack_txoutidx
+        _pack_sats = pack_satoshis_val
         _pack_txnum = pack_txnum
 
         for tx in txs:
@@ -496,8 +496,8 @@ class BlockProcessor:
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 append_hashX(hashX)
-                put_utxo(txid_rev + pack_txoutidx(idx),
-                         hashX + tx_numb + to_le_uint64(txout.value))
+                put_utxo(txid_rev + _pack_txoutidx(idx),
+                         hashX + tx_numb + _pack_sats(txout.value))
                 add_touched_outpoint((txid_rev, idx))
 
             append_hashXs(hashXs)
@@ -815,8 +815,8 @@ class LTORBlockProcessor(BlockProcessor):
         undo_info_append = undo_info.append
         update_touched_hashxs = self.touched_hashxs.update
         add_touched_outpoint = self.touched_outpoints.add
-        to_le_uint32 = pack_le_uint32
-        to_le_uint64 = pack_le_uint64
+        _pack_txoutidx = pack_txoutidx
+        _pack_sats = pack_satoshis_val
         _pack_txnum = pack_txnum
 
         hashXs_by_tx = [set() for _ in txs]
@@ -835,8 +835,8 @@ class LTORBlockProcessor(BlockProcessor):
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 add_hashXs(hashX)
-                put_utxo(txid_rev + pack_txoutidx(idx),
-                         hashX + tx_numb + to_le_uint64(txout.value))
+                put_utxo(txid_rev + _pack_txoutidx(idx),
+                         hashX + tx_numb + _pack_sats(txout.value))
                 add_touched_outpoint((txid_rev, idx))
             tx_num += 1
 

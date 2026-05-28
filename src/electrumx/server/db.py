@@ -31,7 +31,7 @@ from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
     History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
-    pack_txoutidx, unpack_txoutidx,
+    pack_txoutidx, unpack_txoutidx, pack_satoshis_val, unpack_satoshis_val,
     DBTooOldForMigrations,
 )
 
@@ -691,7 +691,7 @@ class DB:
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
                 txout_idx = unpack_txoutidx(db_key[-TXNUM_LEN-TXOUTIDX_LEN:-TXNUM_LEN])
                 tx_num = unpack_txnum(db_key[-TXNUM_LEN:])
-                value, = unpack_le_uint64(db_value)
+                value = unpack_satoshis_val(db_value)
                 txid_rev, height = self.fs_txid_rev(tx_num)
                 utxos_append(UTXO(tx_num, txout_idx, txid_rev, height, value))
             return utxos
@@ -748,7 +748,7 @@ class DB:
                     # This can happen if the DB was updated between
                     # getting the hashXs and getting the UTXOs
                     return None
-                value, = unpack_le_uint64(db_value)
+                value = unpack_satoshis_val(db_value)
                 return hashX, value
             return [lookup_utxo(*hashX_pair) for hashX_pair in hashX_pairs]
 

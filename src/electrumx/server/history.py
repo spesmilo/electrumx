@@ -19,6 +19,7 @@ import electrumx.lib.util as util
 from electrumx.lib.hash import HASHX_LEN, hash_to_hex_str
 from electrumx.lib.util import (
     pack_le_uint32, unpack_le_uint32,
+    pack_le_uint64, unpack_le_uint64,
     pack_be_uint64, unpack_be_uint64,
 )
 
@@ -46,6 +47,14 @@ def unpack_txoutidx(txout_idx: bytes) -> int:
 
 def pack_txoutidx(txout_idx: int) -> bytes:
     return pack_le_uint32(txout_idx)[:TXOUTIDX_LEN]
+
+
+def unpack_satoshis_val(sats: bytes) -> int:
+    return unpack_le_uint64(sats)[0]
+
+
+def pack_satoshis_val(sats: int) -> bytes:
+    return pack_le_uint64(sats)
 
 
 class DBTooOldForMigrations(RuntimeError):

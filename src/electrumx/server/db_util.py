@@ -5,8 +5,6 @@
 from typing import Sequence
 
 from electrumx.lib.util import (
-    pack_le_uint32, unpack_le_uint32,
-    pack_le_uint64, unpack_le_uint64,
     pack_be_uint32, unpack_be_uint32,
     pack_be_uint64, unpack_be_uint64,
 )
@@ -25,26 +23,34 @@ def pack_txnum(tx_num: int) -> bytes:
     return pack_be_uint64(tx_num)[-TXNUM_LEN:]
 
 
+assert pack_txnum(0x123) == bytes.fromhex("0000000123")
+assert unpack_txnum(pack_txnum(0x123)) == 0x123
+
+
 # txout_idx
 TXOUTIDX_LEN = 3
 TXOUTIDX_PADDING = bytes(4 - TXOUTIDX_LEN)
 
 
 def unpack_txoutidx(txout_idx: bytes) -> int:
-    return unpack_le_uint32(txout_idx + TXOUTIDX_PADDING)[0]
+    return unpack_be_uint32(TXOUTIDX_PADDING + txout_idx)[0]
 
 
 def pack_txoutidx(txout_idx: int) -> bytes:
-    return pack_le_uint32(txout_idx)[:TXOUTIDX_LEN]
+    return pack_be_uint32(txout_idx)[-TXOUTIDX_LEN:]
+
+
+assert pack_txoutidx(0x123) == bytes.fromhex("000123")
+assert unpack_txoutidx(pack_txoutidx(0x123)) == 0x123
 
 
 # sats
 def unpack_satoshis_val(sats: bytes) -> int:
-    return unpack_le_uint64(sats)[0]
+    return unpack_be_uint64(sats)[0]
 
 
 def pack_satoshis_val(sats: int) -> bytes:
-    return pack_le_uint64(sats)
+    return pack_be_uint64(sats)
 
 
 # block height
@@ -64,11 +70,11 @@ DYN_HEADER_OFFSET_LEN = 8
 
 
 def unpack_dyn_header_offset(offset: bytes) -> int:
-    return unpack_le_uint64(offset)[0]
+    return unpack_be_uint64(offset)[0]
 
 
 def pack_dyn_header_offset(offset: int) -> bytes:
-    return pack_le_uint64(offset)
+    return pack_be_uint64(offset)
 
 
 class DBTooOldForMigrations(RuntimeError):

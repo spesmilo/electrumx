@@ -24,8 +24,7 @@ import electrumx.lib.util as util
 from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN, hex_str_to_hash
 from electrumx.lib.merkle import Merkle, MerkleCache
 from electrumx.lib.util import (
-    formatted_time, pack_be_uint16, pack_be_uint32, pack_le_uint64, pack_le_uint32,
-    unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
+    formatted_time,
 )
 from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
@@ -33,6 +32,7 @@ from electrumx.server.history import (
     History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
     pack_txoutidx, unpack_txoutidx, pack_satoshis_val, unpack_satoshis_val,
     pack_block_height, unpack_block_height, BHEIGHT_LEN,
+    pack_dyn_header_offset, unpack_dyn_header_offset, DYN_HEADER_OFFSET_LEN,
     DBTooOldForMigrations,
 )
 
@@ -425,15 +425,15 @@ class DB:
         offsets = []
         for h in headers:
             offset += len(h)
-            offsets.append(pack_le_uint64(offset))
+            offsets.append(pack_dyn_header_offset(offset))
         # For each header we get the offset of the next header, hence we
         # start writing from the next height
-        pos = (height_start + 1) * 8
+        pos = (height_start + 1) * DYN_HEADER_OFFSET_LEN
         self.headers_offsets_file.write(pos, b''.join(offsets))
 
-    def dynamic_header_offset(self, height):
+    def dynamic_header_offset(self, height: int) -> int:
         assert not self.coin.STATIC_BLOCK_HEADERS
-        offset, = unpack_le_uint64(self.headers_offsets_file.read(height * 8, 8))
+        offset = unpack_dyn_header_offset(self.headers_offsets_file.read(height * DYN_HEADER_OFFSET_LEN, DYN_HEADER_OFFSET_LEN))
         return offset
 
     def dynamic_header_len(self, height):

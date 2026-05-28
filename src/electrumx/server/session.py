@@ -671,7 +671,8 @@ class SessionManager:
             self.logger.info(f'request timeout {self.env.request_timeout:,d}s')
             self.logger.info(f'initial concurrent {self.env.initial_concurrent:,d}')
 
-            self.logger.info(f'max response size {self.env.max_send:,d} bytes')
+            self.logger.info(f'max send (response) size {self.env.max_send:,d} bytes')
+            self.logger.info(f'max recv (request) size {self.env.max_recv:,d} bytes')
             if self.env.drop_client is not None:
                 self.logger.info(
                     f'drop clients matching: {self.env.drop_client.pattern}'

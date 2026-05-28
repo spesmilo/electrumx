@@ -30,9 +30,6 @@ if TYPE_CHECKING:
 
 TXNUM_LEN = 5
 TXNUM_PADDING = bytes(8 - TXNUM_LEN)
-TXOUTIDX_LEN = 3
-TXOUTIDX_PADDING = bytes(4 - TXOUTIDX_LEN)
-BHEIGHT_LEN = 4
 
 
 def unpack_txnum(tx_numb: bytes) -> int:
@@ -41,6 +38,9 @@ def unpack_txnum(tx_numb: bytes) -> int:
 
 def pack_txnum(tx_num: int) -> bytes:
     return pack_be_uint64(tx_num)[-TXNUM_LEN:]
+
+TXOUTIDX_LEN = 3
+TXOUTIDX_PADDING = bytes(4 - TXOUTIDX_LEN)
 
 
 def unpack_txoutidx(txout_idx: bytes) -> int:
@@ -59,6 +59,9 @@ def pack_satoshis_val(sats: int) -> bytes:
     return pack_le_uint64(sats)
 
 
+BHEIGHT_LEN = 4
+
+
 def unpack_block_height(bheight: bytes) -> int:
     return unpack_be_uint32(bheight)[0]
 
@@ -66,6 +69,16 @@ def unpack_block_height(bheight: bytes) -> int:
 def pack_block_height(bheight: int) -> bytes:
     return pack_be_uint32(bheight)
 
+
+DYN_HEADER_OFFSET_LEN = 8
+
+
+def unpack_dyn_header_offset(offset: bytes) -> int:
+    return unpack_le_uint64(offset)[0]
+
+
+def pack_dyn_header_offset(offset: int) -> bytes:
+    return pack_le_uint64(offset)
 
 
 class DBTooOldForMigrations(RuntimeError):

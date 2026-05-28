@@ -40,6 +40,14 @@ def pack_txnum(tx_num: int) -> bytes:
     return pack_be_uint64(tx_num)[-TXNUM_LEN:]
 
 
+def unpack_txoutidx(txout_idx: bytes) -> int:
+    return unpack_le_uint32(txout_idx + TXOUTIDX_PADDING)[0]
+
+
+def pack_txoutidx(txout_idx: int) -> bytes:
+    return pack_le_uint32(txout_idx)[:TXOUTIDX_LEN]
+
+
 class DBTooOldForMigrations(RuntimeError):
     def __init__(self, *, db_name: str, db_version: int, supported_versions: Sequence[int]):
         cmd = 'rm -rf DB_DIRECTORY/{hist,meta,utxo}'

@@ -24,7 +24,10 @@ from electrumx.lib.util import (
 )
 from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
-from electrumx.server.history import TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum
+from electrumx.server.history import (
+    TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
+    pack_txoutidx, unpack_txoutidx,
+)
 
 if TYPE_CHECKING:
     from electrumx.lib.coins import Coin, Block
@@ -493,7 +496,7 @@ class BlockProcessor:
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 append_hashX(hashX)
-                put_utxo(txid_rev + to_le_uint32(idx)[:TXOUTIDX_LEN],
+                put_utxo(txid_rev + pack_txoutidx(idx),
                          hashX + tx_numb + to_le_uint64(txout.value))
                 add_touched_outpoint((txid_rev, idx))
 
@@ -578,7 +581,7 @@ class BlockProcessor:
                     continue
                 n -= undo_entry_len
                 undo_item = undo_info[n:n + undo_entry_len]
-                prevout = txin.prev_txid_rev + pack_le_uint32(txin.prev_idx)[:TXOUTIDX_LEN]
+                prevout = txin.prev_txid_rev + pack_txoutidx(txin.prev_idx)
                 put_utxo(prevout, undo_item)
                 hashX = undo_item[:HASHX_LEN]
                 add_touched_hashx(hashX)
@@ -649,7 +652,7 @@ class BlockProcessor:
         corruption.
         '''
         # Fast track is it being in the cache
-        idx_packed = pack_le_uint32(tx_idx)[:TXOUTIDX_LEN]
+        idx_packed = pack_txoutidx(tx_idx)
         cache_value = self.utxo_cache.pop(txid_rev + idx_packed, None)
         if cache_value:
             return cache_value
@@ -832,7 +835,7 @@ class LTORBlockProcessor(BlockProcessor):
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 add_hashXs(hashX)
-                put_utxo(txid_rev + to_le_uint32(idx)[:TXOUTIDX_LEN],
+                put_utxo(txid_rev + pack_txoutidx(idx),
                          hashX + tx_numb + to_le_uint64(txout.value))
                 add_touched_outpoint((txid_rev, idx))
             tx_num += 1
@@ -883,7 +886,7 @@ class LTORBlockProcessor(BlockProcessor):
                 if txin.is_generation():
                     continue
                 undo_item = undo_info[n:n + undo_entry_len]
-                prevout = txin.prev_txid_rev + pack_le_uint32(txin.prev_idx)[:TXOUTIDX_LEN]
+                prevout = txin.prev_txid_rev + pack_txoutidx(txin.prev_idx)
                 put_utxo(prevout, undo_item)
                 add_touched_hashx(undo_item[:HASHX_LEN])
                 add_touched_outpoint((txin.prev_txid_rev, txin.prev_idx))

@@ -1626,18 +1626,18 @@ class ElectrumX(SessionBase):
             self.logger.info(f'sent tx: {hex_hash}')
             return hex_hash
 
-    async def package_broadcast(self, tx_package: Sequence[str], verbose: bool = False) -> dict:
+    async def package_broadcast(self, raw_txs: Sequence[str], verbose: bool = False) -> dict:
         """Broadcast a package of raw transactions to the network (submitpackage).
         The package must consist of a child with its parents,
         and none of the parents may depend on one another.
 
         raw_txs: a list of raw transactions as hexadecimal strings"""
-        assert_list_or_tuple(tx_package)
-        for raw_tx in tx_package:
+        assert_list_or_tuple(raw_txs)
+        for raw_tx in raw_txs:
             assert_hex_str(raw_tx)
-        self.bump_cost(0.25 + sum(len(tx) / 5000 for tx in tx_package))
+        self.bump_cost(0.25 + sum(len(tx) / 5000 for tx in raw_txs))
         try:
-            daemon_result = await self.session_mgr.broadcast_package(tx_package)
+            daemon_result = await self.session_mgr.broadcast_package(raw_txs)
         except DaemonError as e:
             error, = e.args
             message = error['message']
@@ -1647,8 +1647,8 @@ class ElectrumX(SessionBase):
                 f'the tx package was rejected by network rules.\n\n{message}.',
             )
 
-        self.txs_sent += len(tx_package)
-        self.logger.info(f'broadcasted package: {len(tx_package)=}')
+        self.txs_sent += len(raw_txs)
+        self.logger.info(f'broadcasted package: {len(raw_txs)=}')
         if verbose:
             return daemon_result
 

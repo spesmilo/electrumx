@@ -24,9 +24,10 @@ from electrumx.lib.util import (
 )
 from electrumx.lib.tx import Tx
 from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
-from electrumx.server.history import (
-    TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
-    pack_txoutidx, unpack_txoutidx, pack_satoshis_val, unpack_satoshis_val,
+from electrumx.server.db_util import (
+    pack_txnum, unpack_txnum, TXNUM_LEN,
+    pack_txoutidx, unpack_txoutidx, TXOUTIDX_LEN,
+    pack_satoshis_val, unpack_satoshis_val,
 )
 
 if TYPE_CHECKING:

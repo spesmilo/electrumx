@@ -29,11 +29,15 @@ from electrumx.lib.util import (
 from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
 from electrumx.server.history import (
-    History, TXNUM_LEN, TXNUM_PADDING, TXOUTIDX_LEN, TXOUTIDX_PADDING, pack_txnum, unpack_txnum,
-    pack_txoutidx, unpack_txoutidx, pack_satoshis_val, unpack_satoshis_val,
+    History,
+)
+from electrumx.server.db_util import (
+    DBTooOldForMigrations,
+    pack_txnum, unpack_txnum, TXNUM_LEN,
+    pack_txoutidx, unpack_txoutidx, TXOUTIDX_LEN,
+    pack_satoshis_val, unpack_satoshis_val,
     pack_block_height, unpack_block_height, BHEIGHT_LEN,
     pack_dyn_header_offset, unpack_dyn_header_offset, DYN_HEADER_OFFSET_LEN,
-    DBTooOldForMigrations,
 )
 
 if TYPE_CHECKING:

@@ -310,6 +310,11 @@ class DeserializerSegWit(Deserializer):
         return self._read_tx_parts()[0]
 
 
+######################################################################
+# Non-Bitcoin stuff goes strictly below this line.
+######################################################################
+
+
 class DeserializerLitecoin(DeserializerSegWit):
     '''Class representing Litecoin transactions, which may have the MW flag set.
 

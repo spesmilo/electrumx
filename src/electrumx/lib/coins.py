@@ -195,6 +195,9 @@ class Coin:
         '''Return a pubkey script that pays to a pubkey hash.
 
         Pass the address (either P2PKH or P2SH) in base58 form.
+
+        note(ghost43): looks mainly needed for serving the altcoin Dash(Coin)'s "masternode.list" RPC.
+                       Barring that, we could rip out the whole base58 encoder/decoder.
         '''
         raw = cls.DECODE_CHECK(address)
 

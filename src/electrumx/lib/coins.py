@@ -78,9 +78,6 @@ class Coin:
     DESERIALIZER = lib_tx.Deserializer
     DAEMON = daemon.Daemon
     BLOCK_PROCESSOR = block_proc.BlockProcessor
-    HEADER_VALUES = ('version', 'prev_block_hash', 'merkle_root', 'timestamp',
-                     'bits', 'nonce')
-    HEADER_UNPACK = struct.Struct('< I 32s 32s I I I').unpack_from
     P2PKH_VERBYTE = bytes.fromhex("00")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
     ENCODE_CHECK = Base58.encode_check
@@ -455,9 +452,6 @@ class EquihashMixin:
     STATIC_BLOCK_HEADERS = False
     BASIC_HEADER_SIZE = 140  # Excluding Equihash solution
     DESERIALIZER = lib_tx.DeserializerEquihash
-    HEADER_VALUES = ('version', 'prev_block_hash', 'merkle_root', 'reserved',
-                     'timestamp', 'bits', 'nonce')
-    HEADER_UNPACK = struct.Struct('< I 32s 32s 32s I I 32s').unpack_from
 
     @classmethod
     def block_header(cls, block, height):
@@ -1349,9 +1343,6 @@ class FairCoin(Coin):
     GENESIS_HASH = ('beed44fa5e96150d95d56ebd5d262578'
                     '1825a9407a5215dd7eda723373a0a1d7')
     BASIC_HEADER_SIZE = 108
-    HEADER_VALUES = ('version', 'prev_block_hash', 'merkle_root',
-                     'payload_hash', 'timestamp', 'creatorId')
-    HEADER_UNPACK = struct.Struct('< I 32s 32s 32s I I').unpack_from
     TX_COUNT = 505
     TX_COUNT_HEIGHT = 470
     TX_PER_BLOCK = 1
@@ -2209,13 +2200,6 @@ class Decred(Coin):
                            hash_fn=lib_tx.DeserializerDecred.blake256d)
     DECODE_CHECK = partial(Base58.decode_check,
                            hash_fn=lib_tx.DeserializerDecred.blake256d)
-    HEADER_VALUES = ('version', 'prev_block_hash', 'merkle_root', 'stake_root',
-                     'vote_bits', 'final_state', 'voters', 'fresh_stake',
-                     'revocations', 'pool_size', 'bits', 'sbits',
-                     'block_height', 'size', 'timestamp', 'nonce',
-                     'extra_data', 'stake_version')
-    HEADER_UNPACK = struct.Struct(
-        '< i 32s 32s 32s H 6s H B B I I Q I I I I 32s I').unpack_from
     TX_COUNT = 4629388
     TX_COUNT_HEIGHT = 260628
     TX_PER_BLOCK = 17

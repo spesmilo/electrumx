@@ -85,7 +85,6 @@ class Coin:
     P2SH_VERBYTES = (bytes.fromhex("05"),)
     XPUB_VERBYTES = bytes('????', 'utf-8')
     XPRV_VERBYTES = bytes('????', 'utf-8')
-    WIF_BYTE = bytes.fromhex("80")
     ENCODE_CHECK = Base58.encode_check
     DECODE_CHECK = Base58.decode_check
     GENESIS_HASH = ('000000000019d6689c085ae165831e93'
@@ -226,14 +225,6 @@ class Coin:
         raise CoinError(f'invalid address: {address}')
 
     @classmethod
-    def privkey_WIF(cls, privkey_bytes, compressed):
-        '''Return the private key encoded in Wallet Import Format.'''
-        payload = bytearray(cls.WIF_BYTE + privkey_bytes)
-        if compressed:
-            payload.append(0x01)
-        return cls.ENCODE_CHECK(payload)
-
-    @classmethod
     def header_hash(cls, header):
         '''Given a header return hash'''
         return double_sha256(header)
@@ -370,7 +361,6 @@ class BitcoinTestnetMixin:
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('000000000933ea01ad0ee984209779ba'
                     'aec3ced90fa3f408719526f8d77f4943')
     REORG_LIMIT = 8000
@@ -513,7 +503,6 @@ class ScryptMixin:
 class KomodoMixin:
     P2PKH_VERBYTE = bytes.fromhex("3C")
     P2SH_VERBYTES = (bytes.fromhex("55"),)
-    WIF_BYTE = bytes.fromhex("BC")
     GENESIS_HASH = ('027e3758c3a65b12aa1046462b486d0a'
                     '63bfa1beae327897f56c5cfb7daaae71')
     DESERIALIZER = lib_tx.DeserializerZcash
@@ -716,7 +705,6 @@ class Verge(Coin):
     XPRV_VERBYTES = bytes.fromhex("0221312b")
     P2PKH_VERBYTE = bytes.fromhex("30")
     P2SH_VERBYTES = [bytes.fromhex("33")]
-    WIF_BYTE = bytes.fromhex("9E")
     GENESIS_HASH = ('00000fc63692467faeb20cdb3b53200d'
                     'c601d75bdfa1001463304cc790d77278')
     RPC_PORT = 20102
@@ -738,7 +726,6 @@ class HOdlcoin(Coin):
     NET = "mainnet"
     BASIC_HEADER_SIZE = 88
     P2PKH_VERBYTE = bytes.fromhex("28")
-    WIF_BYTE = bytes.fromhex("a8")
     GENESIS_HASH = ('008872e5582924544e5c707ee4b839bb'
                     '82c28a9e94e917c94b40538d5658c04b')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -826,7 +813,6 @@ class BitcoinGoldTestnet(BitcoinGold):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6F")
     P2SH_VERBYTES = (bytes.fromhex("C4"),)
-    WIF_BYTE = bytes.fromhex("EF")
     TX_COUNT = 0
     TX_COUNT_HEIGHT = 1
     NET = 'testnet'
@@ -847,7 +833,6 @@ class BitcoinGoldRegtest(BitcoinGold):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6F")
     P2SH_VERBYTES = (bytes.fromhex("C4"),)
-    WIF_BYTE = bytes.fromhex("EF")
     TX_COUNT = 0
     TX_COUNT_HEIGHT = 1
     NET = 'regtest'
@@ -1010,7 +995,6 @@ class Sumcoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488abe6")
     P2PKH_VERBYTE = bytes.fromhex("3f")
     P2SH_VERBYTES = (bytes.fromhex("c8"), bytes.fromhex("05"))
-    WIF_BYTE = bytes.fromhex("bf")
     GENESIS_HASH = ('37d4696c5072cd012f3b7c651e5ce56a'
                     '1383577e4edacc2d289ec9b25eebfd5e')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -1031,7 +1015,6 @@ class Litecoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("30")
     P2SH_VERBYTES = (bytes.fromhex("32"), bytes.fromhex("05"))
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('12a765e31ffd4059bada1e25190f6e98'
                     'c99d9714d334efa41a195a7e7e04bfe2')
     DESERIALIZER = lib_tx.DeserializerLitecoin
@@ -1057,7 +1040,6 @@ class LitecoinTestnet(Litecoin):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("3a"), bytes.fromhex("c4"))
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('4966625a4b2851d9fdee139e56211a0d'
                     '88575f59ed816ff5e6a63deb4e3e29a0')
     TX_COUNT = 21772
@@ -1099,7 +1081,6 @@ class Viacoin(AuxPowMixin, Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("47")
     P2SH_VERBYTES = (bytes.fromhex("21"),)
-    WIF_BYTE = bytes.fromhex("c7")
     GENESIS_HASH = ('4e9b54001f9976049830128ec0331515'
                     'eaabe35a70970d79971da1539a400ba1')
     TX_COUNT = 113638
@@ -1121,7 +1102,6 @@ class ViacoinTestnet(Viacoin):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("7f")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ff")
     GENESIS_HASH = ('00000007199508e34a9ff81e6ec0c477'
                     'a4cccff2a4767a8eee39c11db367b008')
     RPC_PORT = 25222
@@ -1146,7 +1126,6 @@ class GravityCoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("28")
     P2SH_VERBYTES = (bytes.fromhex("0a"),)
-    WIF_BYTE = bytes.fromhex("d2")
     GENESIS_HASH = '322bad477efb4b33fa4b1f0b2861eaf543c61068da9898a95062fdb02ada486f'
     TX_COUNT = 446050
     TX_COUNT_HEIGHT = 547346
@@ -1170,7 +1149,6 @@ class Bitcoinzero(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("4b")
     P2SH_VERBYTES = (bytes.fromhex("22"),)
-    WIF_BYTE = bytes.fromhex("d2")
     RPC_PORT = 29202
     REORG_LIMIT = 5000
     PEERS = []
@@ -1184,7 +1162,6 @@ class Unitus(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("44")
     P2SH_VERBYTES = (bytes.fromhex("0A"),)
-    WIF_BYTE = bytes.fromhex("84")
     GENESIS_HASH = ('d8a2b2439d013a59f3bfc626a33487a3'
                     'd7d27e42a3c9e0b81af814cd8e592f31')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -1207,7 +1184,6 @@ class Namecoin(NameIndexAuxPoWMixin, Coin):
     XPRV_VERBYTES = bytes.fromhex("d7dc6e31")
     P2PKH_VERBYTE = bytes.fromhex("34")
     P2SH_VERBYTES = (bytes.fromhex("0d"),)
-    WIF_BYTE = bytes.fromhex("e4")
     GENESIS_HASH = ('000000000062b72c5e2ceb45fbc8587e'
                     '807c155b0da735e6483dfba2f0a9c770')
     DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
@@ -1257,7 +1233,6 @@ class NamecoinTestnet(Namecoin):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('00000007199508e34a9ff81e6ec0c477'
                     'a4cccff2a4767a8eee39c11db367b008')
 
@@ -1281,7 +1256,6 @@ class Dogecoin(AuxPowMixin, Coin):
     XPRV_VERBYTES = bytes.fromhex("02fac398")
     P2PKH_VERBYTE = bytes.fromhex("1e")
     P2SH_VERBYTES = (bytes.fromhex("16"),)
-    WIF_BYTE = bytes.fromhex("9e")
     GENESIS_HASH = ('1a91e3dace36e2be3bf030a65679fe82'
                     '1aa1d6ef92e7c9902eb318182c355691')
     TX_COUNT = 27583427
@@ -1297,7 +1271,6 @@ class DogecoinTestnet(Dogecoin):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("71")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("f1")
     GENESIS_HASH = ('bb0a78264637406b6360aad926284d54'
                     '4d7049f45189db5664f3c4d07350559e')
 
@@ -1313,7 +1286,6 @@ class Dash(Coin):
                     '9c733355108f107a430458cdf3407ab6')
     P2PKH_VERBYTE = bytes.fromhex("4c")
     P2SH_VERBYTES = (bytes.fromhex("10"),)
-    WIF_BYTE = bytes.fromhex("cc")
     TX_COUNT_HEIGHT = 569399
     TX_COUNT = 2157510
     TX_PER_BLOCK = 4
@@ -1345,7 +1317,6 @@ class DashTestnet(Dash):
                     '7288a481e5c005f6563d91623bf8bc2c')
     P2PKH_VERBYTE = bytes.fromhex("8c")
     P2SH_VERBYTES = (bytes.fromhex("13"),)
-    WIF_BYTE = bytes.fromhex("ef")
     TX_COUNT_HEIGHT = 101619
     TX_COUNT = 132681
     TX_PER_BLOCK = 1
@@ -1371,7 +1342,6 @@ class Argentum(AuxPowMixin, Coin):
     SHORTNAME = "ARG"
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("17")
-    WIF_BYTE = bytes.fromhex("97")
     GENESIS_HASH = ('88c667bc63167685e4e4da058fffdfe8'
                     'e007e5abffd6855de52ad59df7bb0bb2')
     TX_COUNT = 2263089
@@ -1385,7 +1355,6 @@ class ArgentumTestnet(Argentum):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
     REORG_LIMIT = 2000
 
 
@@ -1407,7 +1376,6 @@ class DigiByteTestnet(DigiByte):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('b5dca8039e300198e5fe7cd23bdd1728'
                     'e2a444af34c447dbd0916fa3430a68c2')
     RPC_PORT = 15022
@@ -1420,7 +1388,6 @@ class FairCoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("5f")
     P2SH_VERBYTES = (bytes.fromhex("24"),)
-    WIF_BYTE = bytes.fromhex("df")
     GENESIS_HASH = ('beed44fa5e96150d95d56ebd5d262578'
                     '1825a9407a5215dd7eda723373a0a1d7')
     BASIC_HEADER_SIZE = 108
@@ -1467,7 +1434,6 @@ class ZcashTestnet(Zcash):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("1D25")
     P2SH_VERBYTES = (bytes.fromhex("1CBA"),)
-    WIF_BYTE = bytes.fromhex("EF")
     GENESIS_HASH = ('05a60a92d99d85997cce3b87616c089f'
                     '6124d7342af37106edc76126334a2c38')
     TX_COUNT = 242312
@@ -1582,7 +1548,6 @@ class KotoTestnet(Koto):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("18A4")
     P2SH_VERBYTES = (bytes.fromhex("1839"),)
-    WIF_BYTE = bytes.fromhex("EF")
     GENESIS_HASH = ('bf84afbde20c2d213b68b231ddb585ab'
                     '616ef7567226820f00d9b397d774d2f0')
     TX_COUNT = 91144
@@ -1635,7 +1600,6 @@ class Einsteinium(Coin):
     SHORTNAME = "EMC2"
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("21")
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('4e56204bb7b8ac06f860ff1c845f03f9'
                     '84303b5b97eb7b42868f714611aed94b')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -1654,7 +1618,6 @@ class Blackcoin(ScryptMixin, Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("19")
     P2SH_VERBYTES = (bytes.fromhex("55"),)
-    WIF_BYTE = bytes.fromhex("99")
     GENESIS_HASH = ('000001faef25dec4fbcf906e6242621d'
                     'f2c183bf232f263d0ba5b101911e4563')
     DESERIALIZER = lib_tx.DeserializerBlackcoin
@@ -1681,7 +1644,6 @@ class BlackcoinTestnet(Blackcoin):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6F")
     P2SH_VERBYTES = (bytes.fromhex("C4"),)
-    WIF_BYTE = bytes.fromhex("EF")
     GENESIS_HASH = ('0000724595fb3b9609d441cbfb957761'
                     '5c292abf07d996d3edabc48de843642d')
     DESERIALIZER = lib_tx.DeserializerBlackcoin
@@ -1706,7 +1668,6 @@ class Bitbay(ScryptMixin, Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("19")
     P2SH_VERBYTES = (bytes.fromhex("55"),)
-    WIF_BYTE = bytes.fromhex("99")
     GENESIS_HASH = ('0000075685d3be1f253ce777174b1594'
                     '354e79954d2a32a6f77fe9cba00e6467')
     TX_COUNT = 4594999
@@ -1722,7 +1683,6 @@ class DeepOnion(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("1F")
     P2SH_VERBYTES = (bytes.fromhex("4E"),)
-    WIF_BYTE = bytes.fromhex("9f")
     GENESIS_HASH = ('000004e29458ef4f2e0abab544737b07'
                     '344e6ff13718f7c2d12926166db07b5e')
     DESERIALIZER = lib_tx.DeserializerTxTime
@@ -1753,7 +1713,6 @@ class Peercoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("37")
     P2SH_VERBYTES = (bytes.fromhex("75"),)
-    WIF_BYTE = bytes.fromhex("b7")
     GENESIS_HASH = ('0000000032fe677166d54963b62a4677'
                     'd8957e87c508eaa4fd7eb1c880cd27e3')
     DESERIALIZER = lib_tx.DeserializerTxTimeSegWit
@@ -1779,7 +1738,6 @@ class PeercoinTestnet(Peercoin):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('00000001f757bb737f6596503e17cd17'
                     'b0658ce630cc727c0cca81aec47c9f06')
     ESTIMATE_FEE = 0.001
@@ -1797,7 +1755,6 @@ class Trezarcoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("42")
     P2SH_VERBYTES = (bytes.fromhex("08"),)
-    WIF_BYTE = bytes.fromhex("c2")
     GENESIS_HASH = ('24502ba55d673d2ee9170d83dae2d1ad'
                     'b3bfb4718e4f200db9951382cc4f6ee6')
     DESERIALIZER = lib_tx.DeserializerTrezarcoin
@@ -1837,7 +1794,6 @@ class Reddcoin(Coin):
     SHORTNAME = "RDD"
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("3d")
-    WIF_BYTE = bytes.fromhex("bd")
     GENESIS_HASH = ('b868e0d95a3c3c0e0dadc67ee587aaf9'
                     'dc8acbf99e3b4b3110fad4eb74c1decc')
     DESERIALIZER = lib_tx.DeserializerReddcoin
@@ -1853,7 +1809,6 @@ class TokenPay(ScryptMixin, Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("41")
     P2SH_VERBYTES = (bytes.fromhex("7e"),)
-    WIF_BYTE = bytes.fromhex("b3")
     GENESIS_HASH = ('000008b71ab32e585a23f0de642dc113'
                     '740144e94c0ece047751e9781f953ae9')
     DESERIALIZER = lib_tx.DeserializerTokenPay
@@ -1900,7 +1855,6 @@ class VertcoinTestnet(Vertcoin):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("4a")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('cee8f24feb7a64c8f07916976aa4855d'
                     'ecac79b6741a8ec2e32e2747497ad2c9')
     RPC_PORT = 15888
@@ -1917,7 +1871,6 @@ class Monacoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("32")
     P2SH_VERBYTES = (bytes.fromhex("37"), bytes.fromhex("05"))
-    WIF_BYTE = bytes.fromhex("B0")
     GENESIS_HASH = ('ff9f1c0116d19de7c9963845e129f9ed'
                     '1bfc0b376eb54fd7afa42e0d418c8bb6')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -1943,7 +1896,6 @@ class MonacoinTestnet(Monacoin):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6F")
     P2SH_VERBYTES = (bytes.fromhex("75"), bytes.fromhex("C4"))
-    WIF_BYTE = bytes.fromhex("EF")
     GENESIS_HASH = ('a2b106ceba3be0c6d097b2a6a6aacf9d'
                     '638ba8258ae478158f449c321061e0b2')
     TX_COUNT = 83602
@@ -2001,7 +1953,6 @@ class Fujicoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("24")
     P2SH_VERBYTES = (bytes.fromhex("10"),)
-    WIF_BYTE = bytes.fromhex("a4")
     GENESIS_HASH = ('adb6d9cfd74075e7f91608add4bd2a2e'
                     'a636f70856183086842667a1597714a0')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -2059,7 +2010,6 @@ class CanadaeCoin(AuxPowMixin, Coin):
     XPUB_VERBYTES = bytes.fromhex("0488b21e")
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("1C")
-    WIF_BYTE = bytes.fromhex("9c")
     GENESIS_HASH = ('863626dadaef221e2e2f30ff3dacae44'
                     'cabdae9e0028058072181b3fb675d94a')
     ESTIMATE_FEE = 0.0001
@@ -2080,7 +2030,6 @@ class Denarius(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("1E")  # Address starts with a D
     P2SH_VERBYTES = (bytes.fromhex("5A"),)
-    WIF_BYTE = bytes.fromhex("9E")  # WIF starts with a 6
     GENESIS_HASH = ('00000d5dbbda01621cfc16bbc1f9bf32'
                     '64d641a5dbf0de89fd0182c2c4828fcd')
     DESERIALIZER = lib_tx.DeserializerTxTime
@@ -2105,7 +2054,6 @@ class DenariusTestnet(Denarius):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("12")
     P2SH_VERBYTES = (bytes.fromhex("74"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('000086bfe8264d241f7f8e5393f74778'
                     '4b8ca2aa98bdd066278d590462a4fdb4')
     RPC_PORT = 32338
@@ -2120,7 +2068,6 @@ class Sibcoin(Dash):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("3F")
     P2SH_VERBYTES = (bytes.fromhex("28"),)
-    WIF_BYTE = bytes.fromhex("80")
     GENESIS_HASH = ('00000c492bf73490420868bc577680bf'
                     'c4c60116e7e85343bc624787c21efa4c')
     DAEMON = daemon.DashDaemon
@@ -2159,7 +2106,6 @@ class Chips(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("3c")
     P2SH_VERBYTES = (bytes.fromhex("55"),)
-    WIF_BYTE = bytes.fromhex("bc")
     GENESIS_HASH = ('0000006e75f6aa0efdbf7db03132aa4e'
                     '4d0c84951537a6f5a7c39a0a9d30e1e7')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -2177,7 +2123,6 @@ class Feathercoin(Coin):
     XPUB_VERBYTES = bytes.fromhex("0488BC26")
     XPRV_VERBYTES = bytes.fromhex("0488DAEE")
     P2PKH_VERBYTE = bytes.fromhex("0E")
-    WIF_BYTE = bytes.fromhex("8E")
     GENESIS_HASH = ('12a765e31ffd4059bada1e25190f6e98'
                     'c99d9714d334efa41a195a7e7e04bfe2')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -2201,7 +2146,6 @@ class UFO(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("1B")
     P2SH_VERBYTES = (bytes.fromhex("44"),)
-    WIF_BYTE = bytes.fromhex("9B")
     GENESIS_HASH = ('ba1d39b4928ab03d813d952daf65fb77'
                     '97fcf538a9c1b8274f4edc8557722d13')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -2221,7 +2165,6 @@ class Newyorkcoin(AuxPowMixin, Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("3c")
     P2SH_VERBYTES = (bytes.fromhex("16"),)
-    WIF_BYTE = bytes.fromhex("bc")
     GENESIS_HASH = ('5597f25c062a3038c7fd815fe46c67de'
                     'dfcb3c839fbc8e01ed4044540d08fe48')
     TX_COUNT = 5161944
@@ -2235,7 +2178,6 @@ class NewyorkcoinTestnet(Newyorkcoin):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("71")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("f1")
     GENESIS_HASH = ('24463e4d3c625b0a9059f309044c2cf0'
                     'd7e196cf2a6ecce901f24f681be33c8f')
     TX_COUNT = 5161944
@@ -2269,7 +2211,6 @@ class GameCredits(Coin):
     SHORTNAME = "GAME"
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("26")
-    WIF_BYTE = bytes.fromhex("a6")
     GENESIS_HASH = ('91ec5f25ee9a0ffa1af7d4da4db9a552'
                     '228dd2dc77cdb15b738be4e1f55f30ee')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -2288,7 +2229,6 @@ class Machinecoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("32")
     P2SH_VERBYTES = (bytes.fromhex("26"), bytes.fromhex("05"))
-    WIF_BYTE = bytes.fromhex("b2")
     GENESIS_HASH = ('6a1f879bcea5471cbfdee1fd0cb2ddcc'
                     '4fed569a500e352d41de967703e83172')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -2344,7 +2284,6 @@ class Decred(Coin):
     XPRV_VERBYTES = bytes.fromhex("02fda4e8")
     P2PKH_VERBYTE = bytes.fromhex("073f")
     P2SH_VERBYTES = (bytes.fromhex("071a"),)
-    WIF_BYTE = bytes.fromhex("22de")
     GENESIS_HASH = ('298e5cc3d985bfe7f81dc135f360abe0'
                     '89edd4396b86d2de66b0cef42b21d980')
     BASIC_HEADER_SIZE = 180
@@ -2390,7 +2329,6 @@ class DecredTestnet(Decred):
     XPRV_VERBYTES = bytes.fromhex("04358397")
     P2PKH_VERBYTE = bytes.fromhex("0f21")
     P2SH_VERBYTES = (bytes.fromhex("0efc"),)
-    WIF_BYTE = bytes.fromhex("230e")
     GENESIS_HASH = (
         'a649dce53918caf422e9c711c858837e08d626ecfcd198969b24f7b634a49bac')
     BASIC_HEADER_SIZE = 180
@@ -2410,7 +2348,6 @@ class Axe(Dash):
     XPRV_VERBYTES = bytes.fromhex("02fe52f8")
     P2PKH_VERBYTE = bytes.fromhex("37")
     P2SH_VERBYTES = (bytes.fromhex("10"),)
-    WIF_BYTE = bytes.fromhex("cc")
     GENESIS_HASH = ('00000c33631ca6f2f61368991ce2dc03'
                     '306b5bb50bf7cede5cfbba6db38e52e6')
     SESSIONCLS = DashElectrumX
@@ -2443,7 +2380,6 @@ class AxeTestnet(Axe):
                     'd4623b4bbf44ac205caec55f4cefb483')
     P2PKH_VERBYTE = bytes.fromhex("8c")
     P2SH_VERBYTES = (bytes.fromhex("13"),)
-    WIF_BYTE = bytes.fromhex("ef")
     TX_COUNT_HEIGHT = 101619
     TX_COUNT = 132681
     TX_PER_BLOCK = 1
@@ -2470,7 +2406,6 @@ class Xuez(Coin):
     XPRV_VERBYTES = bytes.fromhex("0221312b")
     P2PKH_VERBYTE = bytes.fromhex("48")
     P2SH_VERBYTES = (bytes.fromhex("12"),)
-    WIF_BYTE = bytes.fromhex("d4")
     GENESIS_HASH = ('000000e1febc39965b055e8e0117179a'
                     '4d18e24e7aaa0c69864c4054b4f29445')
     TX_COUNT = 30000
@@ -2507,7 +2442,6 @@ class Odin(Coin):
     XPRV_VERBYTES = bytes.fromhex("27256746")
     P2PKH_VERBYTE = bytes.fromhex("73")
     P2SH_VERBYTES = (bytes.fromhex("39"),)
-    WIF_BYTE = bytes.fromhex("8a")
     GENESIS_HASH = ('31ca29566549e444cf227a0e2e067aed'
                     '847c2acc541d3bbf9ca1ae89f4fd57d7')
 
@@ -2555,7 +2489,6 @@ class Pac(Coin):
                     'bd2897fe6c16f732dbc4ae19f04b789e')
     P2PKH_VERBYTE = bytes.fromhex("37")
     P2SH_VERBYTES = (bytes.fromhex("0A"),)
-    WIF_BYTE = bytes.fromhex("CC")
     TX_COUNT_HEIGHT = 14939
     TX_COUNT = 23708
     TX_PER_BLOCK = 2
@@ -2585,7 +2518,6 @@ class PacTestnet(Pac):
                     'af05202ab68643f9091e049b2b5280ed')
     P2PKH_VERBYTE = bytes.fromhex("78")
     P2SH_VERBYTES = (bytes.fromhex("0E"),)
-    WIF_BYTE = bytes.fromhex("EF")
     TX_COUNT_HEIGHT = 16275
     TX_COUNT = 16275
     TX_PER_BLOCK = 1
@@ -2598,7 +2530,6 @@ class Zcoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("52")
     P2SH_VERBYTES = (bytes.fromhex("07"),)
-    WIF_BYTE = bytes.fromhex("d2")
     GENESIS_HASH = ('4381deb85b1b2c9843c222944b616d99'
                     '7516dcbd6a964e1eaf0def0830695233')
     TX_COUNT = 667154
@@ -2653,7 +2584,6 @@ class ZcoinTestnet(Zcoin):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("41")
     P2SH_VERBYTES = (bytes.fromhex("b2"),)
-    WIF_BYTE = bytes.fromhex("b9")
     GENESIS_HASH = '1e3487fdb1a7d46dac3e8f3e58339c6e' \
                    'ff54abf6aef353485f3ed64250a35e89'
     REORG_LIMIT = 8000
@@ -2670,7 +2600,6 @@ class Polis(Coin):
                     '60f6408a2c990db291bc5108a1345c1e')
     P2PKH_VERBYTE = bytes.fromhex("37")
     P2SH_VERBYTES = (bytes.fromhex("38"),)
-    WIF_BYTE = bytes.fromhex("3c")
     TX_COUNT_HEIGHT = 280600
     TX_COUNT = 635415
     TX_PER_BLOCK = 4
@@ -2698,7 +2627,6 @@ class MNPCoin(Coin):
                     '7e62fa2111dd3b063880a1067c69ccb1')
     P2PKH_VERBYTE = bytes.fromhex("32")
     P2SH_VERBYTES = (bytes.fromhex("35"),)
-    WIF_BYTE = bytes.fromhex("37")
     TX_COUNT_HEIGHT = 248000
     TX_COUNT = 506447
     TX_PER_BLOCK = 4
@@ -2726,7 +2654,6 @@ class ColossusXT(Coin):
                     'f0989ca7f72d62b14e652c55f02b4f5c')
     P2PKH_VERBYTE = bytes.fromhex("1E")
     P2SH_VERBYTES = (bytes.fromhex("0D"),)
-    WIF_BYTE = bytes.fromhex("D4")
     TX_COUNT_HEIGHT = 356500
     BASIC_HEADER_SIZE = 80
     HDR_V5_HEIGHT = 500000
@@ -2830,7 +2757,6 @@ class GroestlcoinTestnet(Groestlcoin):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('000000ffbb50fc9898cdd36ec163e6ba'
                     '23230164c0052a28876255b7dcf2cd36')
     RPC_PORT = 17766
@@ -2871,7 +2797,6 @@ class Pivx(Coin):
     GENESIS_HASH = '0000041e482b9b9691d98eefb48473405c0b8ec31b76df3797c74a78680ef818'
     P2PKH_VERBYTE = bytes.fromhex("1e")
     P2SH_VERBYTE = bytes.fromhex("0d")
-    WIF_BYTE = bytes.fromhex("d4")
     DESERIALIZER = lib_tx.DeserializerPIVX
     TX_COUNT_HEIGHT = 569399
     TX_COUNT = 2157510
@@ -2912,7 +2837,6 @@ class PivxTestnet(Pivx):
     GENESIS_HASH = '0000041e482b9b9691d98eefb48473405c0b8ec31b76df3797c74a78680ef818'
     P2PKH_VERBYTE = bytes.fromhex("8B")
     P2SH_VERBYTE = bytes.fromhex("13")
-    WIF_BYTE = bytes.fromhex("EF")
     TX_PER_BLOCK = 4
     RPC_PORT = 51472
     ZEROCOIN_START_HEIGHT = 201
@@ -2939,7 +2863,6 @@ class Bitg(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("26")
     P2SH_VERBYTES = (bytes.fromhex("06"),)
-    WIF_BYTE = bytes.fromhex("2e")
     GENESIS_HASH = (
         '000008467c3a9c587533dea06ad9380cded3ed32f9742a6c0c1aebc21bf2bc9b')
     DAEMON = daemon.DashDaemon
@@ -2964,7 +2887,6 @@ class tBitg(Bitg):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("62")
     P2SH_VERBYTES = (bytes.fromhex("0c"),)
-    WIF_BYTE = bytes.fromhex("6c")
     GENESIS_HASH = (
         '000008467c3a9c587533dea06ad9380cded3ed32f9742a6c0c1aebc21bf2bc9b')
     RPC_PORT = 19332
@@ -2980,7 +2902,6 @@ class EXOS(Coin):
                     'c1b4403fef74a003be7f71877699cab7')
     P2PKH_VERBYTE = bytes.fromhex("1C")
     P2SH_VERBYTE = [bytes.fromhex("57")]
-    WIF_BYTE = bytes.fromhex("9C")
     RPC_PORT = 4561
     TX_COUNT = 1000
     TX_COUNT_HEIGHT = 10000
@@ -3007,7 +2928,6 @@ class EXOSTestnet(EXOS):
                     'b3ce4089d54c93b69aaab212fb369887')
     P2PKH_VERBYTE = bytes.fromhex("4B")
     P2SH_VERBYTE = [bytes.fromhex("CE")]
-    WIF_BYTE = bytes.fromhex("CB")
     RPC_PORT = 14561
 
     @classmethod
@@ -3026,7 +2946,6 @@ class SmartCash(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("3f")
     P2SH_VERBYTES = (bytes.fromhex("12"),)
-    WIF_BYTE = bytes.fromhex("bf")
     GENESIS_HASH = ('000007acc6970b812948d14ea5a0a13d'
                     'b0fdd07d5047c7e69101fa8b361e05a4')
     DESERIALIZER = lib_tx.DeserializerSmartCash
@@ -3087,7 +3006,6 @@ class Noir(Coin):
     XPUB_VERBYTES = bytes.fromhex("0488b21e")
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2SH_VERBYTES = (bytes.fromhex("07"),)
-    WIF_BYTE = bytes.fromhex("D0")
     GENESIS_HASH = ('23911212a525e3d149fcad6c559c8b17'
                     'f1e8326a272a75ff9bb315c8d96433ef')
     RPC_PORT = 8825
@@ -3104,7 +3022,6 @@ class BitcoinPlus(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("19")
     P2SH_VERBYTES = (bytes.fromhex("55"),)
-    WIF_BYTE = bytes.fromhex("99")
     GENESIS_HASH = ('0000005f6a28e686f641c616e56182d1'
                     'b43afbe08a223f23bda23cdf9d55b882')
     DESERIALIZER = lib_tx.DeserializerTxTime
@@ -3130,7 +3047,6 @@ class Myriadcoin(AuxPowMixin, Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("32")
     P2SH_VERBYTES = (bytes.fromhex("09"),)
-    WIF_BYTE = bytes.fromhex("b2")
     GENESIS_HASH = ('00000ffde4c020b5938441a0ea3d314b'
                     'f619eff0b38f32f78f7583cffa1ea485')
     DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
@@ -3149,7 +3065,6 @@ class MyriadcoinTestnet(Myriadcoin):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("58")
     P2SH_VERBYTES = (bytes.fromhex("bc"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('0000017ce2a79c8bddafbbe47c004aa9'
                     '2b20678c354b34085f62b762084b9788')
 
@@ -3162,7 +3077,6 @@ class Bitsend(Coin):
     XPUB_VERBYTES = bytes.fromhex("0488B21E")
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("66")
-    WIF_BYTE = bytes.fromhex("cc")
     GENESIS_HASH = ('0000012e1b8843ac9ce8c18603658eaf'
                     '8895f99d3f5e7e1b7b1686f35e3c087a')
     TX_COUNT = 974672
@@ -3265,7 +3179,6 @@ class RavencoinTestnet(Ravencoin):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6F")
     P2SH_VERBYTES = (bytes.fromhex("C4"),)
-    WIF_BYTE = bytes.fromhex("EF")
     GENESIS_HASH = ('000000ecfc5e6324a079542221d00e10'
                     '362bdc894d56500c414060eea8a3ad5a')
     X16RV2_ACTIVATION_TIME = 1567533600
@@ -3289,7 +3202,6 @@ class Bolivarcoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("55")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("D5")
     GENESIS_HASH = ('00000e4fc293a1912b9d73cbb8d8f727'
                     '0007a7d84382f1370661e65d5d57b1f6')
     TX_COUNT = 1082515
@@ -3341,7 +3253,6 @@ class Electra(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("21")
     P2SH_VERBYTES = (bytes.fromhex("28"),)
-    WIF_BYTE = bytes.fromhex("A1")
     GENESIS_HASH = ('00000f98da995de0ef1665c7d3338687'
                     '923c1199230a44ecbdb5cec9306e4f4e')
     RPC_PORT = 5788
@@ -3394,7 +3305,6 @@ class Xaya(NameIndexAuxPoWMixin, Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("1c")
     P2SH_VERBYTES = (bytes.fromhex("1e"),)
-    WIF_BYTE = bytes.fromhex("82")
     GENESIS_HASH = ('e5062d76e5f50c42f493826ac9920b63'
                     'a8def2626fd70a5cec707ec47a4c4651')
     TX_COUNT = 1147749
@@ -3436,7 +3346,6 @@ class XayaTestnet(Xaya):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("58")
     P2SH_VERBYTES = (bytes.fromhex("5a"),)
-    WIF_BYTE = bytes.fromhex("e6")
     GENESIS_HASH = ('5195fc01d0e23d70d1f929f21ec55f47'
                     'e1c6ea1e66fae98ee44cbbc994509bba')
     TX_COUNT = 51557
@@ -3460,7 +3369,6 @@ class GravityZeroCoin(ScryptMixin, Coin):
     SHORTNAME = "GZRO"
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("26")
-    WIF_BYTE = bytes.fromhex("26")
     GENESIS_HASH = '0000028bfbf9ccaed8f28b3ca6b3ffe6b65e29490ab0e4430679bf41cc7c164f'
     DAEMON = daemon.FakeEstimateLegacyRPCDaemon
     TX_COUNT = 100
@@ -3479,7 +3387,6 @@ class Simplicity(Coin):
     XPRV_VERBYTES = bytes.fromhex("0444f0a3")
     P2PKH_VERBYTE = bytes.fromhex("12")
     P2SH_VERBYTE = bytes.fromhex("3b")
-    WIF_BYTE = bytes.fromhex("5d")
     GENESIS_HASH = 'f4bbfc518aa3622dbeb8d2818a606b82c2b8b1ac2f28553ebdb6fc04d7abaccf'
     RPC_PORT = 11958
     TX_COUNT = 1726548
@@ -3508,7 +3415,6 @@ class ElectraProtocol(Coin):
     XPRV_VERBYTES = bytes.fromhex('0488ade4')
     P2PKH_VERBYTE = bytes.fromhex('37')
     P2SH_VERBYTE = bytes.fromhex('89')
-    WIF_BYTE = bytes.fromhex('a2')
     GENESIS_HASH = '000000954c02f260a6db02c712557adcb5a7a8a0a9acfd3d3c2b3a427376c56f'
     RPC_PORT = 16816
     TX_COUNT = 264299
@@ -3540,7 +3446,6 @@ class Myce(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("32")
     P2SH_VERBYTE = bytes.fromhex("55")
-    WIF_BYTE = bytes.fromhex("99")
     GENESIS_HASH = '0000c74cc66c72cb1a327c5c1d4893ae5276aa50be49fb23cec21df1a2f20d87'
     RPC_PORT = 23512
     TX_COUNT = 1568977
@@ -3570,7 +3475,6 @@ class Navcoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("35")
     P2SH_VERBYTES = (bytes.fromhex("55"),)
-    WIF_BYTE = bytes.fromhex("96")
     GENESIS_HASH = ('00006a4e3e18c71c6d48ad6c261e2254'
                     'fa764cf29607a4357c99b712dfbb8e6a')
     DESERIALIZER = lib_tx.DeserializerTxTimeSegWitNavCoin
@@ -3595,7 +3499,6 @@ class Primecoin(PrimeChainPowMixin, Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("17")
     P2SH_VERBYTES = (bytes.fromhex("53"),)
-    WIF_BYTE = bytes.fromhex("97")
     GENESIS_HASH = ('963d17ba4dc753138078a2f56afb3af9'
                     '674e2546822badff26837db9a0152106')
     DAEMON = daemon.FakeEstimateFeeDaemon
@@ -3616,7 +3519,6 @@ class PrimecoinTestnet(Primecoin):
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("c4"),)
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('221156cf301bc3585e72de34fe1efdb6'
                     'fbd703bc27cfc468faa1cdd889d0efa0')
     RPC_PORT = 9914
@@ -3633,7 +3535,6 @@ class Unobtanium(AuxPowMixin, Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     P2PKH_VERBYTE = bytes.fromhex("82")
     P2SH_VERBYTES = (bytes.fromhex("1e"),)
-    WIF_BYTE = bytes.fromhex("e0")
     GENESIS_HASH = ('000004c2fc5fffb810dccc197d603690'
                     '099a68305232e552d96ccbe8e2c52b75')
     TX_COUNT = 1
@@ -3649,7 +3550,6 @@ class Linx(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("4b")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("cb")
     GENESIS_HASH = ('3bafea350a70f75e7a1cd279999faed7'
                     '1a51852aae88fed3c38553cecc810a92')
     TX_COUNT = 1
@@ -3665,7 +3565,6 @@ class Flashcoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("44")
     P2SH_VERBYTES = (bytes.fromhex("82"),)
-    WIF_BYTE = bytes.fromhex("c4")
     GENESIS_HASH = ('aa0cf4f5ce0a3c550ce5674c1e808c41'
                     '7cf5077b4e95bda1d6fbaeaf4258972b')
     TX_COUNT = 1
@@ -3681,7 +3580,6 @@ class Defcoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("1e")
     P2SH_VERBYTES = bytes.fromhex("05")
-    WIF_BYTE = bytes.fromhex("9e")
     GENESIS_HASH = ('192047379f33ffd2bbbab3d53b9c4b9e'
                     '9b72e48f888eadb3dcf57de95a6038ad')
     TX_COUNT = 1
@@ -3698,7 +3596,6 @@ class Auroracoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("17")
     P2SH_VERBYTES = bytes.fromhex("05")
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('2a8e100939494904af825b488596ddd5'
                     '36b3a96226ad02e0f7ab7ae472b27a8e')
     TX_COUNT = 2800000
@@ -3714,7 +3611,6 @@ class Smileycoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("19")
     P2SH_VERBYTES = bytes.fromhex("05")
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('660f734cf6c6d16111bde201bbd21228'
                     '73f2f2c078b969779b9d4c99732354fd')
     TX_COUNT = 1
@@ -3730,7 +3626,6 @@ class Iop(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("75")
     P2SH_VERBYTES = (bytes.fromhex("AE"),)
-    WIF_BYTE = bytes.fromhex("31")
     GENESIS_HASH = ('00000000bf5f2ee556cb9be8be64e077'
                     '6af14933438dbb1af72c41bfb6c82db3')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -3747,7 +3642,6 @@ class Egulden(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("30")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('6d39f28ad01a7edd3e2374b355cf8c7f'
                     '8dbc1c5e4596ad3642fa6d10c2599217')
     TX_COUNT = 13336629
@@ -3763,7 +3657,6 @@ class Ixcoin(AuxPowMixin, Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("8a")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("80")
     GENESIS_HASH = ('0000000001534ef8893b025b9c1da672'
                     '50285e35c9f76cae36a4904fdf72c591')
     TX_COUNT = 1
@@ -3779,7 +3672,6 @@ class Batacoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("19")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("99")
     GENESIS_HASH = ('b4bee36fd54a6176fd832f462641415c'
                     '142d50e4b378f71c041870c2b1186bc8')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -3796,7 +3688,6 @@ class Digitalcoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("1e")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("9e")
     GENESIS_HASH = ('5e039e1ca1dbf128973bf6cff98169e4'
                     '0a1b194c3b91463ab74956f413b2f9c8')
     TX_COUNT = 1
@@ -3812,7 +3703,6 @@ class Cannacoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("1C")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("bd")
     GENESIS_HASH = ('f1b4cdf03c86099a0758f1c018d1a10b'
                     'f05afab436c92b93b42bb88970de9821')
     DESERIALIZER = lib_tx.DeserializerReddcoin
@@ -3829,7 +3719,6 @@ class Europecoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("21")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("a8")
     GENESIS_HASH = ('000d0da26987ead011c5d568e627f7e3'
                     'd4a4f83a0b280b1134d8e7e366377f9a')
     BASIC_HEADER_SIZE = 88
@@ -3846,7 +3735,6 @@ class Adcoin(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("1e")
     P2SH_VERBYTES = (bytes.fromhex("0d"),)
-    WIF_BYTE = bytes.fromhex("97")
     GENESIS_HASH = ('000000fc5276647fd959f718c9526f87'
                     'f4858c4ef62f2e29d3772e4e37040a25')
 
@@ -3864,7 +3752,6 @@ class Lynx(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("2d")
     P2SH_VERBYTES = (bytes.fromhex("16"),)
-    WIF_BYTE = bytes.fromhex("ad")
     GENESIS_HASH = ('984b30fc9bb5e5ff424ad7f4ec193053'
                     '8a7b14a2d93e58ad7976c23154ea4a76')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -3881,7 +3768,6 @@ class LitecoinCash(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("1c")
     P2SH_VERBYTES = (bytes.fromhex("32"), bytes.fromhex("05"))
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('12a765e31ffd4059bada1e25190f6e98'
                     'c99d9714d334efa41a195a7e7e04bfe2')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -3898,7 +3784,6 @@ class BitcoinPrivate(EquihashMixin, Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("1325")
     P2SH_VERBYTES = (bytes.fromhex("13AF"),)
-    WIF_BYTE = bytes.fromhex("80")
     GENESIS_HASH = ('0007104ccda289427919efc39dc9e4d4'
                     '99804b7bebc22df55f8b834301260602')
     DESERIALIZER = lib_tx.DeserializerZcash
@@ -3917,7 +3802,6 @@ class Aryacoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("019da462")
     P2PKH_VERBYTE = bytes.fromhex("17")
     P2SH_VERBYTES = (bytes.fromhex("6f"),)
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('b553727635006d7faade229d152482df'
                     'b9da7822d41cf0cad9ffa82a54f67803')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -3934,7 +3818,6 @@ class Donu(Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("35")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("b1")
     XPUB_VERBYTES = bytes.fromhex("0488B21E")
     XPRV_VERBYTES = bytes.fromhex("0488ADE4")
     GENESIS_HASH = ('5f7f26e24291f5be2351e1dcdab18bf9'
@@ -3955,7 +3838,6 @@ class Quebecoin(AuxPowMixin, Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("3a")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("ba")
     GENESIS_HASH = ('000008c2d57759af6462352ee9f4923d'
                     '97401cb599a9318e6595a2a74c26ea74')
     DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
@@ -3974,7 +3856,6 @@ class Beyondcoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("ff88ade4")
     P2PKH_VERBYTE = bytes.fromhex("19")
     P2SH_VERBYTES = [bytes.fromhex("1a"), bytes.fromhex("05")]
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('0a9e3b5fce3aee6e04f06dfd6ad380a6'
                     'c0f9d8420f53a4ca97845756ee5d56e7')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -3991,7 +3872,6 @@ class Syscoin(AuxPowMixin, Coin):
     NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("3f")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
-    WIF_BYTE = bytes.fromhex("80")
     GENESIS_HASH = ('0000022642db0346b6e01c2a397471f4'
                     'f12e65d4f4251ec96c1f85367a61a7ab')
     DESERIALIZER = lib_tx.DeserializerAuxPowSegWit
@@ -4011,7 +3891,6 @@ class Lbry(Coin):
     XPRV_VERBYTES = bytes.fromhex("019C3118")
     P2PKH_VERBYTE = bytes.fromhex("55")
     P2SH_VERBYTES = (bytes.fromhex("7a"),)
-    WIF_BYTE = bytes.fromhex("1c")
     GENESIS_HASH = ('9c89283ba0f3227f6c03b70216b9f665'
                     'f0118d5e0fa729cedf4fb34d6a34f463')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -4031,7 +3910,6 @@ class Garlicoin(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("26")
     P2SH_VERBYTES = [bytes.fromhex("32"), bytes.fromhex("05")]
-    WIF_BYTE = bytes.fromhex("b0")
     GENESIS_HASH = ('2ada80bf415a89358d697569c96eb98c'
                     'dbf4c3b8878ac5722c01284492e27228')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -4063,7 +3941,6 @@ class Ferrite(Coin):
     XPRV_VERBYTES = bytes.fromhex("0488ade4")
     P2PKH_VERBYTE = bytes.fromhex("24")
     P2SH_VERBYTES = (bytes.fromhex("23"), bytes.fromhex("05"))
-    WIF_BYTE = bytes.fromhex("a3")
     GENESIS_HASH = ('46ca17415c18e43f5292034ebf9bbd10'
                     'de80a61fc6dc17180e6609f33d3b48f3')
     DESERIALIZER = lib_tx.DeserializerSegWit
@@ -4088,7 +3965,6 @@ class FerriteTestnet(Ferrite):
     XPRV_VERBYTES = bytes.fromhex("04358394")
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = (bytes.fromhex("23"), bytes.fromhex("c4"))
-    WIF_BYTE = bytes.fromhex("ef")
     GENESIS_HASH = ('7a9f43d6e86eefa66e2b79918b2235c9'
                     '362106f3d9f11f37f7a33450ceae73c1')
     TX_COUNT = 12445

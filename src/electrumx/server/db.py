@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from glob import glob
 from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING
 
-import attr
 from aiorpcx import run_in_thread, sleep
 
 import electrumx.lib.util as util
@@ -44,17 +43,17 @@ class UTXO:
     value: int       # in satoshis
 
 
-@attr.s(slots=True)
+@dataclass(slots=True)
 class FlushData:
-    height = attr.ib()
-    tx_count = attr.ib()
-    headers = attr.ib()
-    block_tx_hashes = attr.ib()  # type: List[bytes]
+    height: int
+    tx_count: int
+    headers: list[bytes]
+    block_tx_hashes: list[bytes]
     # The following are flushed to the UTXO DB if undo_infos is not None
-    undo_infos = attr.ib()  # type: List[Tuple[Sequence[bytes], int]]
-    adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
-    deletes = attr.ib()  # type: List[bytes]  # b'h' db keys, and b'u' db keys
-    tip = attr.ib()
+    undo_infos: list[tuple[Sequence[bytes], int]]
+    adds: dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
+    deletes: list[bytes]  # b'h' db keys, and b'u' db keys
+    tip: bytes
 
 
 COMP_TXID_LEN = 4

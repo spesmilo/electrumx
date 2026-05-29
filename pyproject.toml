@@ -46,8 +46,7 @@ dev = [
     "objgraph",
 ]
 rocksdb = [
-    "python-rocksdb>=0.6.9",
-    "Cython<3.0",
+    "rocksdb-ng",  # Felix's fork. ref https://github.com/f321x/python-rocksdb
 ]
 rapidjson = [
     "python-rapidjson>=0.4.1,<2.0",

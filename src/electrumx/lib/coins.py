@@ -2228,7 +2228,6 @@ class DecredTestnet(Decred):
     GENESIS_HASH = (
         'a649dce53918caf422e9c711c858837e08d626ecfcd198969b24f7b634a49bac')
     BASIC_HEADER_SIZE = 180
-    ALLOW_ADVANCING_ERRORS = True
     TX_COUNT = 217380620
     TX_COUNT_HEIGHT = 464000
     TX_PER_BLOCK = 1800
@@ -2419,7 +2418,6 @@ class Zcoin(Coin):
     TX_COUNT = 667154
     TX_COUNT_HEIGHT = 100266
     TX_PER_BLOCK = 4000  # 2000 for 1MB block
-    IRC_PREFIX = None
     RPC_PORT = 8888
     REORG_LIMIT = 5000
     PEER_DEFAULT_PORTS = {'t': '50001', 's': '50002'}

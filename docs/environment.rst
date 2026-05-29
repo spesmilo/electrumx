@@ -281,6 +281,15 @@ These environment variables are optional:
   version string. For example to drop versions from 1.0 to 1.2 use
   the regex ``1\.[0-2]\.\d+``.
 
+.. envvar:: DAEMON_HAS_TXINDEX
+
+  Set this environment variable to empty if the connected bitcoind
+  does not have txindex enabled. Defaults to True (has txindex).
+  We rely on bitcoind to lookup arbitrary txs, regardless of this setting.
+  Without txindex, tx lookup works as in `bitcoind PR #10275`_.
+  Note that performance when serving many sessions is better with txindex
+  (but initial sync should be unaffected).
+
 
 Resource Usage Limits
 =====================
@@ -504,3 +513,4 @@ your available physical RAM:
 
 .. _lib/coins.py: https://github.com/spesmilo/electrumx/blob/master/src/electrumx/lib/coins.py
 .. _uvloop: https://pypi.python.org/pypi/uvloop
+.. _bitcoind PR #10275: https://github.com/bitcoin/bitcoin/pull/10275

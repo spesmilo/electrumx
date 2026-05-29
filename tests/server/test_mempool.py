@@ -222,34 +222,20 @@ class API(MemPoolAPI):
         return self._cached_height
 
     async def mempool_hashes(self):
-        '''Query bitcoind for the hashes of all transactions in its
-        mempool, returned as a list.'''
         await sleep(0)
         return [hash_to_hex_str(hash) for hash in self.txs]
 
     async def raw_transactions(self, hex_hashes):
-        '''Query bitcoind for the serialized raw transactions with the given
-        hashes.  Missing transactions are returned as None.
-
-        hex_hashes is an iterable of hexadecimal hash strings.'''
         await sleep(0)
         hashes = [hex_str_to_hash(hex_hash) for hex_hash in hex_hashes]
         return [self.raw_txs.get(hash) for hash in hashes]
 
     async def lookup_utxos(self, prevouts):
-        '''Return a list of (hashX, value) pairs each prevout if unspent,
-        otherwise return None if spent or not found.
-
-        prevouts - an iterable of (hash, index) pairs
-        '''
         await sleep(0)
         return [self.db_utxos.get(prevout) for prevout in prevouts]
 
-    async def on_mempool(self, touched, height):
-        '''Called each time the mempool is synchronized.  touched is a set of
-        hashXs touched since the previous call.  height is the
-        daemon's height at the time the mempool was obtained.'''
-        self.on_mempool_calls.append((touched, height))
+    async def on_mempool(self, *, touched_hashxs, touched_outpoints, height):
+        self.on_mempool_calls.append((touched_hashxs, height))
         await sleep(0)
 
 
@@ -560,6 +546,33 @@ async def test_notifications(caplog):
         touched, height = api.on_mempool_calls[2]
         assert height == api._db_height == new_height
         assert touched == first_touched
+        await group.cancel_remaining()
+
+
+@pytest.mark.asyncio
+async def test_get_recently_added_txs():
+    mempool_size_target = 50
+    api = API()
+    api.initialize(mempool_size=mempool_size_target)
+    mempool = MemPool(coin, api, refresh_secs=0.001, log_status_secs=0)
+    event = Event()
+
+    raw_txs = api.raw_txs.copy()
+    txs = api.txs.copy()
+
+    async with OldTaskGroup() as group:
+        api.raw_txs = {}
+        api.txs = {}
+        await group.spawn(mempool.keep_synchronized, event)
+        for cur_size in range(mempool_size_target):
+            api.raw_txs = {hash: raw_txs[hash] for hash in api.ordered_adds[:cur_size]}
+            api.txs = {hash: txs[hash] for hash in api.ordered_adds[:cur_size]}
+            async with ignore_after(max(mempool.refresh_secs * 2, 0.5)):
+                await event.wait()
+            recent_txs = await mempool.get_recently_added_txs(count=10)
+            start_idx = max(0, cur_size-10)
+            recent_adds = api.ordered_adds[start_idx:cur_size]
+            assert [tx.hash for tx in recent_txs][::-1] == recent_adds
         await group.cancel_remaining()
 
 

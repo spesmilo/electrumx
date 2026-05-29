@@ -28,17 +28,20 @@ functions. For example, `dash_hash`_ is required for DASH. Scrypt coins
 require a Python interpreter compiled and/or linked with OpenSSL 1.1.0
 or higher.
 
-You **must** be running a non-pruning bitcoin daemon with::
+You **must** be running a non-pruning bitcoin daemon.
+It is also recommended to have::
 
   txindex=1
 
-set in its configuration file.  If you have an existing installation
-of bitcoind and have not previously set this you will need to reindex
-the blockchain with::
+set in its configuration file, for better performance when serving many sessions.
+If you have an existing installation of bitcoind and have not previously set this
+but you do now, you will need to reindex the blockchain with::
 
   bitcoind -reindex
 
 which can take some time.
+If you intend to use a bitcoind without txindex enabled, you need to configure the
+`DAEMON_HAS_TXINDEX` :ref:`environment variable <environment>`.
 
 While not a requirement for running ElectrumX, it is intended to be
 run with supervisor software such as Daniel Bernstein's

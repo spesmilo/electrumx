@@ -41,7 +41,6 @@ def _does_coin_require_testcase(coin: Coin) -> bool:
         return False
     # legacy whitelist: these coins do not have tests. FIXME
     if coin in [
-        coins.Bitcoin,
         coins.BitcoinCash,
         coins.Viacoin,
         coins.Argentum,

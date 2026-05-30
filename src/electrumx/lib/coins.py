@@ -270,13 +270,14 @@ class Coin:
 
 
 class BitcoinMixin:
-    SHORTNAME = "BTC"
-    NET = "mainnet"
-    RPC_PORT = 8332
-
+    """Actual non-altcoin Bitcoin, including its various test networks."""
+    pass
 
 class Bitcoin(BitcoinMixin, Coin):
     NAME = "Bitcoin"
+    SHORTNAME = "BTC"
+    NET = "mainnet"
+    RPC_PORT = 8332
     DESERIALIZER = lib_tx.DeserializerSegWit
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
     TX_COUNT = 565436782
@@ -712,9 +713,11 @@ class HOdlcoin(Coin):
     TX_PER_BLOCK = 5
 
 
-class BitcoinSV(BitcoinMixin, Coin):
+class BitcoinSV(Coin):
     NAME = "BitcoinSV"
     SHORTNAME = "BSV"
+    NET = "mainnet"
+    RPC_PORT = 8332
     TX_COUNT = 267318795
     TX_COUNT_HEIGHT = 557037
     TX_PER_BLOCK = 400
@@ -728,9 +731,11 @@ class BitcoinSV(BitcoinMixin, Coin):
     GENESIS_ACTIVATION = 620_538
 
 
-class BitcoinCash(BitcoinMixin, Coin):
+class BitcoinCash(Coin):
     NAME = "BitcoinCash"
     SHORTNAME = "BCH"
+    NET = "mainnet"
+    RPC_PORT = 8332
     TX_COUNT = 265479628
     TX_COUNT_HEIGHT = 556592
     TX_PER_BLOCK = 400
@@ -756,10 +761,11 @@ class BitcoinCash(BitcoinMixin, Coin):
         return False
 
 
-class BitcoinGold(EquihashMixin, BitcoinMixin, Coin):
+class BitcoinGold(EquihashMixin, Coin):
     CHUNK_SIZE = 252
     NAME = "BitcoinGold"
     SHORTNAME = "BTG"
+    NET = "mainnet"
     FORK_HEIGHT = 491407
     P2PKH_VERBYTE = bytes.fromhex("26")
     P2SH_VERBYTES = (bytes.fromhex("17"),)
@@ -816,9 +822,11 @@ class BitcoinGoldRegtest(BitcoinGold):
     PEERS = []
 
 
-class BitcoinDiamond(Bitcoin, Coin):
+class BitcoinDiamond(Coin):
     NAME = "BitcoinDiamond"
     SHORTNAME = "BCD"
+    NET = "mainnet"
+    RPC_PORT = 8332
     TX_VERSION = 12
     TX_COUNT = 274277819
     TX_COUNT_HEIGHT = 498678
@@ -2095,9 +2103,10 @@ class NewyorkcoinTestnet(Newyorkcoin):
     REORG_LIMIT = 2000
 
 
-class Bitcore(BitcoinMixin, Coin):
+class Bitcore(Coin):
     NAME = "Bitcore"
     SHORTNAME = "BTX"
+    NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("03")
     P2SH_VERBYTES = (bytes.fromhex("7D"),)
     DESERIALIZER = lib_tx.DeserializerSegWit

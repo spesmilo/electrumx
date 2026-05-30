@@ -107,7 +107,7 @@ class Coin:
 
     RPC_PORT: int
     NAME: str
-    NET: str
+    NET: str | None
     MIN_REQUIRED_DAEMON_VERSION: Optional[str] = None
 
     # only used for initial db sync ETAs:
@@ -116,14 +116,17 @@ class Coin:
     TX_PER_BLOCK: int     # and from that height onwards, we guess this many txs per block
 
     @classmethod
-    def lookup_coin_class(cls, name, net):
+    def lookup_coin_class(cls, name: str, net: str):
         '''Return a coin class given name and network.
 
         Raise an exception if unrecognised.'''
         req_attrs = ('TX_COUNT', 'TX_COUNT_HEIGHT', 'TX_PER_BLOCK')
         for coin in util.subclasses(Coin):
-            if (coin.NAME.lower() == name.lower() and
-                    coin.NET.lower() == net.lower()):
+            if (
+                    coin.NAME.lower() == name.lower()
+                    and coin.NET is not None
+                    and coin.NET.lower() == net.lower()
+            ):
                 missing = [
                     attr
                     for attr in req_attrs
@@ -271,6 +274,8 @@ class Coin:
 
 class Bitcoin(Coin):
     """Base class for Actual non-altcoin Bitcoin, including its various test networks."""
+    NAME = "Bitcoin"
+    NET = None  # we are an abstract base class
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
     DESERIALIZER = lib_tx.DeserializerSegWit
     CRASH_CLIENT_VER = (3, 2, 3)
@@ -305,7 +310,6 @@ class Bitcoin(Coin):
 
 
 class BitcoinMainnet(Bitcoin):
-    NAME = "Bitcoin"
     SHORTNAME = "BTC"
     NET = "mainnet"
     RPC_PORT = 8332
@@ -357,7 +361,6 @@ class BitcoinTestnetMixin:  # also subclassed by altcoins.
 
 class BitcoinTestnet3(BitcoinTestnetMixin, Bitcoin):
     '''Bitcoin Testnet3 for Bitcoin Core >= 0.13.1.'''
-    NAME = "Bitcoin"
     NET = "testnet"
     PEERS = [
         'testnet.hsmiths.com t53011 s53012',
@@ -374,7 +377,6 @@ class BitcoinTestnet3(BitcoinTestnetMixin, Bitcoin):
 
 
 class BitcoinRegtest(BitcoinTestnetMixin, Bitcoin):
-    NAME = "Bitcoin"
     NET = "regtest"
     GENESIS_HASH = ('0f9188f13cb7b2c71f2a335e3a4fc328'
                     'bf5beb436012afca590b1a11466e2206')
@@ -385,7 +387,6 @@ class BitcoinRegtest(BitcoinTestnetMixin, Bitcoin):
 
 
 class BitcoinSignet(BitcoinTestnetMixin, Bitcoin):
-    NAME = "Bitcoin"
     NET = "signet"
     GENESIS_HASH = ('00000008819873e925422c1ff0f99f7c'
                     'c9bbb232af63a077a480a3633bee1ef6')
@@ -396,7 +397,6 @@ class BitcoinSignet(BitcoinTestnetMixin, Bitcoin):
 
 
 class BitcoinTestnet4(BitcoinTestnetMixin, Bitcoin):
-    NAME = "Bitcoin"
     NET = "testnet4"
     GENESIS_HASH = ('00000000da84f2bafbbc53dee25a72ae'
                     '507ff4914b867c565be350b0da8bf043')

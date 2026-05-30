@@ -269,49 +269,13 @@ class Coin:
         return n
 
 
-class BitcoinMixin:
-    """Actual non-altcoin Bitcoin, including its various test networks."""
-    pass
-
-class Bitcoin(BitcoinMixin, Coin):
-    NAME = "Bitcoin"
-    SHORTNAME = "BTC"
-    NET = "mainnet"
-    RPC_PORT = 8332
-    DESERIALIZER = lib_tx.DeserializerSegWit
+class Bitcoin(Coin):
+    """Base class for Actual non-altcoin Bitcoin, including its various test networks."""
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
-    TX_COUNT = 565436782
-    TX_COUNT_HEIGHT = 646855
-    TX_PER_BLOCK = 2200
+    DESERIALIZER = lib_tx.DeserializerSegWit
     CRASH_CLIENT_VER = (3, 2, 3)
     # core version 28 introduced 1p1c package relay required for protocol 1.6
     MIN_REQUIRED_DAEMON_VERSION = "28.0"
-    BLACKLIST_URL = 'https://electrum.org/blacklist.json'
-    PEERS = [
-        'electrum.vom-stausee.de s t',
-        'electrum.hsmiths.com s t',
-        'helicarrier.bauerj.eu s t',
-        'electrum.hodlister.co s',
-        'electrum3.hodlister.co s',
-        'btc.usebsv.com s50006',
-        'fortress.qtornado.com s443 t',
-        'ecdsa.net s110 t',
-        'e2.keff.org s t',
-        'currentlane.lovebitco.in s t',
-        'electrum.jochen-hoenicke.de s50005 t50003',
-        'vps5.hsmiths.com s',
-        'electrum.emzy.de s',
-        'electrum1.cipig.net t10000 s20000',
-        'ulrichard.ch s',
-        'hodlers.beer s',
-        '5.9.83.108 s',
-        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
-        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
-        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
-        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
-        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
-        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
-    ]
 
     @classmethod
     def warn_old_client_on_tx_broadcast(cls, client_ver):
@@ -340,7 +304,43 @@ class Bitcoin(BitcoinMixin, Coin):
         return 1008
 
 
-class BitcoinTestnetMixin:
+class BitcoinMainnet(Bitcoin):
+    NAME = "Bitcoin"
+    SHORTNAME = "BTC"
+    NET = "mainnet"
+    RPC_PORT = 8332
+    TX_COUNT = 565436782
+    TX_COUNT_HEIGHT = 646855
+    TX_PER_BLOCK = 2200
+    BLACKLIST_URL = 'https://electrum.org/blacklist.json'
+    PEERS = [
+        'electrum.vom-stausee.de s t',
+        'electrum.hsmiths.com s t',
+        'helicarrier.bauerj.eu s t',
+        'electrum.hodlister.co s',
+        'electrum3.hodlister.co s',
+        'btc.usebsv.com s50006',
+        'fortress.qtornado.com s443 t',
+        'ecdsa.net s110 t',
+        'e2.keff.org s t',
+        'currentlane.lovebitco.in s t',
+        'electrum.jochen-hoenicke.de s50005 t50003',
+        'vps5.hsmiths.com s',
+        'electrum.emzy.de s',
+        'electrum1.cipig.net t10000 s20000',
+        'ulrichard.ch s',
+        'hodlers.beer s',
+        '5.9.83.108 s',
+        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
+        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
+        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
+        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
+        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
+    ]
+
+
+class BitcoinTestnetMixin:  # also subclassed by altcoins.
     SHORTNAME = "XTN"
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("6f")
@@ -355,12 +355,10 @@ class BitcoinTestnetMixin:
     PEER_DEFAULT_PORTS = {'t': '51001', 's': '51002'}
 
 
-class BitcoinTestnet(BitcoinTestnetMixin, Coin):
-    '''Bitcoin Testnet for Bitcoin Core >= 0.13.1.'''
+class BitcoinTestnet3(BitcoinTestnetMixin, Bitcoin):
+    '''Bitcoin Testnet3 for Bitcoin Core >= 0.13.1.'''
     NAME = "Bitcoin"
-    DESERIALIZER = lib_tx.DeserializerSegWit
-    CRASH_CLIENT_VER = (3, 2, 3)
-    MIN_REQUIRED_DAEMON_VERSION = "28.0"
+    NET = "testnet"
     PEERS = [
         'testnet.hsmiths.com t53011 s53012',
         'testnet.qtornado.com s t',
@@ -374,19 +372,8 @@ class BitcoinTestnet(BitcoinTestnetMixin, Coin):
         'electrum1.cipig.net t10068',
     ]
 
-    @classmethod
-    def warn_old_client_on_tx_broadcast(cls, client_ver):
-        if client_ver < (3, 3, 3):
-            return ('<br/><br/>'
-                    'Your transaction was successfully broadcast.<br/><br/>'
-                    'However, you are using a VULNERABLE version of Electrum.<br/>'
-                    'Download the new version from the usual place:<br/>'
-                    'https://electrum.org/'
-                    '<br/><br/>')
-        return False
 
-
-class BitcoinRegtest(BitcoinTestnet):
+class BitcoinRegtest(BitcoinTestnetMixin, Bitcoin):
     NAME = "Bitcoin"
     NET = "regtest"
     GENESIS_HASH = ('0f9188f13cb7b2c71f2a335e3a4fc328'
@@ -397,7 +384,7 @@ class BitcoinRegtest(BitcoinTestnet):
     RPC_PORT = 18443
 
 
-class BitcoinSignet(BitcoinTestnet):
+class BitcoinSignet(BitcoinTestnetMixin, Bitcoin):
     NAME = "Bitcoin"
     NET = "signet"
     GENESIS_HASH = ('00000008819873e925422c1ff0f99f7c'
@@ -408,7 +395,7 @@ class BitcoinSignet(BitcoinTestnet):
     RPC_PORT = 38332
 
 
-class BitcoinTestnet4(BitcoinTestnet):
+class BitcoinTestnet4(BitcoinTestnetMixin, Bitcoin):
     NAME = "Bitcoin"
     NET = "testnet4"
     GENESIS_HASH = ('00000000da84f2bafbbc53dee25a72ae'

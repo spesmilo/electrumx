@@ -107,7 +107,7 @@ class Coin:
 
     RPC_PORT: int
     NAME: str
-    NET: str
+    NET: str | None
     MIN_REQUIRED_DAEMON_VERSION: Optional[str] = None
 
     # only used for initial db sync ETAs:
@@ -116,14 +116,17 @@ class Coin:
     TX_PER_BLOCK: int     # and from that height onwards, we guess this many txs per block
 
     @classmethod
-    def lookup_coin_class(cls, name, net):
+    def lookup_coin_class(cls, name: str, net: str):
         '''Return a coin class given name and network.
 
         Raise an exception if unrecognised.'''
         req_attrs = ('TX_COUNT', 'TX_COUNT_HEIGHT', 'TX_PER_BLOCK')
         for coin in util.subclasses(Coin):
-            if (coin.NAME.lower() == name.lower() and
-                    coin.NET.lower() == net.lower()):
+            if (
+                    coin.NAME.lower() == name.lower()
+                    and coin.NET is not None
+                    and coin.NET.lower() == net.lower()
+            ):
                 missing = [
                     attr
                     for attr in req_attrs
@@ -269,48 +272,15 @@ class Coin:
         return n
 
 
-class BitcoinMixin:
-    SHORTNAME = "BTC"
-    NET = "mainnet"
-    RPC_PORT = 8332
-
-
-class Bitcoin(BitcoinMixin, Coin):
+class Bitcoin(Coin):
+    """Base class for Actual non-altcoin Bitcoin, including its various test networks."""
     NAME = "Bitcoin"
-    DESERIALIZER = lib_tx.DeserializerSegWit
+    NET = None  # we are an abstract base class
     MEMPOOL_HISTOGRAM_REFRESH_SECS = 120
-    TX_COUNT = 565436782
-    TX_COUNT_HEIGHT = 646855
-    TX_PER_BLOCK = 2200
+    DESERIALIZER = lib_tx.DeserializerSegWit
     CRASH_CLIENT_VER = (3, 2, 3)
     # core version 28 introduced 1p1c package relay required for protocol 1.6
     MIN_REQUIRED_DAEMON_VERSION = "28.0"
-    BLACKLIST_URL = 'https://electrum.org/blacklist.json'
-    PEERS = [
-        'electrum.vom-stausee.de s t',
-        'electrum.hsmiths.com s t',
-        'helicarrier.bauerj.eu s t',
-        'electrum.hodlister.co s',
-        'electrum3.hodlister.co s',
-        'btc.usebsv.com s50006',
-        'fortress.qtornado.com s443 t',
-        'ecdsa.net s110 t',
-        'e2.keff.org s t',
-        'currentlane.lovebitco.in s t',
-        'electrum.jochen-hoenicke.de s50005 t50003',
-        'vps5.hsmiths.com s',
-        'electrum.emzy.de s',
-        'electrum1.cipig.net t10000 s20000',
-        'ulrichard.ch s',
-        'hodlers.beer s',
-        '5.9.83.108 s',
-        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
-        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
-        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
-        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
-        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
-        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
-    ]
 
     @classmethod
     def warn_old_client_on_tx_broadcast(cls, client_ver):
@@ -339,7 +309,42 @@ class Bitcoin(BitcoinMixin, Coin):
         return 1008
 
 
-class BitcoinTestnetMixin:
+class BitcoinMainnet(Bitcoin):
+    SHORTNAME = "BTC"
+    NET = "mainnet"
+    RPC_PORT = 8332
+    TX_COUNT = 565436782
+    TX_COUNT_HEIGHT = 646855
+    TX_PER_BLOCK = 2200
+    BLACKLIST_URL = 'https://electrum.org/blacklist.json'
+    PEERS = [
+        'electrum.vom-stausee.de s t',
+        'electrum.hsmiths.com s t',
+        'helicarrier.bauerj.eu s t',
+        'electrum.hodlister.co s',
+        'electrum3.hodlister.co s',
+        'btc.usebsv.com s50006',
+        'fortress.qtornado.com s443 t',
+        'ecdsa.net s110 t',
+        'e2.keff.org s t',
+        'currentlane.lovebitco.in s t',
+        'electrum.jochen-hoenicke.de s50005 t50003',
+        'vps5.hsmiths.com s',
+        'electrum.emzy.de s',
+        'electrum1.cipig.net t10000 s20000',
+        'ulrichard.ch s',
+        'hodlers.beer s',
+        '5.9.83.108 s',
+        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
+        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
+        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
+        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
+        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
+    ]
+
+
+class BitcoinTestnetMixin:  # also subclassed by altcoins.
     SHORTNAME = "XTN"
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("6f")
@@ -354,12 +359,9 @@ class BitcoinTestnetMixin:
     PEER_DEFAULT_PORTS = {'t': '51001', 's': '51002'}
 
 
-class BitcoinTestnet(BitcoinTestnetMixin, Coin):
-    '''Bitcoin Testnet for Bitcoin Core >= 0.13.1.'''
-    NAME = "Bitcoin"
-    DESERIALIZER = lib_tx.DeserializerSegWit
-    CRASH_CLIENT_VER = (3, 2, 3)
-    MIN_REQUIRED_DAEMON_VERSION = "28.0"
+class BitcoinTestnet3(BitcoinTestnetMixin, Bitcoin):
+    '''Bitcoin Testnet3 for Bitcoin Core >= 0.13.1.'''
+    NET = "testnet"
     PEERS = [
         'testnet.hsmiths.com t53011 s53012',
         'testnet.qtornado.com s t',
@@ -373,20 +375,8 @@ class BitcoinTestnet(BitcoinTestnetMixin, Coin):
         'electrum1.cipig.net t10068',
     ]
 
-    @classmethod
-    def warn_old_client_on_tx_broadcast(cls, client_ver):
-        if client_ver < (3, 3, 3):
-            return ('<br/><br/>'
-                    'Your transaction was successfully broadcast.<br/><br/>'
-                    'However, you are using a VULNERABLE version of Electrum.<br/>'
-                    'Download the new version from the usual place:<br/>'
-                    'https://electrum.org/'
-                    '<br/><br/>')
-        return False
 
-
-class BitcoinRegtest(BitcoinTestnet):
-    NAME = "Bitcoin"
+class BitcoinRegtest(BitcoinTestnetMixin, Bitcoin):
     NET = "regtest"
     GENESIS_HASH = ('0f9188f13cb7b2c71f2a335e3a4fc328'
                     'bf5beb436012afca590b1a11466e2206')
@@ -396,8 +386,7 @@ class BitcoinRegtest(BitcoinTestnet):
     RPC_PORT = 18443
 
 
-class BitcoinSignet(BitcoinTestnet):
-    NAME = "Bitcoin"
+class BitcoinSignet(BitcoinTestnetMixin, Bitcoin):
     NET = "signet"
     GENESIS_HASH = ('00000008819873e925422c1ff0f99f7c'
                     'c9bbb232af63a077a480a3633bee1ef6')
@@ -407,8 +396,7 @@ class BitcoinSignet(BitcoinTestnet):
     RPC_PORT = 38332
 
 
-class BitcoinTestnet4(BitcoinTestnet):
-    NAME = "Bitcoin"
+class BitcoinTestnet4(BitcoinTestnetMixin, Bitcoin):
     NET = "testnet4"
     GENESIS_HASH = ('00000000da84f2bafbbc53dee25a72ae'
                     '507ff4914b867c565be350b0da8bf043')
@@ -712,9 +700,11 @@ class HOdlcoin(Coin):
     TX_PER_BLOCK = 5
 
 
-class BitcoinSV(BitcoinMixin, Coin):
+class BitcoinSV(Coin):
     NAME = "BitcoinSV"
     SHORTNAME = "BSV"
+    NET = "mainnet"
+    RPC_PORT = 8332
     TX_COUNT = 267318795
     TX_COUNT_HEIGHT = 557037
     TX_PER_BLOCK = 400
@@ -728,9 +718,11 @@ class BitcoinSV(BitcoinMixin, Coin):
     GENESIS_ACTIVATION = 620_538
 
 
-class BitcoinCash(BitcoinMixin, Coin):
+class BitcoinCash(Coin):
     NAME = "BitcoinCash"
     SHORTNAME = "BCH"
+    NET = "mainnet"
+    RPC_PORT = 8332
     TX_COUNT = 265479628
     TX_COUNT_HEIGHT = 556592
     TX_PER_BLOCK = 400
@@ -756,10 +748,11 @@ class BitcoinCash(BitcoinMixin, Coin):
         return False
 
 
-class BitcoinGold(EquihashMixin, BitcoinMixin, Coin):
+class BitcoinGold(EquihashMixin, Coin):
     CHUNK_SIZE = 252
     NAME = "BitcoinGold"
     SHORTNAME = "BTG"
+    NET = "mainnet"
     FORK_HEIGHT = 491407
     P2PKH_VERBYTE = bytes.fromhex("26")
     P2SH_VERBYTES = (bytes.fromhex("17"),)
@@ -816,9 +809,11 @@ class BitcoinGoldRegtest(BitcoinGold):
     PEERS = []
 
 
-class BitcoinDiamond(Bitcoin, Coin):
+class BitcoinDiamond(Coin):
     NAME = "BitcoinDiamond"
     SHORTNAME = "BCD"
+    NET = "mainnet"
+    RPC_PORT = 8332
     TX_VERSION = 12
     TX_COUNT = 274277819
     TX_COUNT_HEIGHT = 498678
@@ -2095,9 +2090,10 @@ class NewyorkcoinTestnet(Newyorkcoin):
     REORG_LIMIT = 2000
 
 
-class Bitcore(BitcoinMixin, Coin):
+class Bitcore(Coin):
     NAME = "Bitcore"
     SHORTNAME = "BTX"
+    NET = "mainnet"
     P2PKH_VERBYTE = bytes.fromhex("03")
     P2SH_VERBYTES = (bytes.fromhex("7D"),)
     DESERIALIZER = lib_tx.DeserializerSegWit

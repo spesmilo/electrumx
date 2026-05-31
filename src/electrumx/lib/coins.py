@@ -337,12 +337,12 @@ class BitcoinMainnet(Bitcoin):
         'ulrichard.ch s',
         'hodlers.beer s',
         '5.9.83.108 s',
-        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t'
-        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t'
-        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t'
-        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110'
-        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001'
-        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t'
+        'v7gtzf7nua6hdmb2wtqaqioqmesdb4xrlly4zwr7bvayxv2bpg665pqd.onion t',
+        'qeqgdlw2ezf3uabook2ny3lztjxxzeyyoqw2k7cempzvqpknbmevhmyd.onion t',
+        'kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion t',
+        'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t110',
+        'v7o2hkemnt677k3jxcbosmjjxw3p5khjyu7jwv7orfy6rwtkizbshwqd.onion t57001',
+        'nf365b5sbzk5j4jreimskffwnfpka7qtamyni5doohoom3g63o5tldad.onion t',
     ]
 
 
@@ -769,7 +769,7 @@ class BitcoinGold(EquihashMixin, Coin):
     RPC_PORT = 8332
     PEERS = [
         'electrumx-eu.bitcoingold.org s50002 t50001',
-        'electrumx-us.bitcoingold.org s50002 t50001'
+        'electrumx-us.bitcoingold.org s50002 t50001',
     ]
 
     @classmethod
@@ -796,7 +796,7 @@ class BitcoinGoldTestnet(BitcoinGold):
     PEERS = [
         'test-node1.bitcoingold.org s50002',
         'test-node2.bitcoingold.org s50002',
-        'test-node3.bitcoingold.org s50002'
+        'test-node3.bitcoingold.org s50002',
     ]
 
 
@@ -1579,7 +1579,7 @@ class Blackcoin(ScryptMixin, Coin):
     PEERS = [
         'electrum1.blackcoin.nl t10001 s10002',
         'electrum2.blackcoin.nl t20001 s20002',
-        'electrum3.blackcoin.nl t30001 s30002'
+        'electrum3.blackcoin.nl t30001 s30002',
     ]
 
 
@@ -1603,7 +1603,7 @@ class BlackcoinTestnet(Blackcoin):
     PEERS = [
         'electrum1.blackcoin.nl t10011 s10012',
         'electrum2.blackcoin.nl t20011 s20012',
-        'electrum3.blackcoin.nl t30011 s30012'
+        'electrum3.blackcoin.nl t30011 s30012',
     ]
 
 
@@ -1669,7 +1669,7 @@ class Peercoin(Coin):
     REORG_LIMIT = 5000
 
     PEERS = [
-        "electrum.peercoinexplorer.net s"
+        "electrum.peercoinexplorer.net s",
     ]
 
     VALUE_PER_COIN = 1000000
@@ -1685,7 +1685,7 @@ class PeercoinTestnet(Peercoin):
                     'b0658ce630cc727c0cca81aec47c9f06')
     ESTIMATE_FEE = 0.001
     PEERS = [
-        "testnet-electrum.peercoinexplorer.net s"
+        "testnet-electrum.peercoinexplorer.net s",
     ]
 
 
@@ -2112,7 +2112,7 @@ class Bitcore(Coin):
         'ele1.bitcore.cc s t',
         'ele2.bitcore.cc s t',
         'ele3.bitcore.cc s t',
-        'ele4.bitcore.cc s t'
+        'ele4.bitcore.cc s t',
     ]
 
 
@@ -2381,7 +2381,7 @@ class Pac(Coin):
     RPC_PORT = 7111
     PEERS = [
         'electrum.paccoin.io s t',
-        'electro-pac.paccoin.io s t'
+        'electro-pac.paccoin.io s t',
     ]
     SESSIONCLS = DashElectrumX
     DAEMON = daemon.DashDaemon
@@ -2431,7 +2431,7 @@ class Zcoin(Coin):
     DAEMON = daemon.ZcoinMtpDaemon
     DESERIALIZER = lib_tx.DeserializerZcoin
     PEERS = [
-        'electrum.polispay.com'
+        'electrum.polispay.com',
     ]
 
     @classmethod
@@ -2484,7 +2484,7 @@ class Polis(Coin):
     TX_PER_BLOCK = 4
     RPC_PORT = 24127
     PEERS = [
-        'electrum.polispay.com'
+        'electrum.polispay.com',
     ]
     SESSIONCLS = DashElectrumX
     DAEMON = daemon.DashDaemon
@@ -2509,7 +2509,7 @@ class MNPCoin(Coin):
     TX_PER_BLOCK = 4
     RPC_PORT = 13373
     PEERS = [
-        'electrum.polispay.com'
+        'electrum.polispay.com',
     ]
     SESSIONCLS = DashElectrumX
     DAEMON = daemon.DashDaemon
@@ -2538,7 +2538,7 @@ class ColossusXT(Coin):
     TX_PER_BLOCK = 4
     RPC_PORT = 51473
     PEERS = [
-        'electrum.polispay.com'
+        'electrum.polispay.com',
     ]
     SESSIONCLS = DashElectrumX
     DAEMON = daemon.DashDaemon
@@ -2580,7 +2580,7 @@ class Minexcoin(EquihashMixin, Coin):
     PEERS = [
         'electrumx.xpresit.net s t',
         'elex01-ams.turinex.eu s t',
-        'eu.minexpool.nl s t'
+        'eu.minexpool.nl s t',
     ]
 
     @classmethod
@@ -2933,7 +2933,7 @@ class Bitsend(Coin):
     XEVAN_TIMESTAMP = 1477958400
     PEERS = [
         'ele1.bitsend.cc s t',
-        '51.15.121.233 s t'
+        '51.15.121.233 s t',
     ]
 
     @classmethod
@@ -3738,7 +3738,7 @@ class Garlicoin(Coin):
         'ca.garlium.crapules.org s',
         'au.garlium.crapules.org s',
         'electrum.hotgrlc.com s t',
-        'electrum.maxpuig.com s t'
+        'electrum.maxpuig.com s t',
     ]
 
 

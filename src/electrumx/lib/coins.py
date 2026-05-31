@@ -315,9 +315,9 @@ class BitcoinMainnet(Bitcoin):
     SHORTNAME = "BTC"
     NET = "mainnet"
     RPC_PORT = 8332
-    TX_COUNT = 565436782
-    TX_COUNT_HEIGHT = 646855
-    TX_PER_BLOCK = 2200
+    TX_COUNT = 1_368_093_517
+    TX_COUNT_HEIGHT = 951_801
+    TX_PER_BLOCK = 3000
     BLACKLIST_URL = 'https://electrum.org/blacklist.json'
     PEERS = [
         'electrum.vom-stausee.de s t',
@@ -354,8 +354,8 @@ class BitcoinTestnetMixin:  # also subclassed by altcoins.
     GENESIS_HASH = ('000000000933ea01ad0ee984209779ba'
                     'aec3ced90fa3f408719526f8d77f4943')
     REORG_LIMIT = 8000
-    TX_COUNT = 12242438
-    TX_COUNT_HEIGHT = 1035428
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
     TX_PER_BLOCK = 21
     RPC_PORT = 18332
     PEER_DEFAULT_PORTS = {'t': '51001', 's': '51002'}
@@ -364,6 +364,9 @@ class BitcoinTestnetMixin:  # also subclassed by altcoins.
 class BitcoinTestnet3(BitcoinTestnetMixin, Bitcoin):
     '''Bitcoin Testnet3 for Bitcoin Core >= 0.13.1.'''
     NET = "testnet"
+    TX_COUNT = 536_377_099
+    TX_COUNT_HEIGHT = 4_966_614
+    TX_PER_BLOCK = 100
     PEERS = [
         'testnet.hsmiths.com t53011 s53012',
         'testnet.qtornado.com s t',

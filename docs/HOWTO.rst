@@ -71,10 +71,17 @@ You will need to install one of:
 + `plyvel <https://plyvel.readthedocs.io/en/latest/installation.html>`_ for LevelDB.
 
   Included as part of a regular pip installation of ElectrumX.
-+ `python-rocksdb <https://pypi.python.org/pypi/python-rocksdb>`_ for RocksDB
 
-  ``pip3 install python-rocksdb`` or use the rocksdb extra install option to ElectrumX.
-+ `pyrocksdb <http://pyrocksdb.readthedocs.io/en/v0.4/installation.html>`_ for an unmaintained version that doesn't work with recent releases of RocksDB
++ `rocksdb-ng <https://pypi.org/project/rocksdb-ng>`_ for RocksDB
+
+  (Should work with RocksDB versions 8-10)
+
+  ``apt install librocksdb-dev``
+
+  ``pip3 install rocksdb-ng`` , or use the ``[rocksdb]`` extra install option to ElectrumX.
+
++ `python-rocksdb <https://pypi.python.org/pypi/python-rocksdb>`_ for an unmaintained version
+  that doesn't work with recent releases of RocksDB (only <7.0)
 
 Running
 =======

@@ -32,11 +32,28 @@ def test_put_get(db):
 
 
 def test_batch(db):
+    """Batch updates are only committed *after* the context manager exits."""
     db.put(b"a", b"1")
     with db.write_batch() as b:
         b.put(b"a", b"2")
         assert db.get(b"a") == b"1"
     assert db.get(b"a") == b"2"
+
+
+def test_batch_exception(db):
+    """Batch updates are *not* committed if the context manager exits with an exception."""
+    class FakeError(Exception): pass
+
+    db.put(b"a", b"1")
+    try:
+        with db.write_batch() as b:
+            b.put(b"a", b"2")
+            raise FakeError
+    except FakeError:
+        pass
+    else:
+        assert False
+    assert db.get(b"a") == b"1"
 
 
 def test_iterator(db):

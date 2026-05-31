@@ -368,16 +368,14 @@ class BitcoinTestnet3(BitcoinTestnetMixin, Bitcoin):
     TX_COUNT_HEIGHT = 4_966_614
     TX_PER_BLOCK = 100
     PEERS = [
-        'testnet.hsmiths.com t53011 s53012',
         'testnet.qtornado.com s t',
-        'testnet1.bauerj.eu t50001 s50002',
-        'tn.not.fyi t55001 s55002',
-        'bitcoin.cluelessperson.com s t',
-        'blackie.c3-soft.com s57006',
+        'blackie.c3-soft.com s57006 t57005',
         'electrum.blockstream.info t60001 s60002',
         'testnet.aranguren.org s t',
+        'v22019051929289916.bestsrv.de s50002 t50001',
         'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion t143',
-        'electrum1.cipig.net t10068',
+        'gsw6sn27quwf6u3swgra6o7lrp5qau6kt3ymuyoxgkth6wntzm2bjwyd.onion s51002 t51001',
+        '3tc6nefii2fwoc66dqvrwcyj64dd3r35ihgxvp4u37itsopns5fjtead.onion s50002 t50001',
     ]
 
 
@@ -408,9 +406,17 @@ class BitcoinTestnet4(BitcoinTestnetMixin, Bitcoin):
     PEERS = [
         'blackie.c3-soft.com s57010 t57009',
         'testnet4-electrumx.wakiyamap.dev',
+        '13.212.194.61 s60002 t50001',
+        'v22019051929289916.bestsrv.de s60002 t60001',
+        'fulcrum.theuplink.net s60002',
+        '134.199.227.217 s50002 t50001',
+        'bitcoin.stagemole.eu s5010 t5000',
+        'testnet4.qtornado.com s51012 t51011',
+        'gsw6sn27quwf6u3swgra6o7lrp5qau6kt3ymuyoxgkth6wntzm2bjwyd.onion s52002 t52001',
     ]
-    TX_COUNT = 1
-    TX_COUNT_HEIGHT = 1
+    TX_COUNT = 14_410_912
+    TX_COUNT_HEIGHT = 137_121
+    TX_PER_BLOCK = 100
     RPC_PORT = 48332
 
 

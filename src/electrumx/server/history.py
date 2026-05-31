@@ -81,17 +81,17 @@ class History:
 
     def clear_excess(self, utxo_db_tx_count: int) -> None:
         # self.hist_db_tx_count != utxo_db_tx_count might happen as
-        # both DBs cannot be updated atomically
-        # FIXME when advancing blocks, hist_db is flushed first, so its count can be higher;
-        #       but when backing up (e.g. reorg), hist_db is flushed first as well,
-        #       so its count can be lower?!
-        #       Shouldn't we flush utxo_db first when backing up?
-        if self.hist_db_tx_count <= utxo_db_tx_count:
-            assert self.hist_db_tx_count == utxo_db_tx_count
-            return
+        # both DBs cannot be updated atomically.
+        # However, we MUST maintain the invariant that hist_db_tx_count >= utxo_db_tx_count:
+        # - when advancing blocks, hist_db is flushed first, so its count can be higher;
+        #   but when backing up (during reorg), hist_db is flushed last, so its count can be higher.
+        if self.hist_db_tx_count == utxo_db_tx_count:
+            return  # happy path
+        elif self.hist_db_tx_count < utxo_db_tx_count:
+            raise RuntimeError(f"corrupted DB. {self.hist_db_tx_count=} < {utxo_db_tx_count=}")
 
-        self.logger.info('DB shut down uncleanly.  Scanning for '
-                         'excess history flushes...')
+        assert self.hist_db_tx_count > utxo_db_tx_count
+        self.logger.info('DB shut down uncleanly.  Scanning for excess history flushes...')
 
         keys = []
         for db_key, db_val in self.db.iterator(prefix=b'H'):

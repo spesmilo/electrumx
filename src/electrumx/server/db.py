@@ -269,12 +269,13 @@ class DB:
         prior_flush = self.last_flush
         tx_delta = flush_data.tx_count - self.last_flush_tx_count
 
-        # Flush to file system
+        # 1. Flush to file system
         self.flush_fs(flush_data)
 
-        # Then history
+        # 2. Then hist_db
         self.flush_history()
 
+        # 3. Then utxo_db
         # Flush state last as it reads the wall time.
         with self.utxo_db.write_batch() as batch:
             if flush_utxos:
@@ -407,15 +408,26 @@ class DB:
         start_time = time.time()
         tx_delta = flush_data.tx_count - self.last_flush_tx_count
 
+        # 1. (fake-)Flush to file system: this just updates pointers
         self.backup_fs(flush_data.height, flush_data.tx_count)
-        self.history.backup(
-            hashXs=touched_hashxs,
-            tx_count=flush_data.tx_count,
-        )
+
+        # Crucially, we flush utxo_db and hist_db in the reverse order compared to when advancing,
+        #   to maintain the invariant that hist_db_tx_count >= utxo_db_tx_count even if we crash.
+        # 2. Then utxo_db
         with self.utxo_db.write_batch() as batch:
             self.flush_utxo_db(batch, flush_data)
             # Flush state last as it reads the wall time.
             self.flush_state(batch)
+
+        # 3. Then hist_db
+        self.history.backup(
+            hashXs=touched_hashxs,
+            tx_count=flush_data.tx_count,
+        )
+
+        # Update and put the wall time again - otherwise we drop the
+        # time it took to commit the batch
+        self.flush_state(self.utxo_db)
 
         elapsed = self.last_flush - start_time
         self.logger.info(f'backup flush took '

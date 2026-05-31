@@ -313,9 +313,11 @@ def protocol_version(client_req, min_tuple, max_tuple):
     return result, client_min
 
 
-def is_hex_str(text: Any) -> bool:
+def is_hex_str(text: Any, *, allow_odd_len: bool = False) -> bool:
     if not isinstance(text, str):
         return False
+    if allow_odd_len and len(text) % 2 == 1:
+        return is_hex_str("0" + text, allow_odd_len=False)
     try:
         b = bytes.fromhex(text)
     except Exception:
@@ -333,6 +335,7 @@ struct_le_I = Struct('<I')
 struct_le_Q = Struct('<Q')
 struct_be_H = Struct('>H')
 struct_be_I = Struct('>I')
+struct_be_Q = Struct('>Q')
 structB = Struct('B')
 
 unpack_le_int32_from = struct_le_i.unpack_from
@@ -346,6 +349,7 @@ unpack_be_uint32_from = struct_be_I.unpack_from
 unpack_le_uint32 = struct_le_I.unpack
 unpack_le_uint64 = struct_le_Q.unpack
 unpack_be_uint32 = struct_be_I.unpack
+unpack_be_uint64 = struct_be_Q.unpack
 
 pack_le_int32 = struct_le_i.pack
 pack_le_int64 = struct_le_q.pack
@@ -354,6 +358,7 @@ pack_le_uint32 = struct_le_I.pack
 pack_le_uint64 = struct_le_Q.pack
 pack_be_uint16 = struct_be_H.pack
 pack_be_uint32 = struct_be_I.pack
+pack_be_uint64 = struct_be_Q.pack
 pack_byte = structB.pack
 
 hex_to_bytes = bytes.fromhex

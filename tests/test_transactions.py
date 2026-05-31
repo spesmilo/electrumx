@@ -44,16 +44,16 @@ def test_transaction_bitcoin(transaction_details_bitcoin):
 
     raw_tx = unhexlify(tx_info['hex'])
     tx, vsize = coin.DESERIALIZER(raw_tx, 0).read_tx_and_vsize()
-    tx_hash = tx.txid
+    tx_hash = tx.txid_rev
     assert tx_info['txid'] == hash_to_hex_str(tx_hash)
-    assert tx_info['hash'] == hash_to_hex_str(tx.wtxid)
+    assert tx_info['hash'] == hash_to_hex_str(tx.wtxid_rev)
 
     assert tx_info['version'] == tx.version
     assert tx_info['vsize'] == vsize
 
     vin = tx_info['vin']
     for i in range(len(vin)):
-        assert vin[i]['txid'] == hash_to_hex_str(tx.inputs[i].prev_hash)
+        assert vin[i]['txid'] == hash_to_hex_str(tx.inputs[i].prev_txid_rev)
         assert vin[i]['vout'] == tx.inputs[i].prev_idx
         if "txinwitness" in vin[i] or (hasattr(tx, "witness") and tx.witness[i]):
             assert vin[i]["txinwitness"] == [x.hex() for x in tx.witness[i]]
@@ -80,14 +80,14 @@ def test_transaction_alts(transaction_details_altcoin):
 
     raw_tx = unhexlify(tx_info['hex'])
     tx = coin.DESERIALIZER(raw_tx, 0).read_tx()
-    tx_hash = tx.txid
+    tx_hash = tx.txid_rev
     assert tx_info['txid'] == hash_to_hex_str(tx_hash)
     if expected_wtxid := tx_info.get('hash'):
-        assert expected_wtxid == hash_to_hex_str(tx.wtxid)
+        assert expected_wtxid == hash_to_hex_str(tx.wtxid_rev)
 
     vin = tx_info['vin']
     for i in range(len(vin)):
-        assert vin[i]['txid'] == hash_to_hex_str(tx.inputs[i].prev_hash)
+        assert vin[i]['txid'] == hash_to_hex_str(tx.inputs[i].prev_txid_rev)
         assert vin[i]['vout'] == tx.inputs[i].prev_idx
 
     vout = tx_info['vout']

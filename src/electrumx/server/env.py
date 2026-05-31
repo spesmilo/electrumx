@@ -10,7 +10,7 @@
 
 import re
 from ipaddress import IPv4Address, IPv6Address
-from typing import Type
+from typing import Type, Sequence
 
 from aiorpcx import Service, ServicePart
 from electrumx.lib.coins import Coin
@@ -154,7 +154,7 @@ class Env(EnvBase):
                              "bumping COST_HARD_LIMIT by 1.")
             self.cost_hard_limit = self.cost_soft_limit + 1
 
-    def _parse_services(self, services_str, default_func):
+    def _parse_services(self, services_str, default_func) -> Sequence[Service]:
         result = []
         for service_str in services_str.split(','):
             if not service_str:
@@ -177,7 +177,7 @@ class Env(EnvBase):
 
         return result
 
-    def services_to_run(self):
+    def services_to_run(self) -> Sequence[Service]:
         def default_part(protocol, part):
             return default_services.get(protocol, {}).get(part)
 

@@ -419,16 +419,20 @@ class PeerManager:
         result = await session.send_request(message)
         assert_good(message, result, dict)
 
+        # Compare heights.
+        MAX_TIP_HEIGHT_DIFF = 5
         our_height = self.db.db_height
         their_height = result.get('height')
         if not isinstance(their_height, int):
             raise BadPeerError(f'invalid height {their_height}')
-        if abs(our_height - their_height) > 5:
+        if abs(our_height - their_height) > MAX_TIP_HEIGHT_DIFF:
             raise BadPeerError(f'bad height {their_height:,d} '
                                f'(ours: {our_height:,d})')
 
         # Check prior header too in case of hard fork.
-        check_height = min(our_height, their_height)
+        # Allow short chain-splits. On Bitcoin testnet4, <6 block splits and reorgs are *very* common.
+        MAX_CHAINSPLIT_LEN = 10
+        check_height = max(0, min(our_height, their_height) - MAX_CHAINSPLIT_LEN)
         raw_header = await self.db.raw_header(check_height)
         ours = raw_header.hex()
         message = 'blockchain.block.header'

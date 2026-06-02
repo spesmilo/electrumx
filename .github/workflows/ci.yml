@@ -44,8 +44,8 @@ jobs:
           pip install pytest-cov
           pip install Sphinx
           # e-x itself
-          # - install both leveldb (default) and rocksdb bindings
-          pip install ".[rocksdb]"
+          # - install both leveldb and rocksdb bindings
+          pip install ".[leveldb,rocksdb]"
           # hashes and other altcoin-specific stuff
           pip install tribushashm
           pip install blake256

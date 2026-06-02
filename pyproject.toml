@@ -14,7 +14,7 @@ license = {'file'="LICENSE"}
 requires-python = ">=3.10"
 dependencies = [
     "aiorpcx[ws]>=0.25.0,<0.26",
-    "plyvel",
+    "plyvel",  # TODO rm from default install before 2.0 release
     "aiohttp>=3.3,<4",
 ]
 classifiers = [
@@ -42,11 +42,16 @@ electrumx_compact_history = "electrumx.cli.electrumx_compact_history:main"
 version = { attr = 'electrumx.__version__' }
 
 [project.optional-dependencies]
-dev = [
-    "objgraph",
+# DB_ENGINE choices. The user MUST install at least one.
+leveldb = [
+    "plyvel",
 ]
 rocksdb = [
     "rocksdb-ng",  # Felix's fork. ref https://github.com/f321x/python-rocksdb
+]
+# misc
+dev = [
+    "objgraph",
 ]
 rapidjson = [
     "python-rapidjson>=0.4.1,<2.0",

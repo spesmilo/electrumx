@@ -9,7 +9,7 @@
 
 import os
 from functools import partial
-from typing import Type
+from typing import Type, Sequence
 
 import electrumx.lib.util as util
 
@@ -21,6 +21,10 @@ def db_class(name) -> Type['Storage']:
             db_class.import_module()
             return db_class
     raise RuntimeError(f'unrecognised DB engine "{name}"')
+
+
+def list_db_engine_choices() -> Sequence[str]:
+    return [db_class.__name__.lower() for db_class in util.subclasses(Storage)]
 
 
 class Storage:
@@ -81,7 +85,11 @@ class LevelDB(Storage):
 
     @classmethod
     def import_module(cls):
-        import plyvel
+        try:
+            import plyvel
+        except ImportError as e:
+            raise Exception(f"{e}. For the leveldb DB-backend, you should install ElectrumX with the [leveldb] pip extra.") from e
+
         cls.module = plyvel
 
     def open(self, name, create):
@@ -124,7 +132,10 @@ class RocksDB(Storage):
 
     @classmethod
     def import_module(cls):
-        import rocksdb
+        try:
+            import rocksdb
+        except ImportError as e:
+            raise Exception(f"{e}. For the rocksdb DB-backend, you should install ElectrumX with the [rocksdb] pip extra.") from e
         cls.module = rocksdb
 
     def open(self, name, create):

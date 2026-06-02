@@ -62,21 +62,23 @@ Database Engine
 ===============
 
 You can choose from LevelDB and RocksDB to store transaction
-information on disk.  The time taken and DB size is not significantly
-different.  We tried to support LMDB, but its history write performance
+information on disk.  On an SSD, RocksDB performs better than LevelDB.
+We tried to support LMDB, but its history write performance
 was much worse.
 
 You will need to install one of:
 
 + `plyvel <https://plyvel.readthedocs.io/en/latest/installation.html>`_ for LevelDB.
 
-  Included as part of a regular pip installation of ElectrumX.
+  ``apt install libleveldb-dev build-essential``
+
+  ``pip3 install plyvel`` , or use the ``[leveldb]`` extra install option to ElectrumX.
 
 + `rocksdb-ng <https://pypi.org/project/rocksdb-ng>`_ for RocksDB
 
   (Should work with RocksDB versions 8-10)
 
-  ``apt install librocksdb-dev``
+  ``apt install librocksdb-dev build-essential pkg-config``
 
   ``pip3 install rocksdb-ng`` , or use the ``[rocksdb]`` extra install option to ElectrumX.
 

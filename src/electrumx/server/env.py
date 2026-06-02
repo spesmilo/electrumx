@@ -13,6 +13,8 @@ from ipaddress import IPv4Address, IPv6Address
 from typing import Type
 
 from aiorpcx import Service, ServicePart
+
+import electrumx
 from electrumx.lib.coins import Coin
 from electrumx.lib.env_base import EnvBase
 
@@ -44,6 +46,7 @@ class Env(EnvBase):
         # Core items
 
         self.db_dir = self.required('DB_DIRECTORY')
+        self.db_engine = self.db_engine_enum()
         self.daemon_url = self.required('DAEMON_URL')
         if coin is not None:
             assert issubclass(coin, Coin)
@@ -62,8 +65,6 @@ class Env(EnvBase):
         self.tor_proxy_port = self.integer('TOR_PROXY_PORT', None)
 
         # Misc
-
-        self.db_engine = self.default('DB_ENGINE', 'leveldb')
         self.banner_file = self.default('BANNER_FILE', None)
         self.tor_banner_file = self.default('TOR_BANNER_FILE',
                                             self.banner_file)
@@ -217,3 +218,30 @@ class Env(EnvBase):
             return self.PD_SELF
         else:
             return self.PD_ON
+
+    def db_engine_enum(self) -> str:
+        from electrumx.server.storage import list_db_engine_choices
+        choices = list_db_engine_choices()
+        db_eng = self.default('DB_ENGINE', None)
+
+        if db_eng is None and electrumx.__version__.startswith("1."):  # temporary legacy hack
+            db_eng = "leveldb"
+        if db_eng is None:
+            raise self.Error(
+                f"required envvar DB_ENGINE not set.\n"
+                f"Choose one from: {choices}.\n"
+                f"The corresponding dependencies also need to be installed. See pip extras.\n"
+                f"In ElectrumX 1.x versions, the default was leveldb.\n"
+                f"Warning: It is not possible to switch back and forth, "
+                f"the on-disk DB formats are not compatible with each other: when switching, "
+                f"you have to resync from genesis.\n"
+                f"LevelDB was written with HDDs in mind. RocksDB is more modern and performs better (on an SSD)."
+            )
+
+        db_eng = db_eng.lower()
+        if db_eng in choices:
+            return db_eng
+        else:
+            raise self.Error(
+                f"bad value for envvar DB_ENGINE: {db_eng!r}. Choose one from: {choices}."
+            )

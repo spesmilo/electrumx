@@ -31,6 +31,7 @@ ENV COIN=Bitcoin
 ENV DB_DIRECTORY=/var/lib/electrumx
 ENV DAEMON_URL="http://username:password@hostname:port/"
 ENV ALLOW_ROOT=true
+# TODO change DB_ENGINE default to rocksdb after we tag ElectrumX 2.0?
 ENV DB_ENGINE=leveldb
 ENV MAX_SEND=10000000
 ENV BANDWIDTH_UNIT_COST=50000

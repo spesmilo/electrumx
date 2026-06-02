@@ -307,7 +307,18 @@ def test_DONATION_ADDRESS():
 
 
 def test_DB_ENGINE():
-    assert_default('DB_ENGINE', 'db_engine', 'leveldb')
+    setup_base_env()
+
+    e = Env()
+    assert e.db_engine == "leveldb"
+
+    os.environ['DB_ENGINE'] = "rocksdb"
+    e = Env()
+    assert e.db_engine == "rocksdb"
+
+    os.environ['DB_ENGINE'] = "custom-something"
+    with pytest.raises(Env.Error):
+        e = Env()
 
 
 def test_MAX_SEND():

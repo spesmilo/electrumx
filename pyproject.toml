@@ -10,7 +10,8 @@ authors = [
 description = "Server implementation for the Electrum protocol"
 keywords = ["asyncio", "bitcoin", "electrum", "electrum-server"]
 readme = "README.md"
-license = {'file'="LICENSE"}
+license = "MIT"
+license-files = ["LICENCE"]
 requires-python = ">=3.10"
 dependencies = [
     "aiorpcx[ws]>=0.25.0,<0.26",
@@ -20,7 +21,6 @@ dependencies = [
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Framework :: AsyncIO",
-    "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: Unix",
     "Programming Language :: Python :: 3.10",

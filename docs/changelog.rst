@@ -13,6 +13,7 @@ TODO expand
    - in return, no more manual "history compaction" and unexpected downtimes every year:
      no more "DB::flush_count overflow" (`spesmilo/electrumx#88`_)
    - the size of the new DB is comparable to the old one, however:
+
 * We now require Bitcoin Core to have `txospenderindex=1` (added in Bitcoin Core 31)
   in addition to `txindex=1`.  This is needed to serve the `blockchain.outpoint.subscribe` RPC
   added in Electrum Protocol 1.7.
@@ -20,11 +21,30 @@ TODO expand
   For reference, on Bitcoin mainnet around height=950k,
 
    - the ElectrumX db uses around 122 GiB (using LevelDB, roughly same for both of e-x 1.x and 2.0),
+      - note: using RocksDB 9, it is a bit smaller, around 106 GiB
    - `.bitcoin/blocks/` uses 788 GiB,
    - `.bitcoin/chainstate/` uses 12 GiB,
    - `.bitcoin/indexes/txindex/` uses 66 GiB,
    - `.bitcoin/indexes/txospenderindex/` uses 88 GiB (new!)
-* This also means that we now require Bitcoin Core 31.0 or newer (for `COIN=Bitcoin`).
+
+  - This also means that we now require Bitcoin Core 31.0 or newer (for `COIN=Bitcoin`).
+
+* env: the previously optional envvar `DB_ENGINE`, is now mandatory.
+
+  - choose either `leveldb` or `rocksdb`
+  - in ElectrumX 1.x versions, the default was leveldb.
+
+  You need to install the appropriate dependencies for your engine, see the `[leveldb]` and
+  `[rocksdb]` pip extras and the "Database Engine" section of the HOWTO.
+
+  Previously RocksDB was difficult to use as the python bindings for it have been unmaintained for years.
+  By the super-slop-powers of LLMs, we revived the python bindings and made it compatible with modern
+  cpython, cython, and rocksdb. The changes are reviewable and not really slop. (see `spesmilo/electrumx#347`_)
+
+  LevelDB was written with HDDs in mind. RocksDB is more modern
+  and on an SSD takes around ~25% less time than LevelDB to sync from genesis.
+  Given that this release contains breaking DB changes and a resync is needed anyway, maybe try out RocksDB :)
+
 * protocol:
    - new: implement electrum protocol version 1.7  (`spesmilo/electrum-protocol#2`_).
      The min supported protocol version remains 1.4, the max is now 1.7.
@@ -343,6 +363,7 @@ This fork maintained by:
 .. _spesmilo/electrumx#340:  https://github.com/spesmilo/electrumx/pull/340
 .. _spesmilo/electrumx#344:  https://github.com/spesmilo/electrumx/pull/344
 .. _spesmilo/electrumx#345:  https://github.com/spesmilo/electrumx/pull/345
+.. _spesmilo/electrumx#347:  https://github.com/spesmilo/electrumx/pull/347
 .. _spesmilo/electrumx#348:  https://github.com/spesmilo/electrumx/pull/348
 .. _spesmilo/electrumx#349:  https://github.com/spesmilo/electrumx/pull/349
 .. _spesmilo/electrumx#351:  https://github.com/spesmilo/electrumx/pull/351

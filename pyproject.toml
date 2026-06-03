@@ -15,7 +15,6 @@ license-files = ["LICENCE"]
 requires-python = ">=3.10"
 dependencies = [
     "aiorpcx[ws]>=0.25.0,<0.26",
-    "plyvel",  # TODO rm from default install before 2.0 release
     "aiohttp>=3.3,<4",
 ]
 classifiers = [

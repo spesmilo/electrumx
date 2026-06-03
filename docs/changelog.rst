@@ -3,6 +3,29 @@
 ===========
 
 
+Version 1.20.0 (03 June 2026)
+=============================
+
+Small fixes and general maintenance.
+
+After this release, the master branch will move towards a 2.0 release, which will require
+a resync from genesis. So for a while, master might be less stable than usual.
+
+* fix: lib/tx.py: vsize calculation was off by 6-8 vbytes (`spesmilo/electrumx#328`_).
+  Added tests. The discrepancy was externally observable via the `mempool.get_fee_histogram` RPC.
+* fix: don't get stuck during shutdown waiting for SessionManager to stop (`spesmilo/electrumx#339`_)
+* fix: protocol: name of arg for broadcast_package RPC: tx_package->raw_txs (`c9b72e7e`_)
+* changed: peer discovery: allow short chain splits (`spesmilo/electrumx#351`_)
+* changed: rm 'attrs' as a direct dependency, use stdlib `dataclasses` instead (`spesmilo/electrumx#345`_)
+* new: daemon: check early "txindex" is enabled for bitcoind, error if missing (`spesmilo/electrumx#349`_)
+* new: coins: add Bitcoin mutinynet (`spesmilo/electrumx#352`_)
+* maintenance: coins: some clean-up (`spesmilo/electrumx#344`_, `spesmilo/electrumx#348`_, ...)
+* maintenance: moved CI from Cirrus CI to Github Actions (`spesmilo/electrumx#340`_)
+
+(We also made some changes to make RocksDB practical and nicer to use, but if you currently use LevelDB,
+maybe consider waiting for 2.0 before you resync the DB)
+
+
 Version 1.19.0 (11 Nov 2025)
 =============================
 
@@ -287,6 +310,15 @@ This fork maintained by:
 .. _spesmilo/electrumx#322:  https://github.com/spesmilo/electrumx/pull/322
 .. _spesmilo/electrumx#323:  https://github.com/spesmilo/electrumx/pull/323
 .. _spesmilo/electrumx#326:  https://github.com/spesmilo/electrumx/pull/326
+.. _spesmilo/electrumx#328:  https://github.com/spesmilo/electrumx/pull/328
+.. _spesmilo/electrumx#339:  https://github.com/spesmilo/electrumx/pull/339
+.. _spesmilo/electrumx#340:  https://github.com/spesmilo/electrumx/pull/340
+.. _spesmilo/electrumx#344:  https://github.com/spesmilo/electrumx/pull/344
+.. _spesmilo/electrumx#345:  https://github.com/spesmilo/electrumx/pull/345
+.. _spesmilo/electrumx#348:  https://github.com/spesmilo/electrumx/pull/348
+.. _spesmilo/electrumx#349:  https://github.com/spesmilo/electrumx/pull/349
+.. _spesmilo/electrumx#351:  https://github.com/spesmilo/electrumx/pull/351
+.. _spesmilo/electrumx#352:  https://github.com/spesmilo/electrumx/pull/352
 
 
 .. _4b3f6510:  https://github.com/spesmilo/electrumx/commit/4b3f6510e94670a013c1abe6247cdd2b0e7e6f8c
@@ -301,6 +333,7 @@ This fork maintained by:
 .. _5f4dd2cd:  https://github.com/spesmilo/electrumx/commit/5f4dd2cdb414464484407affbbaae6b7407696cb
 .. _f5582b29:  https://github.com/spesmilo/electrumx/commit/f5582b29792625e8cca7cf137a6718c2520bb9cb
 .. _0ba87447:  https://github.com/spesmilo/electrumx/commit/0ba87447cb293cfc4a8a26c1c27842b95666875a
+.. _c9b72e7e:  https://github.com/spesmilo/electrumx/commit/c9b72e7ea76bfb706b2df3e90c739116bf49678d
 
 
 .. _spesmilo/electrum-protocol#6:  https://github.com/spesmilo/electrum-protocol/pull/6

@@ -49,6 +49,6 @@ def test_tx_serialiazation():
         test = bytes.fromhex(test)
         deser_xzc = tx_lib.DeserializerZcoin(test)
         tx = deser_xzc.read_tx()
-        assert tx.inputs[0].prev_hash == tx_lib.ZERO
+        assert tx.inputs[0].prev_txid_rev == tx_lib.ZERO
         assert tx.inputs[0].prev_idx  == tx_lib.MINUS_1
 

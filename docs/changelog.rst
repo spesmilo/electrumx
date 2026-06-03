@@ -2,6 +2,33 @@
  ChangeLog
 ===========
 
+Version 2.0 (not yet released)
+==============================
+
+TODO expand
+
+* Breaking changes to on-disk database. Server operators need to manually delete old DB,
+  no migration path. New DB will be rebuilt while rescanning again from genesis.
+
+   - in return, no more manual "history compaction" and unexpected downtimes every year:
+     no more "DB::flush_count overflow" (`spesmilo/electrumx#88`_)
+   - the size of the new DB is comparable to the old one, however:
+* We now require Bitcoin Core to have `txospenderindex=1` (added in Bitcoin Core 31)
+  in addition to `txindex=1`.  This is needed to serve the `blockchain.outpoint.subscribe` RPC
+  added in Electrum Protocol 1.7.
+
+  For reference, on Bitcoin mainnet around height=950k,
+
+   - the ElectrumX db uses around 122 GiB (using LevelDB, roughly same for both of e-x 1.x and 2.0),
+   - `.bitcoin/blocks/` uses 788 GiB,
+   - `.bitcoin/chainstate/` uses 12 GiB,
+   - `.bitcoin/indexes/txindex/` uses 66 GiB,
+   - `.bitcoin/indexes/txospenderindex/` uses 88 GiB (new!)
+* This also means that we now require Bitcoin Core 31.0 or newer (for `COIN=Bitcoin`).
+* protocol:
+   - new: implement electrum protocol version 1.7  (`spesmilo/electrum-protocol#2`_).
+     The min supported protocol version remains 1.4, the max is now 1.7.
+
 
 Version 1.20.0 (03 June 2026)
 =============================
@@ -299,6 +326,7 @@ This fork maintained by:
 .. _#67:  https://github.com/spesmilo/electrumx/pull/67
 .. _#70:  https://github.com/spesmilo/electrumx/pull/70
 .. _spesmilo/electrumx#75:  https://github.com/spesmilo/electrumx/pull/75
+.. _spesmilo/electrumx#88:  https://github.com/spesmilo/electrumx/issues/88
 .. _spesmilo/electrumx#122:  https://github.com/spesmilo/electrumx/pull/122
 .. _spesmilo/electrumx#248:  https://github.com/spesmilo/electrumx/pull/248
 .. _spesmilo/electrumx#273:  https://github.com/spesmilo/electrumx/pull/273
@@ -336,5 +364,6 @@ This fork maintained by:
 .. _c9b72e7e:  https://github.com/spesmilo/electrumx/commit/c9b72e7ea76bfb706b2df3e90c739116bf49678d
 
 
+.. _spesmilo/electrum-protocol#2:  https://github.com/spesmilo/electrum-protocol/pull/2
 .. _spesmilo/electrum-protocol#6:  https://github.com/spesmilo/electrum-protocol/pull/6
 

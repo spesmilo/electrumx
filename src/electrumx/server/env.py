@@ -10,7 +10,7 @@
 
 import re
 from ipaddress import IPv4Address, IPv6Address
-from typing import Type
+from typing import Type, Sequence
 
 from aiorpcx import Service, ServicePart
 
@@ -155,7 +155,7 @@ class Env(EnvBase):
                              "bumping COST_HARD_LIMIT by 1.")
             self.cost_hard_limit = self.cost_soft_limit + 1
 
-    def _parse_services(self, services_str, default_func):
+    def _parse_services(self, services_str, default_func) -> Sequence[Service]:
         result = []
         for service_str in services_str.split(','):
             if not service_str:
@@ -178,7 +178,7 @@ class Env(EnvBase):
 
         return result
 
-    def services_to_run(self):
+    def services_to_run(self) -> Sequence[Service]:
         def default_part(protocol, part):
             return default_services.get(protocol, {}).get(part)
 
@@ -224,8 +224,6 @@ class Env(EnvBase):
         choices = list_db_engine_choices()
         db_eng = self.default('DB_ENGINE', None)
 
-        if db_eng is None and electrumx.__version__.startswith("1."):  # temporary legacy hack
-            db_eng = "leveldb"
         if db_eng is None:
             raise self.Error(
                 f"required envvar DB_ENGINE not set.\n"

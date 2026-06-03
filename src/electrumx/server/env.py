@@ -224,8 +224,6 @@ class Env(EnvBase):
         choices = list_db_engine_choices()
         db_eng = self.default('DB_ENGINE', None)
 
-        if db_eng is None and electrumx.__version__.startswith("1."):  # temporary legacy hack
-            db_eng = "leveldb"
         if db_eng is None:
             raise self.Error(
                 f"required envvar DB_ENGINE not set.\n"

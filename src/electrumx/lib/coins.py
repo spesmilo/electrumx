@@ -399,6 +399,21 @@ class BitcoinSignet(BitcoinTestnetMixin, Bitcoin):
     RPC_PORT = 38332
 
 
+class BitcoinMutinynet(BitcoinTestnetMixin, Bitcoin):
+    # custom signet https://github.com/MutinyWallet/mutiny-net/
+    # see https://github.com/f321x/simple-mutinynet for docker setup
+    NET = "mutinynet"
+    GENESIS_HASH = ('00000008819873e925422c1ff0f99f7c'  # same as Signet
+                    'c9bbb232af63a077a480a3633bee1ef6')
+    PEERS = [
+        'electrum.mutinynet.com t50001',  # doesn't seem to serve server.features
+        '5.9.83.108 s51234',
+    ]
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+    RPC_PORT = 38332
+
+
 class BitcoinTestnet4(BitcoinTestnetMixin, Bitcoin):
     NET = "testnet4"
     GENESIS_HASH = ('00000000da84f2bafbbc53dee25a72ae'

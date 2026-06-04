@@ -1422,7 +1422,7 @@ class ElectrumX(SessionBase):
             error, = e.args
             ecode = error['code']
             if ecode == -5:  # "No such mempool or blockchain transaction."
-                return TXOSpendStatus(prev_height=None)  # utxo never existed
+                return TXOSpendStatus(funder_height=None)  # utxo never existed
             self.logger.debug(f"getrawtransaction errored. {prev_txid_hum=}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None  # TODO some callers do not expect this
         assert prevtx_item.get("txid") == prev_txid_hum, f"{prevtx_item.get('txid')=} != {prev_txid_hum=}"
@@ -1431,12 +1431,12 @@ class ElectrumX(SessionBase):
         if funder_bhash is not None:
             funder_bheight = self.db.get_blockheight_from_blockhash(funder_bhash)
         if funder_bheight is None:  # if in mempool, will defer to mempool.spender_for_txo
-            return TXOSpendStatus(prev_height=None)  # utxo never existed (in chain)
+            return TXOSpendStatus(funder_height=None)  # utxo never existed (in chain)
         assert isinstance(funder_bheight, int)
         # ok, funding tx exists, does the requested output index also exist in this tx?
         vouts = prevtx_item.get("vout") or []
         if len(vouts) <= txout_idx:
-            return TXOSpendStatus(prev_height=None)  # txout_idx was out-of-bounds
+            return TXOSpendStatus(funder_height=None)  # txout_idx was out-of-bounds
         # by now we know the funding TXO existed in the chain. Let's see if it was spent.
         # 2. call bitcoind "gettxspendingprevout"
         self.bump_cost(1)
@@ -1452,12 +1452,12 @@ class ElectrumX(SessionBase):
         if spender_bhash is not None:
             spender_bheight = self.db.get_blockheight_from_blockhash(spender_bhash)
         if spender_bheight is None:  # if in mempool, will defer to mempool.spender_for_txo
-            return TXOSpendStatus(prev_height=funder_bheight)  # utxo funded but unspent (in-chain)
+            return TXOSpendStatus(funder_height=funder_bheight)  # utxo funded but unspent (in-chain)
         spender_txid = spender_item.get("spendingtxid")
         assert spender_txid is not None  # we already have a height!
         # utxo funded, and spent (in-chain)
         return TXOSpendStatus(
-            prev_height=funder_bheight,
+            funder_height=funder_bheight,
             spender_txid_rev=hex_str_to_hash(spender_txid),
             spender_height=spender_bheight,
         )
@@ -1465,8 +1465,8 @@ class ElectrumX(SessionBase):
     def _convert_txospendstatus_to_protocol_dict(self, spend_status: 'TXOSpendStatus') -> dict[str, Any]:
         # convert to json dict the client expects
         d = {}
-        if spend_status.prev_height is not None:
-            d['funder_height'] = spend_status.prev_height
+        if spend_status.funder_height is not None:
+            d['funder_height'] = spend_status.funder_height
             if spend_status.spender_txid_rev is not None:
                 assert spend_status.spender_height is not None
                 d['spender_txhash'] = hash_to_hex_str(spend_status.spender_txid_rev)
@@ -1478,13 +1478,13 @@ class ElectrumX(SessionBase):
         spend_status = await self._spender_for_txo(prev_txid_rev, txout_idx)
         if spend_status.spender_height is not None:
             # TXO was created, was mined, was spent, and spend was mined.
-            assert spend_status.prev_height > 0
+            assert spend_status.funder_height > 0
             assert spend_status.spender_height > 0
             assert spend_status.spender_txid_rev is not None
         else:
             mp_spend_status = await self.mempool.spender_for_txo(prev_txid_rev, txout_idx)
-            if mp_spend_status.prev_height is not None:
-                spend_status.prev_height = mp_spend_status.prev_height
+            if mp_spend_status.funder_height is not None:
+                spend_status.funder_height = mp_spend_status.funder_height
             if mp_spend_status.spender_height is not None:
                 spend_status.spender_height = mp_spend_status.spender_height
             if mp_spend_status.spender_txid_rev is not None:
@@ -1496,10 +1496,10 @@ class ElectrumX(SessionBase):
         status = await self._calc_txoutpoint_status(prev_txid_rev=prev_txid_rev, txout_idx=txout_idx)
         # update status last sent to client
         prevout = (prev_txid_rev, txout_idx)
-        prev_height = status.prev_height
-        spender_height = status.spender_height
-        if ((prev_height is not None and prev_height <= 0)
-                or (spender_height is not None and spender_height <= 0)):
+        fh = status.funder_height
+        sh = status.spender_height
+        if ((fh is not None and fh <= 0)
+                or (sh is not None and sh <= 0)):
             self.mempool_txoutpoint_statuses[prevout] = status
         else:
             self.mempool_txoutpoint_statuses.pop(prevout, None)

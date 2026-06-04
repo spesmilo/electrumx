@@ -115,7 +115,7 @@ class TxOutput:
 
 @dataclass(kw_only=True, slots=True)
 class TXOSpendStatus:
-    prev_height: Optional[int]  # block height TXO is mined at. None if the outpoint never existed
+    funder_height: Optional[int]  # block height TXO is mined at. None if the outpoint never existed
     spender_txid_rev: bytes = None
     spender_height: int = None
 

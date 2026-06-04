@@ -1161,7 +1161,7 @@ class ElectrumX(SessionBase):
         self.hashX_subs = {}  # type: Dict[bytes, str]  # hashX -> scripthash
         self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]  # (txid_rev, txout_idx)
         self.mempool_hashX_statuses = {}  # type: Dict[bytes, str]
-        self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], Mapping[str, Any]]
+        self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], TXOSpendStatus]
         self.set_request_handlers(self.PROTOCOL_MIN)
         self.is_peer = False
         self.cost = 5.0   # Connection cost
@@ -1302,7 +1302,7 @@ class ElectrumX(SessionBase):
         touched_outpoints = touched_outpoints.intersection(self.txoutpoint_subs)
         if touched_outpoints or (height_changed and self.mempool_txoutpoint_statuses):
             method = 'blockchain.outpoint.subscribe'
-            txo_to_status = {}  # type: dict[tuple[bytes, int], dict[str, Any]]
+            txo_to_status = {}  # type: dict[tuple[bytes, int], TXOSpendStatus]
             for prevout in touched_outpoints:
                 txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)
 
@@ -1316,8 +1316,9 @@ class ElectrumX(SessionBase):
 
             for txid_rev, txout_idx in touched_outpoints:
                 spend_status = txo_to_status[(txid_rev, txout_idx)]
+                spend_status_dict = self._convert_txospendstatus_to_protocol_dict(spend_status)
                 tx_hash_hex = hash_to_hex_str(txid_rev)
-                await self.send_notification(method, (tx_hash_hex, txout_idx, spend_status))
+                await self.send_notification(method, (tx_hash_hex, txout_idx, spend_status_dict))
                 cnt_sent += 1
             num_txo_notifs_sent = len(touched_outpoints)
 
@@ -1461,7 +1462,18 @@ class ElectrumX(SessionBase):
             spender_height=spender_bheight,
         )
 
-    async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> Dict[str, Any]:
+    def _convert_txospendstatus_to_protocol_dict(self, spend_status: 'TXOSpendStatus') -> dict[str, Any]:
+        # convert to json dict the client expects
+        d = {}
+        if spend_status.prev_height is not None:
+            d['funder_height'] = spend_status.prev_height
+            if spend_status.spender_txid_rev is not None:
+                assert spend_status.spender_height is not None
+                d['spender_txhash'] = hash_to_hex_str(spend_status.spender_txid_rev)
+                d['spender_height'] = spend_status.spender_height
+        return d
+
+    async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         self.bump_cost(0.2)
         spend_status = await self._spender_for_txo(prev_txid_rev, txout_idx)
         if spend_status.spender_height is not None:
@@ -1477,23 +1489,15 @@ class ElectrumX(SessionBase):
                 spend_status.spender_height = mp_spend_status.spender_height
             if mp_spend_status.spender_txid_rev is not None:
                 spend_status.spender_txid_rev = mp_spend_status.spender_txid_rev
-        # convert to json dict the client expects
-        status = {}
-        if spend_status.prev_height is not None:
-            status['funder_height'] = spend_status.prev_height
-            if spend_status.spender_txid_rev is not None:
-                assert spend_status.spender_height is not None
-                status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txid_rev)
-                status['spender_height'] = spend_status.spender_height
-        return status
+        return spend_status
 
-    async def txoutpoint_status_for_notif(self, prev_txid_rev: bytes, txout_idx: int) -> Dict[str, Any]:
+    async def txoutpoint_status_for_notif(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         """Side-effect: updates client-last-seen status, used by notifications."""
         status = await self._calc_txoutpoint_status(prev_txid_rev=prev_txid_rev, txout_idx=txout_idx)
         # update status last sent to client
         prevout = (prev_txid_rev, txout_idx)
-        prev_height = status.get('funder_height')  # type: Optional[int]
-        spender_height = status.get('spender_height')  # type: Optional[int]
+        prev_height = status.prev_height
+        spender_height = status.spender_height
         if ((prev_height is not None and prev_height <= 0)
                 or (spender_height is not None and spender_height <= 0)):
             self.mempool_txoutpoint_statuses[prevout] = status
@@ -1615,7 +1619,8 @@ class ElectrumX(SessionBase):
         assert_hex_str(spk_hint)
         # calc status (but do not side-effect client-last-seen status)
         spend_status = await self._calc_txoutpoint_status(txid_rev, txout_idx)
-        return spend_status
+        d = self._convert_txospendstatus_to_protocol_dict(spend_status)
+        return d
 
     async def phandle_txoutpoint_subscribe(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint: str | Any) -> dict[str, Any]:
         '''Subscribe to an outpoint.
@@ -1629,7 +1634,8 @@ class ElectrumX(SessionBase):
         # calc status, update client-last-seen status, and sub to outpoint
         spend_status = await self.txoutpoint_status_for_notif(txid_rev, txout_idx)
         self.txoutpoint_subs.add((txid_rev, txout_idx))
-        return spend_status
+        d = self._convert_txospendstatus_to_protocol_dict(spend_status)
+        return d
 
     async def phandle_txoutpoint_unsubscribe(self, tx_hash: str | Any, txout_idx: int | Any) -> bool:
         '''Unsubscribe from an outpoint.'''

@@ -1475,21 +1475,21 @@ class ElectrumX(SessionBase):
 
     async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         self.bump_cost(0.2)
-        spend_status = await self._spender_for_txo(prev_txid_rev, txout_idx)
-        if spend_status.spender_height is not None:
+        oc_status = await self._spender_for_txo(prev_txid_rev, txout_idx)  # "on-chain" status
+        if oc_status.spender_height is not None:
             # TXO was created, was mined, was spent, and spend was mined.
-            assert spend_status.funder_height > 0
-            assert spend_status.spender_height > 0
-            assert spend_status.spender_txid_rev is not None
-        else:
-            mp_spend_status = await self.mempool.spender_for_txo(prev_txid_rev, txout_idx)
-            if mp_spend_status.funder_height is not None:
-                spend_status.funder_height = mp_spend_status.funder_height
-            if mp_spend_status.spender_height is not None:
-                spend_status.spender_height = mp_spend_status.spender_height
-            if mp_spend_status.spender_txid_rev is not None:
-                spend_status.spender_txid_rev = mp_spend_status.spender_txid_rev
-        return spend_status
+            assert oc_status.funder_height > 0
+            assert oc_status.spender_height > 0
+            assert oc_status.spender_txid_rev is not None
+            ret = oc_status
+        else:  # mempool is still relevant
+            mp_status = await self.mempool.spender_for_txo(prev_txid_rev, txout_idx)
+            ret = TXOSpendStatus(
+                funder_height=mp_status.funder_height or oc_status.funder_height,
+                spender_txid_rev=mp_status.spender_txid_rev or oc_status.spender_txid_rev,
+                spender_height=mp_status.spender_height or oc_status.spender_height,
+            )
+        return ret
 
     async def txoutpoint_status_for_notif(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         """Side-effect: updates client-last-seen status, used by notifications."""

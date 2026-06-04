@@ -1273,27 +1273,27 @@ class ElectrumX(SessionBase):
             changed = {}  # type: dict[str, Optional[str]]
 
             for hashX in touched_hashxs:
-                alias = self.hashX_subs.get(hashX)
-                if alias:
+                scripthash = self.hashX_subs.get(hashX)
+                if scripthash:
                     status = await self.subscription_address_status(hashX)
-                    changed[alias] = status
+                    changed[scripthash] = status
 
             # Check mempool hashXs - the status is a function of the confirmed state of
             # other transactions. (this is to detect if height changed from -1 to 0)
             mempool_hashX_statuses = self.mempool_hashX_statuses.copy()
             for hashX, old_status in mempool_hashX_statuses.items():
-                alias = self.hashX_subs.get(hashX)
-                if alias:
+                scripthash = self.hashX_subs.get(hashX)
+                if scripthash:
                     status = await self.subscription_address_status(hashX)
                     if status != old_status:
-                        changed[alias] = status
+                        changed[scripthash] = status
 
             if self.protocol_tuple >= (1, 7):
                 method = 'blockchain.scriptpubkey.subscribe'
             else:
                 method = 'blockchain.scripthash.subscribe'
-            for alias, status in changed.items():
-                await self.send_notification(method, (alias, status))
+            for scripthash, status in changed.items():
+                await self.send_notification(method, (scripthash, status))
                 cnt_sent += 1
             num_hashx_notifs_sent = len(changed)
 
@@ -1302,7 +1302,7 @@ class ElectrumX(SessionBase):
         touched_outpoints = touched_outpoints.intersection(self.txoutpoint_subs)
         if touched_outpoints or (height_changed and self.mempool_txoutpoint_statuses):
             method = 'blockchain.outpoint.subscribe'
-            txo_to_status = {}
+            txo_to_status = {}  # type: dict[tuple[bytes, int], dict[str, Any]]
             for prevout in touched_outpoints:
                 txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)
 
@@ -1314,13 +1314,14 @@ class ElectrumX(SessionBase):
                 if status != old_status:
                     txo_to_status[prevout] = status
 
-            for tx_hash, txout_idx in touched_outpoints:
-                spend_status = txo_to_status[(tx_hash, txout_idx)]
-                tx_hash_hex = hash_to_hex_str(tx_hash)
+            for txid_rev, txout_idx in touched_outpoints:
+                spend_status = txo_to_status[(txid_rev, txout_idx)]
+                tx_hash_hex = hash_to_hex_str(txid_rev)
                 await self.send_notification(method, (tx_hash_hex, txout_idx, spend_status))
                 cnt_sent += 1
             num_txo_notifs_sent = len(touched_outpoints)
 
+        # log (number of useful notifications we sent)
         if num_hashx_notifs_sent + num_txo_notifs_sent > 0:
             es1 = '' if num_hashx_notifs_sent == 1 else 'es'
             s2 = '' if num_txo_notifs_sent == 1 else 's'
@@ -1515,10 +1516,10 @@ class ElectrumX(SessionBase):
                 for utxo in utxos
                 if (utxo.txid_rev, utxo.tx_pos) not in spends]
 
-    async def hashX_subscribe(self, hashX: bytes, alias: str) -> Optional[str]:
+    async def hashX_subscribe(self, hashX: bytes, scripthash: str) -> Optional[str]:
         # Store the subscription only after address_status succeeds
         result = await self.address_status(hashX)
-        self.hashX_subs[hashX] = alias  # TODO rename alias to scripthash
+        self.hashX_subs[hashX] = scripthash
         return result
 
     async def get_balance(self, hashX: bytes) -> dict[str, Any]:

@@ -119,6 +119,9 @@ class TXOSpendStatus:
     spender_txid_rev: Optional[bytes] = None
     spender_height: Optional[int] = None
 
+    def __post_init__(self):
+        assert (self.spender_txid_rev is not None) == (self.spender_height is not None), (self.spender_txid_rev, self.spender_height)
+
 
 class Deserializer:
     '''Deserializes blocks into transactions.

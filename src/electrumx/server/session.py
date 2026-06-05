@@ -1485,9 +1485,9 @@ class ElectrumX(SessionBase):
         else:  # mempool is still relevant
             mp_status = await self.mempool.spender_for_txo(prev_txid_rev, txout_idx)
             ret = TXOSpendStatus(
-                funder_height=mp_status.funder_height or oc_status.funder_height,
-                spender_txid_rev=mp_status.spender_txid_rev or oc_status.spender_txid_rev,
-                spender_height=mp_status.spender_height or oc_status.spender_height,
+                funder_height=mp_status.funder_height if mp_status.funder_height is not None else oc_status.funder_height,
+                spender_txid_rev=mp_status.spender_txid_rev if mp_status.spender_txid_rev is not None else oc_status.spender_txid_rev,
+                spender_height=mp_status.spender_height if mp_status.spender_height is not None else oc_status.spender_height,
             )
         return ret
 

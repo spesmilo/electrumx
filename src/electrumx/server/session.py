@@ -1161,7 +1161,7 @@ class ElectrumX(SessionBase):
         self.hashX_subs = {}  # type: Dict[bytes, str]  # hashX -> scripthash
         self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]  # (txid_rev, txout_idx)
         self.mempool_hashX_statuses = {}  # type: Dict[bytes, str]
-        self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], Mapping[str, Any]]
+        self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], TXOSpendStatus]
         self.set_request_handlers(self.PROTOCOL_MIN)
         self.is_peer = False
         self.cost = 5.0   # Connection cost
@@ -1273,27 +1273,27 @@ class ElectrumX(SessionBase):
             changed = {}  # type: dict[str, Optional[str]]
 
             for hashX in touched_hashxs:
-                alias = self.hashX_subs.get(hashX)
-                if alias:
+                scripthash = self.hashX_subs.get(hashX)
+                if scripthash:
                     status = await self.subscription_address_status(hashX)
-                    changed[alias] = status
+                    changed[scripthash] = status
 
             # Check mempool hashXs - the status is a function of the confirmed state of
             # other transactions. (this is to detect if height changed from -1 to 0)
             mempool_hashX_statuses = self.mempool_hashX_statuses.copy()
             for hashX, old_status in mempool_hashX_statuses.items():
-                alias = self.hashX_subs.get(hashX)
-                if alias:
+                scripthash = self.hashX_subs.get(hashX)
+                if scripthash:
                     status = await self.subscription_address_status(hashX)
                     if status != old_status:
-                        changed[alias] = status
+                        changed[scripthash] = status
 
             if self.protocol_tuple >= (1, 7):
                 method = 'blockchain.scriptpubkey.subscribe'
             else:
                 method = 'blockchain.scripthash.subscribe'
-            for alias, status in changed.items():
-                await self.send_notification(method, (alias, status))
+            for scripthash, status in changed.items():
+                await self.send_notification(method, (scripthash, status))
                 cnt_sent += 1
             num_hashx_notifs_sent = len(changed)
 
@@ -1302,7 +1302,7 @@ class ElectrumX(SessionBase):
         touched_outpoints = touched_outpoints.intersection(self.txoutpoint_subs)
         if touched_outpoints or (height_changed and self.mempool_txoutpoint_statuses):
             method = 'blockchain.outpoint.subscribe'
-            txo_to_status = {}
+            txo_to_status = {}  # type: dict[tuple[bytes, int], TXOSpendStatus]
             for prevout in touched_outpoints:
                 txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)
 
@@ -1314,13 +1314,15 @@ class ElectrumX(SessionBase):
                 if status != old_status:
                     txo_to_status[prevout] = status
 
-            for tx_hash, txout_idx in touched_outpoints:
-                spend_status = txo_to_status[(tx_hash, txout_idx)]
-                tx_hash_hex = hash_to_hex_str(tx_hash)
-                await self.send_notification(method, (tx_hash_hex, txout_idx, spend_status))
+            for txid_rev, txout_idx in touched_outpoints:
+                spend_status = txo_to_status[(txid_rev, txout_idx)]
+                spend_status_dict = self._convert_txospendstatus_to_protocol_dict(spend_status)
+                tx_hash_hex = hash_to_hex_str(txid_rev)
+                await self.send_notification(method, (tx_hash_hex, txout_idx, spend_status_dict))
                 cnt_sent += 1
             num_txo_notifs_sent = len(touched_outpoints)
 
+        # log (number of useful notifications we sent)
         if num_hashx_notifs_sent + num_txo_notifs_sent > 0:
             es1 = '' if num_hashx_notifs_sent == 1 else 'es'
             s2 = '' if num_txo_notifs_sent == 1 else 's'
@@ -1420,7 +1422,7 @@ class ElectrumX(SessionBase):
             error, = e.args
             ecode = error['code']
             if ecode == -5:  # "No such mempool or blockchain transaction."
-                return TXOSpendStatus(prev_height=None)  # utxo never existed
+                return TXOSpendStatus(funder_height=None)  # utxo never existed
             self.logger.debug(f"getrawtransaction errored. {prev_txid_hum=}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None  # TODO some callers do not expect this
         assert prevtx_item.get("txid") == prev_txid_hum, f"{prevtx_item.get('txid')=} != {prev_txid_hum=}"
@@ -1429,12 +1431,12 @@ class ElectrumX(SessionBase):
         if funder_bhash is not None:
             funder_bheight = self.db.get_blockheight_from_blockhash(funder_bhash)
         if funder_bheight is None:  # if in mempool, will defer to mempool.spender_for_txo
-            return TXOSpendStatus(prev_height=None)  # utxo never existed (in chain)
+            return TXOSpendStatus(funder_height=None)  # utxo never existed (in chain)
         assert isinstance(funder_bheight, int)
         # ok, funding tx exists, does the requested output index also exist in this tx?
         vouts = prevtx_item.get("vout") or []
         if len(vouts) <= txout_idx:
-            return TXOSpendStatus(prev_height=None)  # txout_idx was out-of-bounds
+            return TXOSpendStatus(funder_height=None)  # txout_idx was out-of-bounds
         # by now we know the funding TXO existed in the chain. Let's see if it was spent.
         # 2. call bitcoind "gettxspendingprevout"
         self.bump_cost(1)
@@ -1450,51 +1452,54 @@ class ElectrumX(SessionBase):
         if spender_bhash is not None:
             spender_bheight = self.db.get_blockheight_from_blockhash(spender_bhash)
         if spender_bheight is None:  # if in mempool, will defer to mempool.spender_for_txo
-            return TXOSpendStatus(prev_height=funder_bheight)  # utxo funded but unspent (in-chain)
+            return TXOSpendStatus(funder_height=funder_bheight)  # utxo funded but unspent (in-chain)
         spender_txid = spender_item.get("spendingtxid")
         assert spender_txid is not None  # we already have a height!
         # utxo funded, and spent (in-chain)
         return TXOSpendStatus(
-            prev_height=funder_bheight,
+            funder_height=funder_bheight,
             spender_txid_rev=hex_str_to_hash(spender_txid),
             spender_height=spender_bheight,
         )
 
-    async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> Dict[str, Any]:
-        self.bump_cost(0.2)
-        spend_status = await self._spender_for_txo(prev_txid_rev, txout_idx)
-        if spend_status.spender_height is not None:
-            # TXO was created, was mined, was spent, and spend was mined.
-            assert spend_status.prev_height > 0
-            assert spend_status.spender_height > 0
-            assert spend_status.spender_txid_rev is not None
-        else:
-            mp_spend_status = await self.mempool.spender_for_txo(prev_txid_rev, txout_idx)
-            if mp_spend_status.prev_height is not None:
-                spend_status.prev_height = mp_spend_status.prev_height
-            if mp_spend_status.spender_height is not None:
-                spend_status.spender_height = mp_spend_status.spender_height
-            if mp_spend_status.spender_txid_rev is not None:
-                spend_status.spender_txid_rev = mp_spend_status.spender_txid_rev
+    def _convert_txospendstatus_to_protocol_dict(self, spend_status: 'TXOSpendStatus') -> dict[str, Any]:
         # convert to json dict the client expects
-        status = {}
-        if spend_status.prev_height is not None:
-            status['funder_height'] = spend_status.prev_height
+        d = {}
+        if spend_status.funder_height is not None:
+            d['funder_height'] = spend_status.funder_height
             if spend_status.spender_txid_rev is not None:
                 assert spend_status.spender_height is not None
-                status['spender_txhash'] = hash_to_hex_str(spend_status.spender_txid_rev)
-                status['spender_height'] = spend_status.spender_height
-        return status
+                d['spender_txhash'] = hash_to_hex_str(spend_status.spender_txid_rev)
+                d['spender_height'] = spend_status.spender_height
+        return d
 
-    async def txoutpoint_status_for_notif(self, prev_txid_rev: bytes, txout_idx: int) -> Dict[str, Any]:
+    async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
+        self.bump_cost(0.2)
+        oc_status = await self._spender_for_txo(prev_txid_rev, txout_idx)  # "on-chain" status
+        if oc_status.spender_height is not None:
+            # TXO was created, was mined, was spent, and spend was mined.
+            assert oc_status.funder_height > 0
+            assert oc_status.spender_height > 0
+            assert oc_status.spender_txid_rev is not None
+            ret = oc_status
+        else:  # mempool is still relevant
+            mp_status = await self.mempool.spender_for_txo(prev_txid_rev, txout_idx)
+            ret = TXOSpendStatus(
+                funder_height=mp_status.funder_height or oc_status.funder_height,
+                spender_txid_rev=mp_status.spender_txid_rev or oc_status.spender_txid_rev,
+                spender_height=mp_status.spender_height or oc_status.spender_height,
+            )
+        return ret
+
+    async def txoutpoint_status_for_notif(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         """Side-effect: updates client-last-seen status, used by notifications."""
         status = await self._calc_txoutpoint_status(prev_txid_rev=prev_txid_rev, txout_idx=txout_idx)
         # update status last sent to client
         prevout = (prev_txid_rev, txout_idx)
-        prev_height = status.get('funder_height')  # type: Optional[int]
-        spender_height = status.get('spender_height')  # type: Optional[int]
-        if ((prev_height is not None and prev_height <= 0)
-                or (spender_height is not None and spender_height <= 0)):
+        fh = status.funder_height
+        sh = status.spender_height
+        if ((fh is not None and fh <= 0)
+                or (sh is not None and sh <= 0)):
             self.mempool_txoutpoint_statuses[prevout] = status
         else:
             self.mempool_txoutpoint_statuses.pop(prevout, None)
@@ -1515,10 +1520,10 @@ class ElectrumX(SessionBase):
                 for utxo in utxos
                 if (utxo.txid_rev, utxo.tx_pos) not in spends]
 
-    async def hashX_subscribe(self, hashX: bytes, alias: str) -> Optional[str]:
+    async def hashX_subscribe(self, hashX: bytes, scripthash: str) -> Optional[str]:
         # Store the subscription only after address_status succeeds
         result = await self.address_status(hashX)
-        self.hashX_subs[hashX] = alias  # TODO rename alias to scripthash
+        self.hashX_subs[hashX] = scripthash
         return result
 
     async def get_balance(self, hashX: bytes) -> dict[str, Any]:
@@ -1614,7 +1619,8 @@ class ElectrumX(SessionBase):
         assert_hex_str(spk_hint)
         # calc status (but do not side-effect client-last-seen status)
         spend_status = await self._calc_txoutpoint_status(txid_rev, txout_idx)
-        return spend_status
+        d = self._convert_txospendstatus_to_protocol_dict(spend_status)
+        return d
 
     async def phandle_txoutpoint_subscribe(self, tx_hash: str | Any, txout_idx: int | Any, spk_hint: str | Any) -> dict[str, Any]:
         '''Subscribe to an outpoint.
@@ -1628,7 +1634,8 @@ class ElectrumX(SessionBase):
         # calc status, update client-last-seen status, and sub to outpoint
         spend_status = await self.txoutpoint_status_for_notif(txid_rev, txout_idx)
         self.txoutpoint_subs.add((txid_rev, txout_idx))
-        return spend_status
+        d = self._convert_txospendstatus_to_protocol_dict(spend_status)
+        return d
 
     async def phandle_txoutpoint_unsubscribe(self, tx_hash: str | Any, txout_idx: int | Any) -> bool:
         '''Unsubscribe from an outpoint.'''

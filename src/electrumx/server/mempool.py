@@ -529,28 +529,28 @@ class MemPool:
         prev_tx = self.txs.get(prev_txid_rev, None)
         if prev_tx is None:
             # funding tx already mined or never existed
-            prev_height = None
+            funder_height = None
         else:
             if len(prev_tx.out_pairs) <= txout_idx:
                 # output idx out of bounds...?
-                return TXOSpendStatus(prev_height=None)
+                return TXOSpendStatus(funder_height=None)
             prev_has_ui = any(hash in self.txs for hash, idx in prev_tx.prevouts)
-            prev_height = -prev_has_ui
+            funder_height = -prev_has_ui
         prevout = (prev_txid_rev, txout_idx)
         # look up spending tx
         spender_txid_rev = self.txo_to_spender.get(prevout, None)
         if spender_txid_rev is None:
-            return TXOSpendStatus(prev_height=prev_height)
+            return TXOSpendStatus(funder_height=funder_height)
         spender_tx = self.txs.get(spender_txid_rev, None)
         if spender_tx is None:
             self.logger.warning(f"spender_tx {hash_to_hex_str(spender_txid_rev)} not in"
                                 f"mempool, but txo_to_spender referenced it as spender "
                                 f"of {hash_to_hex_str(prev_txid_rev)}:{txout_idx} ?!")
-            return TXOSpendStatus(prev_height=prev_height)
-        spender_has_ui = any(hash in self.txs for hash, idx in spender_tx.prevouts)
+            return TXOSpendStatus(funder_height=funder_height)
+        spender_has_ui = any(txid_rev in self.txs for txid_rev, idx in spender_tx.prevouts)
         spender_height = -spender_has_ui
         return TXOSpendStatus(
-            prev_height=prev_height,
+            funder_height=funder_height,
             spender_txid_rev=spender_txid_rev,
             spender_height=spender_height,
         )

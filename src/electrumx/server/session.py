@@ -1264,6 +1264,13 @@ class ElectrumX(SessionBase):
                 f"sub_count: sh={self.sub_count_scripthashes()}, txo={self.sub_count_txoutpoints()}."
             )
             raise GracefulDisconnect from e
+        except RPCError as e:
+            self.logger.warning(
+                f"RPCError while notifying client, closing... "
+                f"sub_count: sh={self.sub_count_scripthashes()}, txo={self.sub_count_txoutpoints()}. "
+                f"RPCError: {e}"
+            )
+            raise GracefulDisconnect from e
 
     async def _notify_inner(
             self,
@@ -1320,13 +1327,13 @@ class ElectrumX(SessionBase):
             method = 'blockchain.outpoint.subscribe'
             txo_to_status = {}  # type: dict[tuple[bytes, int], TXOSpendStatus]
             for prevout in touched_outpoints:
-                txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)
+                txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)  # can raise RPCError
 
             # Check mempool TXOs - the status is a function of the confirmed state of
             # other transactions. (this is to detect if height changed from -1 to 0)
             mempool_txoutpoint_statuses = self.mempool_txoutpoint_statuses.copy()
             for prevout, old_status in mempool_txoutpoint_statuses.items():
-                status = await self.txoutpoint_status_for_notif(*prevout)
+                status = await self.txoutpoint_status_for_notif(*prevout)  # can raise RPCError
                 if status != old_status:
                     txo_to_status[prevout] = status
 
@@ -1382,6 +1389,7 @@ class ElectrumX(SessionBase):
         '''Returns an address status.
 
         Status is a hex string, but must be None if there is no history.
+        Can raise RPCError.
         Side-effect: updates client-last-seen status, used by notifications.
         '''
         # Note both confirmed history and mempool history are ordered
@@ -1428,6 +1436,8 @@ class ElectrumX(SessionBase):
         However, mempool events are ignored, as it would be difficult to distinguish block height 0 vs -1
         using only the daemon. Instead, our own mempool data (as opposed to bitcoind's) can be used
         separately to enrich the return value.
+
+        Can raise RPCError.
         """
         prev_txid_hum = hash_to_hex_str(prev_txid_rev)
         # 1. call bitcoind "getrawtransaction" to see if prevtx exists/is_mined
@@ -1440,7 +1450,7 @@ class ElectrumX(SessionBase):
             if ecode == -5:  # "No such mempool or blockchain transaction."
                 return TXOSpendStatus(funder_height=None)  # utxo never existed
             self.logger.debug(f"getrawtransaction errored. {prev_txid_hum=}. {error=}")
-            raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None  # TODO some callers do not expect this
+            raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None
         assert prevtx_item.get("txid") == prev_txid_hum, f"{prevtx_item.get('txid')=} != {prev_txid_hum=}"
         funder_bhash = prevtx_item.get("blockhash")
         funder_bheight = None  # type: Optional[int]
@@ -1461,7 +1471,7 @@ class ElectrumX(SessionBase):
         except DaemonError as e:
             error, = e.args
             self.logger.debug(f"gettxspendingprevout errored. txo={prev_txid_hum}:{txout_idx}. {error=}")
-            raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None  # TODO some callers do not expect this
+            raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None
         assert spender_item.get("txid") == prev_txid_hum, f"{spender_item.get('txid')=} != {prev_txid_hum=}"
         spender_bhash = spender_item.get("blockhash")
         spender_bheight = None
@@ -1490,6 +1500,7 @@ class ElectrumX(SessionBase):
         return d
 
     async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
+        """Can raise RPCError"""
         self.bump_cost(0.2)
         oc_status = await self._spender_for_txo(prev_txid_rev, txout_idx)  # "on-chain" status
         if oc_status.spender_height is not None:
@@ -1508,7 +1519,9 @@ class ElectrumX(SessionBase):
         return ret
 
     async def txoutpoint_status_for_notif(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
-        """Side-effect: updates client-last-seen status, used by notifications."""
+        """Can raise RPCError
+        Side-effect: updates client-last-seen status, used by notifications.
+        """
         status = await self._calc_txoutpoint_status(prev_txid_rev=prev_txid_rev, txout_idx=txout_idx)
         # update status last sent to client
         prevout = (prev_txid_rev, txout_idx)
@@ -1647,8 +1660,10 @@ class ElectrumX(SessionBase):
         txid_rev = assert_txid_hum(tx_hash)
         txout_idx = non_negative_integer(txout_idx)
         assert_hex_str(spk_hint)
-        # calc status, update client-last-seen status, and sub to outpoint
+        # calc status, update client-last-seen status.
+        # if we can't calc the status, as e.g. bitcoind errors, don't add the subscription
         spend_status = await self.txoutpoint_status_for_notif(txid_rev, txout_idx)
+        # sub to outpoint
         self.txoutpoint_subs.add((txid_rev, txout_idx))
         d = self._convert_txospendstatus_to_protocol_dict(spend_status)
         return d

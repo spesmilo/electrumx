@@ -120,6 +120,10 @@ def assert_list_or_tuple(value: Any) -> None:
         raise RPCError(BAD_REQUEST, f'{value} should be a list')
 
 
+class GracefulDisconnect(Exception):
+    pass
+
+
 @dataclass(slots=True)
 class SessionGroup:
     name: str
@@ -899,15 +903,21 @@ class SessionManager:
                 del cache[hashX]
 
         for session in self.sessions:
-            if self._task_group.joined:  # this can happen during shutdown
-                self.logger.warning(f"task group already terminated. not notifying sessions.")
-                return
+            if session.taskgroup.joined:
+                continue  # session already being closed, skip it
+            # we run this in session.taskgroup, so raising will result in disconnecting just that session:
             coro = session.notify(
                 touched_hashxs=touched_hashxs,
                 touched_outpoints=touched_outpoints,
                 height_changed=height_changed,
             )
-            await self._task_group.spawn(coro)
+            try:
+                await session.taskgroup.spawn(coro)
+            except RuntimeError:
+                if session.taskgroup.joined:
+                    pass  # race: task group terminated just after we checked it before spawning
+                else:
+                    raise
 
     def _ip_addr_group_name(self, session) -> Optional[str]:
         host = session.remote_address().host
@@ -984,6 +994,8 @@ class RPCSessionWithTaskGroup(RPCSession):
         try:
             async with self.taskgroup as group:
                 await group.spawn(asyncio.Event().wait)  # run forever (until cancel)
+        except GracefulDisconnect as e:
+            pass
         except Exception as e:
             self.logger.exception("taskgroup died.")
         finally:
@@ -1235,7 +1247,10 @@ class ElectrumX(SessionBase):
             touched_outpoints: Set[Tuple[bytes, int]],
             height_changed: bool,
     ):
-        '''Wrap _notify_inner; websockets raises exceptions for unclear reasons.'''
+        """Send notifications.
+        If we raise, we will disconnect from just this session.
+        (websockets raise exceptions for unclear reasons?)
+        """
         try:
             async with timeout_after(30):
                 await self._notify_inner(
@@ -1243,11 +1258,12 @@ class ElectrumX(SessionBase):
                     touched_outpoints=touched_outpoints,
                     height_changed=height_changed,
                 )
-        except TaskTimeout:
-            self.logger.warning('timeout notifying client, closing...')
-            await self.close(force_after=1.0)
-        except Exception:
-            self.logger.exception('unexpected exception notifying client')
+        except TaskTimeout as e:
+            self.logger.warning(
+                f"timeout notifying client, closing... "
+                f"sub_count: sh={self.sub_count_scripthashes()}, txo={self.sub_count_txoutpoints()}."
+            )
+            raise GracefulDisconnect from e
 
     async def _notify_inner(
             self,

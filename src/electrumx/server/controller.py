@@ -172,6 +172,8 @@ class Controller(ServerBase):
             await daemon.height()
 
             # Check if daemon is recent enough
+            # note: we only check the first daemon
+            #       (DAEMON_URL might be set to a list of daemons)
             await daemon.check_daemon_version()
             await daemon.check_daemon_indexes()
 

@@ -357,7 +357,12 @@ class SessionManager:
     def _get_info(self) -> dict[str, Any]:
         '''A summary of server state.'''
         def cache_fmt(cache: LRUCache):
-            return f"{cache.num_lookups} lookups, {cache.num_hits} hits, {len(cache)} entries"
+            return (
+                f"{cache.num_lookups} lookups, "
+                f"{cache.num_hits} hits, "
+                f"{len(cache)} entries, "
+                f"hitrate {cache.num_hits/(cache.num_lookups or 1):.4f}"
+            )
         sessions = self.sessions
         return {
             'caches': {

@@ -361,6 +361,7 @@ class SessionManager:
         sessions = self.sessions
         return {
             'caches': {
+                'estimatefee': cache_fmt(self.estimatefee_cache),
                 'history': cache_fmt(self._history_cache),
                 'merkle txid': cache_fmt(self._merkle_txid_cache),
                 'txids': cache_fmt(self._txids_cache),
@@ -1887,9 +1888,11 @@ class ElectrumX(SessionBase):
         cache = self.session_mgr.estimatefee_cache
 
         cache_item = cache.get((number, mode))
+        cache.num_lookups += 1
         if cache_item is not None:
             blockhash, feerate, lock = cache_item
             if blockhash and blockhash == self.session_mgr.bp.tip:
+                cache.num_hits += 1
                 return feerate
         else:
             # create lock now, store it, and only then await on it
@@ -1900,6 +1903,7 @@ class ElectrumX(SessionBase):
             if cache_item is not None:
                 blockhash, feerate, lock = cache_item
                 if blockhash == self.session_mgr.bp.tip:
+                    cache.num_hits += 1
                     return feerate
             self.bump_cost(2.0)  # cache miss incurs extra cost
             blockhash = self.session_mgr.bp.tip

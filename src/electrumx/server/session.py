@@ -1429,7 +1429,7 @@ class ElectrumX(SessionBase):
             self.unsubscribe_hashX(hashX)
             return None
 
-    async def _spender_for_txo(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
+    async def _calc_oc_txo_status(self, funder_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         """For an outpoint, returns its spend-status (ignoring mempool events).
 
         Uses daemon (bitcoind) to find the spender_txhash, requiring "txospenderindex=1".
@@ -1439,20 +1439,20 @@ class ElectrumX(SessionBase):
 
         Can raise RPCError.
         """
-        prev_txid_hum = hash_to_hex_str(prev_txid_rev)
+        funder_txid_hum = hash_to_hex_str(funder_txid_rev)
         # 1. call bitcoind "getrawtransaction" to see if prevtx exists/is_mined
         self.bump_cost(1)
         try:
-            prevtx_item = await self.session_mgr.daemon.getrawtransaction(prev_txid_hum, verbose=True)  # verbose=int(1)
+            funder_item = await self.session_mgr.daemon.getrawtransaction(funder_txid_hum, verbose=True)  # verbose=int(1)
         except DaemonError as e:
             error, = e.args
             ecode = error['code']
             if ecode == -5:  # "No such mempool or blockchain transaction."
                 return TXOSpendStatus(funder_height=None)  # utxo never existed
-            self.logger.debug(f"getrawtransaction errored. {prev_txid_hum=}. {error=}")
+            self.logger.debug(f"getrawtransaction errored. {funder_txid_hum=}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None
-        assert prevtx_item.get("txid") == prev_txid_hum, f"{prevtx_item.get('txid')=} != {prev_txid_hum=}"
-        funder_bhash = prevtx_item.get("blockhash")
+        assert funder_item.get("txid") == funder_txid_hum, f"{funder_item.get('txid')=} != {funder_txid_hum=}"
+        funder_bhash = funder_item.get("blockhash")
         funder_bheight = None  # type: Optional[int]
         if funder_bhash is not None:
             funder_bheight = self.db.get_blockheight_from_blockhash(funder_bhash)
@@ -1460,19 +1460,19 @@ class ElectrumX(SessionBase):
             return TXOSpendStatus(funder_height=None)  # utxo never existed (in chain)
         assert isinstance(funder_bheight, int)
         # ok, funding tx exists, does the requested output index also exist in this tx?
-        vouts = prevtx_item.get("vout") or []
+        vouts = funder_item.get("vout") or []
         if len(vouts) <= txout_idx:
             return TXOSpendStatus(funder_height=None)  # txout_idx was out-of-bounds
         # by now we know the funding TXO existed in the chain. Let's see if it was spent.
         # 2. call bitcoind "gettxspendingprevout"
         self.bump_cost(1)
         try:
-            spender_item = await self.session_mgr.daemon.gettxspendingprevout(prev_txid_hum, txout_idx)
+            spender_item = await self.session_mgr.daemon.gettxspendingprevout(funder_txid_hum, txout_idx)
         except DaemonError as e:
             error, = e.args
-            self.logger.debug(f"gettxspendingprevout errored. txo={prev_txid_hum}:{txout_idx}. {error=}")
+            self.logger.debug(f"gettxspendingprevout errored. txo={funder_txid_hum}:{txout_idx}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None
-        assert spender_item.get("txid") == prev_txid_hum, f"{spender_item.get('txid')=} != {prev_txid_hum=}"
+        assert spender_item.get("txid") == funder_txid_hum, f"{spender_item.get('txid')=} != {funder_txid_hum=}"
         spender_bhash = spender_item.get("blockhash")
         spender_bheight = None
         if spender_bhash is not None:
@@ -1502,7 +1502,7 @@ class ElectrumX(SessionBase):
     async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         """Can raise RPCError"""
         self.bump_cost(0.2)
-        oc_status = await self._spender_for_txo(prev_txid_rev, txout_idx)  # "on-chain" status
+        oc_status = await self._calc_oc_txo_status(prev_txid_rev, txout_idx)  # "on-chain" status
         if oc_status.spender_height is not None:
             # TXO was created, was mined, was spent, and spend was mined.
             assert oc_status.funder_height > 0

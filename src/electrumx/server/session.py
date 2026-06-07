@@ -186,6 +186,7 @@ class SessionManager:
             tuple[int, str | None],
             tuple[bytes | None, float | None, asyncio.Lock]
         ] = LRUCache(maxsize=1000)
+        self.oc_txo_status_cache = LRUCache(maxsize=1000)  # type: LRUCache[tuple[bytes, int], TXOSpendStatus]
         self.notified_height = None
         self.hsub_results = None
         self._task_group = OldTaskGroup()
@@ -322,7 +323,8 @@ class SessionManager:
             await self.bp.backed_up_event.wait()
             self.logger.info(f'reorg signalled; clearing txids and merkle caches')
             self._reorg_count += 1
-            # not: history_cache is cleared in _notify_sessions
+            # note: history_cache is cleared in _notify_sessions
+            # note: txo_status_cache is cleared in _notify_sessions
             self._txids_cache.clear()
             self._merkle_txid_cache.clear()
 
@@ -365,6 +367,7 @@ class SessionManager:
             'groups': len(self.session_groups),
             'history cache': cache_fmt(self._history_cache),
             'merkle txid cache': cache_fmt(self._merkle_txid_cache),
+            'txo status cache': cache_fmt(self.oc_txo_status_cache),
             'pid': os.getpid(),
             'peers': self.peer_mgr.info(),
             'request counts': self._method_counts,
@@ -898,9 +901,11 @@ class SessionManager:
         if height_changed:
             await self._refresh_hsub_results(height)
             # Invalidate our history cache for touched hashXs
-            cache = self._history_cache
-            for hashX in set(cache).intersection(touched_hashxs):
-                del cache[hashX]
+            for hashX in set(self._history_cache).intersection(touched_hashxs):
+                del self._history_cache[hashX]
+            # Invalidate our txo-status cache for touched outpoints
+            for txo in set(self.oc_txo_status_cache).intersection(touched_outpoints):
+                del self.oc_txo_status_cache[txo]
 
         for session in self.sessions:
             if session.taskgroup.joined:
@@ -1429,7 +1434,7 @@ class ElectrumX(SessionBase):
             self.unsubscribe_hashX(hashX)
             return None
 
-    async def _spender_for_txo(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
+    async def _calc_oc_txo_status(self, funder_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         """For an outpoint, returns its spend-status (ignoring mempool events).
 
         Uses daemon (bitcoind) to find the spender_txhash, requiring "txospenderindex=1".
@@ -1439,20 +1444,20 @@ class ElectrumX(SessionBase):
 
         Can raise RPCError.
         """
-        prev_txid_hum = hash_to_hex_str(prev_txid_rev)
+        funder_txid_hum = hash_to_hex_str(funder_txid_rev)
         # 1. call bitcoind "getrawtransaction" to see if prevtx exists/is_mined
         self.bump_cost(1)
         try:
-            prevtx_item = await self.session_mgr.daemon.getrawtransaction(prev_txid_hum, verbose=True)  # verbose=int(1)
+            funder_item = await self.session_mgr.daemon.getrawtransaction(funder_txid_hum, verbose=True)  # verbose=int(1)
         except DaemonError as e:
             error, = e.args
             ecode = error['code']
             if ecode == -5:  # "No such mempool or blockchain transaction."
                 return TXOSpendStatus(funder_height=None)  # utxo never existed
-            self.logger.debug(f"getrawtransaction errored. {prev_txid_hum=}. {error=}")
+            self.logger.debug(f"getrawtransaction errored. {funder_txid_hum=}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None
-        assert prevtx_item.get("txid") == prev_txid_hum, f"{prevtx_item.get('txid')=} != {prev_txid_hum=}"
-        funder_bhash = prevtx_item.get("blockhash")
+        assert funder_item.get("txid") == funder_txid_hum, f"{funder_item.get('txid')=} != {funder_txid_hum=}"
+        funder_bhash = funder_item.get("blockhash")
         funder_bheight = None  # type: Optional[int]
         if funder_bhash is not None:
             funder_bheight = self.db.get_blockheight_from_blockhash(funder_bhash)
@@ -1460,19 +1465,23 @@ class ElectrumX(SessionBase):
             return TXOSpendStatus(funder_height=None)  # utxo never existed (in chain)
         assert isinstance(funder_bheight, int)
         # ok, funding tx exists, does the requested output index also exist in this tx?
-        vouts = prevtx_item.get("vout") or []
+        vouts = funder_item.get("vout") or []
         if len(vouts) <= txout_idx:
             return TXOSpendStatus(funder_height=None)  # txout_idx was out-of-bounds
         # by now we know the funding TXO existed in the chain. Let's see if it was spent.
         # 2. call bitcoind "gettxspendingprevout"
         self.bump_cost(1)
         try:
-            spender_item = await self.session_mgr.daemon.gettxspendingprevout(prev_txid_hum, txout_idx)
+            spender_item = await self.session_mgr.daemon.gettxspendingprevout(funder_txid_hum, txout_idx)
         except DaemonError as e:
             error, = e.args
-            self.logger.debug(f"gettxspendingprevout errored. txo={prev_txid_hum}:{txout_idx}. {error=}")
+            self.logger.debug(f"gettxspendingprevout errored. txo={funder_txid_hum}:{txout_idx}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None
-        assert spender_item.get("txid") == prev_txid_hum, f"{spender_item.get('txid')=} != {prev_txid_hum=}"
+        assert spender_item.get("txid") == funder_txid_hum, f"{spender_item.get('txid')=} != {funder_txid_hum=}"
+        # paranoia: check if funder tx got reorged while we were awaiting bitcoind RPC
+        if self.db.get_blockheight_from_blockhash(funder_bhash) is None:
+            raise RPCError(BAD_REQUEST,
+                           f'tx {funder_txid_hum} was reorged while processing request')  # TODO maybe retry?
         spender_bhash = spender_item.get("blockhash")
         spender_bheight = None
         if spender_bhash is not None:
@@ -1501,8 +1510,18 @@ class ElectrumX(SessionBase):
 
     async def _calc_txoutpoint_status(self, prev_txid_rev: bytes, txout_idx: int) -> 'TXOSpendStatus':
         """Can raise RPCError"""
-        self.bump_cost(0.2)
-        oc_status = await self._spender_for_txo(prev_txid_rev, txout_idx)  # "on-chain" status
+        self.bump_cost(0.1)
+        prevout = (prev_txid_rev, txout_idx)
+        # first, consider only on-chain mined events, and check cache first (to avoid bitcoind RPC calls)
+        self.session_mgr.oc_txo_status_cache.num_lookups += 1
+        try:
+            oc_status = self.session_mgr.oc_txo_status_cache[prevout]
+            self.session_mgr.oc_txo_status_cache.num_hits += 1
+        except KeyError:
+            oc_status = await self._calc_oc_txo_status(prev_txid_rev, txout_idx)  # "on-chain" status
+            self.session_mgr.oc_txo_status_cache[prevout] = oc_status
+        assert oc_status is not None
+        # let's see if we also need to consider the mempool
         if oc_status.spender_height is not None:
             # TXO was created, was mined, was spent, and spend was mined.
             assert oc_status.funder_height > 0
@@ -1510,6 +1529,7 @@ class ElectrumX(SessionBase):
             assert oc_status.spender_txid_rev is not None
             ret = oc_status
         else:  # mempool is still relevant
+            self.bump_cost(0.1)
             mp_status = await self.mempool.spender_for_txo(prev_txid_rev, txout_idx)
             ret = TXOSpendStatus(
                 funder_height=mp_status.funder_height if mp_status.funder_height is not None else oc_status.funder_height,

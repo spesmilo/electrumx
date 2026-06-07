@@ -360,14 +360,17 @@ class SessionManager:
             return f"{cache.num_lookups} lookups, {cache.num_hits} hits, {len(cache)} entries"
         sessions = self.sessions
         return {
+            'caches': {
+                'history': cache_fmt(self._history_cache),
+                'merkle txid': cache_fmt(self._merkle_txid_cache),
+                'txids': cache_fmt(self._txids_cache),
+                'txo status': cache_fmt(self.oc_txo_status_cache),
+            },
             'coin': self.env.coin.__name__,
             'daemon': self.daemon.logged_url(),
             'daemon height': self.daemon.cached_height(),
             'db height': self.db.db_height,
             'groups': len(self.session_groups),
-            'history cache': cache_fmt(self._history_cache),
-            'merkle txid cache': cache_fmt(self._merkle_txid_cache),
-            'txo status cache': cache_fmt(self.oc_txo_status_cache),
             'pid': os.getpid(),
             'peers': self.peer_mgr.info(),
             'request counts': self._method_counts,
@@ -383,7 +386,6 @@ class SessionManager:
                 'subs_sh': sum(s.sub_count_scripthashes() for s in sessions),
                 'subs_txo': sum(s.sub_count_txoutpoints() for s in sessions),
             },
-            'txids cache': cache_fmt(self._txids_cache),
             'txs sent': self.txs_sent,
             'uptime': util.formatted_time(time.time() - self.start_time),
             'version': electrumx.version,

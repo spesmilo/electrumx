@@ -860,12 +860,12 @@ class SessionManager:
 
     async def broadcast_transaction(self, raw_tx: str) -> str:
         txid_hum = await self.daemon.broadcast_transaction(raw_tx)
-        self.txs_sent += 1
+        self.txs_sent += 1  # bump counter for Manager
         return txid_hum
 
     async def broadcast_package(self, tx_package: Sequence[str]) -> dict:
         result = await self.daemon.broadcast_package(tx_package)
-        self.txs_sent += len(tx_package)
+        self.txs_sent += len(tx_package)  # bump counter for Manager
         return result
 
     async def limited_history(self, hashX: bytes) -> tuple[Sequence[tuple[bytes, int]], float]:

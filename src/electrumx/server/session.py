@@ -1473,6 +1473,10 @@ class ElectrumX(SessionBase):
             self.logger.debug(f"gettxspendingprevout errored. txo={funder_txid_hum}:{txout_idx}. {error=}")
             raise RPCError(DAEMON_ERROR, f'daemon error: {error!r}') from None
         assert spender_item.get("txid") == funder_txid_hum, f"{spender_item.get('txid')=} != {funder_txid_hum=}"
+        # paranoia: check if funder tx got reorged while we were awaiting bitcoind RPC
+        if self.db.get_blockheight_from_blockhash(funder_bhash) is None:
+            raise RPCError(BAD_REQUEST,
+                           f'tx {funder_txid_hum} was reorged while processing request')  # TODO maybe retry?
         spender_bhash = spender_item.get("blockhash")
         spender_bheight = None
         if spender_bhash is not None:

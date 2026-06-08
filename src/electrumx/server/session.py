@@ -198,7 +198,7 @@ class SessionManager:
         # Set up the RPC request handlers
         cmds = ('add_peer daemon_url disconnect getinfo groups log peers '
                 'query reorg sessions stop debug_memusage_list_all_objects '
-                'debug_memusage_get_random_backref_chain'.split())
+                'debug_memusage_get_random_backref_chain inspect_session'.split())
         LocalRPC.request_handlers = {cmd: getattr(self, 'rpc_' + cmd)
                                      for cmd in cmds}
 
@@ -565,6 +565,27 @@ class SessionManager:
     async def rpc_getinfo(self):
         '''Return summary information about the server process.'''
         return self._get_info()
+
+    async def rpc_inspect_session(self, session_id: int) -> dict[str, Any]:
+        """Inspect a given currently connected client session."""
+        assert isinstance(session_id, int), repr(session_id)
+        sessions_by_id = {session.session_id: session for session in self.sessions}
+        if (s := sessions_by_id.get(session_id)) is None:
+            raise RPCError(BAD_REQUEST, f'no session with id={session_id}')
+        if not isinstance(s, ElectrumX):
+            raise RPCError(BAD_REQUEST, f'session with id={session_id} is not a client session, but {type(s)}')
+        return {
+            'client_name': s.client,
+            'request counts': s._method_counts,
+            'request total': sum(s._method_counts.values()),
+            'subs_sh': s.sub_count_scripthashes(),
+            'subs_txo': s.sub_count_txoutpoints(),
+            'errors': s.errors,
+            'is_logged': s.log_me,
+            'pending requests': s.unanswered_request_count(),
+            'txs sent': s.txs_sent,
+            'conn_time': util.formatted_time(time.time() - s.start_time),
+        }
 
     async def rpc_groups(self):
         '''Return statistics about the session groups.'''
@@ -1074,6 +1095,7 @@ class SessionBase(RPCSessionWithTaskGroup):
         self.logger = util.ConnectionLogger(logger, context)
         self.logger.info(f'{self.kind} {self.remote_address_string()}, '
                          f'{self.session_mgr.session_count():,d} total')
+        self._method_counts = defaultdict(int)
         self.session_mgr.add_session(self)
         self.recalc_concurrency()  # must be called after session_mgr.add_session
 
@@ -1147,6 +1169,7 @@ class SessionBase(RPCSessionWithTaskGroup):
         if method != 'server.version' and not self.sv_negotiated.is_set():
             await self.sv_negotiated.wait()
 
+        self._method_counts[method] += 1
         self.session_mgr._method_counts[method] += 1
         coro = handler_invocation(handler, request)()
         return await coro

@@ -198,7 +198,7 @@ class SessionManager:
         # Set up the RPC request handlers
         cmds = ('add_peer daemon_url disconnect getinfo groups log peers '
                 'query reorg sessions stop debug_memusage_list_all_objects '
-                'debug_memusage_get_random_backref_chain'.split())
+                'debug_memusage_get_random_backref_chain inspect_session'.split())
         LocalRPC.request_handlers = {cmd: getattr(self, 'rpc_' + cmd)
                                      for cmd in cmds}
 
@@ -404,7 +404,7 @@ class SessionManager:
         return [(session.session_id,
                  session.flags(),
                  session.remote_address_string(for_log=for_log),
-                 session.client,
+                 session.client_shortname(),
                  session.protocol_version_string(),
                  session.cost,
                  session.extra_cost(),
@@ -565,6 +565,27 @@ class SessionManager:
     async def rpc_getinfo(self):
         '''Return summary information about the server process.'''
         return self._get_info()
+
+    async def rpc_inspect_session(self, session_id: int) -> dict[str, Any]:
+        """Inspect a given currently connected client session."""
+        assert isinstance(session_id, int), repr(session_id)
+        sessions_by_id = {session.session_id: session for session in self.sessions}
+        if (s := sessions_by_id.get(session_id)) is None:
+            raise RPCError(BAD_REQUEST, f'no session with id={session_id}')
+        if not isinstance(s, ElectrumX):
+            raise RPCError(BAD_REQUEST, f'session with id={session_id} is not a client session, but {type(s)}')
+        return {
+            'client_name': s.client_longname,
+            'request counts': s._method_counts,
+            'request total': sum(s._method_counts.values()),
+            'subs_sh': s.sub_count_scripthashes(),
+            'subs_txo': s.sub_count_txoutpoints(),
+            'errors': s.errors,
+            'is_logged': s.log_me,
+            'pending requests': s.unanswered_request_count(),
+            'txs sent': s.txs_sent,
+            'conn_time': util.formatted_time(time.time() - s.start_time),
+        }
 
     async def rpc_groups(self):
         '''Return statistics about the session groups.'''
@@ -1060,7 +1081,7 @@ class SessionBase(RPCSessionWithTaskGroup):
         self.kind = kind  # 'RPC', 'TCP' etc.
         self.env = session_mgr.env
         self.coin = self.env.coin
-        self.client = 'unknown'
+        self.client_longname = 'unknown'
         self.sv_seen = False  # has seen 'server.version' message?
         self.sv_negotiated = asyncio.Event()  # done negotiating protocol version
         self.anon_logs = self.env.anon_logs
@@ -1074,8 +1095,12 @@ class SessionBase(RPCSessionWithTaskGroup):
         self.logger = util.ConnectionLogger(logger, context)
         self.logger.info(f'{self.kind} {self.remote_address_string()}, '
                          f'{self.session_mgr.session_count():,d} total')
+        self._method_counts = defaultdict(int)
         self.session_mgr.add_session(self)
         self.recalc_concurrency()  # must be called after session_mgr.add_session
+
+    def client_shortname(self):
+        return self.client_longname[:17]
 
     async def notify(
             self,
@@ -1147,6 +1172,7 @@ class SessionBase(RPCSessionWithTaskGroup):
         if method != 'server.version' and not self.sv_negotiated.is_set():
             await self.sv_negotiated.wait()
 
+        self._method_counts[method] += 1
         self.session_mgr._method_counts[method] += 1
         coro = handler_invocation(handler, request)()
         return await coro
@@ -1158,14 +1184,14 @@ class SessionBase(RPCSessionWithTaskGroup):
             self, ptuple: Optional[tuple[int, ...]], crash_client_ver: Optional[tuple[int, ...]],
     ) -> None:
         if crash_client_ver:
-            client_ver = util.protocol_tuple(self.client)
+            client_ver = util.protocol_tuple(self.client_longname)
             is_old_protocol = ptuple is None or ptuple <= (1, 2)
             is_old_client = client_ver != (0,) and client_ver <= crash_client_ver
             if is_old_protocol and is_old_client:
                 await self._do_crash_old_electrum_client()
 
     async def _do_crash_old_electrum_client(self):
-        self.logger.info(f'attempting to crash old client with version {self.client}')
+        self.logger.info(f'attempting to crash old client with version {self.client_shortname()}')
         # this can crash electrum client 2.6 <= v < 3.1.2
         await self.send_notification('blockchain.relayfee', ())
         # this can crash electrum client (v < 2.8.2) UNION (3.0.0 <= v < 3.3.0)
@@ -1976,7 +2002,7 @@ class ElectrumX(SessionBase):
                     self.env.drop_client.match(client_name):
                 raise ReplyAndDisconnect(RPCError(
                     BAD_REQUEST, f'unsupported client: {client_name}'))
-            self.client = client_name[:17]
+            self.client_longname = client_name[:100]
 
         # Find the highest common protocol version.  Disconnect if
         # that protocol version in unsupported.
@@ -2014,12 +2040,12 @@ class ElectrumX(SessionBase):
                            f'network rules.\n\n{message}\n[{raw_tx}]')
         else:
             self.txs_sent += 1
-            client_ver = util.protocol_tuple(self.client)
+            client_ver = util.protocol_tuple(self.client_longname)
             if client_ver != (0, ):
                 msg = self.coin.warn_old_client_on_tx_broadcast(client_ver)
                 if msg:
                     self.logger.info(f'sent tx: {txid_hum}. and warned user to upgrade their '
-                                     f'client from {self.client}')
+                                     f'client from {self.client_shortname()}')
                     return msg
 
             self.logger.info(f'sent tx: {txid_hum}')
@@ -2228,7 +2254,7 @@ class LocalRPC(SessionBase):
         super().__init__(*args, **kwargs)
         self.sv_seen = True
         self.sv_negotiated.set()
-        self.client = 'RPC'
+        self.client_longname = 'RPC'
         self.connection.max_response_size = 0
         # note: self.request_handlers are set on the class, in SessionManager.__init__
         self.notification_handlers = {}

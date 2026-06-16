@@ -705,7 +705,7 @@ class DB:
     async def all_utxos(self, hashX: bytes) -> Sequence[UTXO]:
         '''Return all UTXOs for an address sorted in no particular order.'''
         def read_utxos():
-            utxos = []
+            utxos = []  # type: list[UTXO]
             utxos_append = utxos.append
             # Key: b'u' + address_hashX + txout_idx + tx_num
             # Value: the UTXO value as a 64-bit unsigned integer

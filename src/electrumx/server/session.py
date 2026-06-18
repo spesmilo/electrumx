@@ -1738,7 +1738,13 @@ class ElectrumX(SessionBase):
         self.bump_cost(cost)
         conf = [{'tx_hash': hash_to_hex_str(txid_rev), 'height': height}
                 for txid_rev, height in history]
-        return conf + await self.unconfirmed_history(hashX)
+        unconf = await self.unconfirmed_history(hashX)
+        # note: the same tx could appear both in conf and unconf, if it was *just* mined.
+        #       For protocol 1.7, this race is eliminated due to @retry_on_chain_sync_error(check_chaintip=True),
+        #       which ensures (self.notified_height == db.db_height).
+        #       Even for older protocol, _history_cache makes this race extremely unlikely: it could only happen
+        #       if we *also* get a cache-miss (but the cache is only cleared when notified_height is updated).
+        return conf + unconf
 
     async def phandle_scripthash_get_history(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the confirmed and unconfirmed history of a scripthash.'''

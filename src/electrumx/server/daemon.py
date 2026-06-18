@@ -73,6 +73,7 @@ class Daemon:
         self.init_retry = init_retry
         self.max_retry = max_retry
         self._height = None
+        self.height_changed = asyncio.Event()
         self.available_rpcs = {}
         self.session = None
 
@@ -394,6 +395,8 @@ class Daemon:
         self._height = await self._send_single('getblockcount')
         if old_height != self._height:
             self.logger.debug(f"new height: {self._height}")
+            self.height_changed.set()
+            self.height_changed.clear()
         return self._height
 
     def cached_height(self) -> Optional[int]:

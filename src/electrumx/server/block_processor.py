@@ -13,7 +13,7 @@ import asyncio
 import time
 from typing import Sequence, Tuple, List, Callable, Optional, TYPE_CHECKING, Type, Set
 
-from aiorpcx import run_in_thread, CancelledError
+from aiorpcx import run_in_thread, CancelledError, ignore_after
 
 import electrumx
 from electrumx.server.daemon import DaemonError, Daemon
@@ -73,7 +73,10 @@ class Prefetcher:
                 # Sleep a while if there is nothing to prefetch
                 await self.refill_event.wait()
                 if not await self._prefetch_blocks():
-                    await asyncio.sleep(self.polling_delay)
+                    # The mempool logic and maybe others can independently notice the daemon's height
+                    # changing. If that happens, we should wake up immediately to fetch blocks.
+                    async with ignore_after(self.polling_delay):
+                        await self.daemon.height_changed.wait()
             except DaemonError as e:
                 self.logger.info(f'ignoring daemon error: {e}')
             except asyncio.CancelledError as e:

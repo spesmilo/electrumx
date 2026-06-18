@@ -390,7 +390,10 @@ class Daemon:
 
     async def height(self) -> int:
         '''Query the daemon for its current height.'''
+        old_height = self._height
         self._height = await self._send_single('getblockcount')
+        if old_height != self._height:
+            self.logger.debug(f"new height: {self._height}")
         return self._height
 
     def cached_height(self) -> Optional[int]:

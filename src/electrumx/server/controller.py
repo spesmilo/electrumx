@@ -148,6 +148,7 @@ class Controller(ServerBase):
                 return db.db_height
             notifications.height = daemon.height
             notifications.db_height = get_db_height
+            notifications.db_height_changed = db.db_flushed_event.wait
             notifications.cached_height = daemon.cached_height
             notifications.mempool_txids_hum = daemon.mempool_txids_hum
             notifications.raw_transactions = daemon.getrawtransactions

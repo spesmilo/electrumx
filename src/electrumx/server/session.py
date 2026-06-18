@@ -161,7 +161,7 @@ def retry_on_chain_sync_error(func=None, *, check_chaintip: bool):
     async def handle_chain_sync_error(self: 'ElectrumX', *args, **kw_args):
         session_mgr = self.session_mgr
         sleeps = [0, 0.5, 2.5, 5, 10]
-        for sleep_time in sleeps:
+        for attempt, sleep_time in enumerate(sleeps):
             if sleep_time != 0:
                 # A previous attempt failed. Sleep a bit before retrying. If the height changes, try again right away.
                 async with ignore_after(sleep_time):
@@ -177,7 +177,7 @@ def retry_on_chain_sync_error(func=None, *, check_chaintip: bool):
                     raise ChainSyncError(message="chaintip moved while processing request")
             except ChainSyncError as e:
                 self.bump_cost(0.1)  # paranoia: maybe client can force ChainSyncError due to logic bug
-                self.logger.debug(f"got {e!r} while processing request: {func}. retrying.")
+                self.logger.debug(f"got {e!r} while processing request: {func}. retrying ({attempt=}).")
                 continue  # try again
             assert chaintip1 == chaintip2
             return res

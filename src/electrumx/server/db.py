@@ -11,6 +11,7 @@
 
 from array import array
 import ast
+import asyncio
 import os
 import time
 from bisect import bisect_right
@@ -126,6 +127,7 @@ class DB:
         self.wall_time = 0
         self.first_sync = True
         self.db_version = -1
+        self.db_flushed_event = asyncio.Event()
 
         self.logger.info(f'using {self.env.db_engine} for DB backend')
 
@@ -301,6 +303,9 @@ class DB:
                              f'since last flush: {tx_per_sec_last:,d}')
             self.logger.info(f'sync time: {formatted_time(self.wall_time)}  '
                              f'ETA: {formatted_time(eta)}')
+
+        self.db_flushed_event.set()
+        self.db_flushed_event.clear()
 
     def flush_fs(self, flush_data):
         '''Write headers, tx counts and block tx hashes to the filesystem.

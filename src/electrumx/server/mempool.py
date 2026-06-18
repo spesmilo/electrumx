@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict, Optional, Set, Iterable
 import math
 
-from aiorpcx import run_in_thread, sleep
+from aiorpcx import run_in_thread, sleep, ignore_after
 
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
 from electrumx.lib.tx import SkipTxDeserialize
@@ -74,6 +74,10 @@ class MemPoolAPI(ABC):
     @abstractmethod
     def db_height(self) -> int:
         '''Return the height flushed to the on-disk DB.'''
+
+    @abstractmethod
+    async def db_height_changed(self) -> None:
+        '''Wait until the on-disk DB height changes.'''
 
     @abstractmethod
     async def mempool_txids_hum(self) -> Sequence[str]:
@@ -316,7 +320,9 @@ class MemPool:
                 )
                 touched_hashxs = set()
                 touched_outpoints = set()
-            await sleep(self.refresh_secs)
+            # poll bitcoind's whole mempool every few seconds; or instantly after the DB height changes
+            async with ignore_after(self.refresh_secs):
+                await self.api.db_height_changed()
 
     async def _process_mempool(
             self,

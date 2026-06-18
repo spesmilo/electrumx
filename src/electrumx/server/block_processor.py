@@ -449,6 +449,7 @@ class BlockProcessor:
         self.tip = self.coin.header_hash_rev(headers[-1])
         self.tip_advanced_event.set()
         self.tip_advanced_event.clear()
+        self.logger.debug(f"new height: {self.height}")
 
     def advance_txs(
             self,

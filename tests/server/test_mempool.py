@@ -1,3 +1,4 @@
+import asyncio
 import dataclasses
 import datetime
 import logging
@@ -218,6 +219,9 @@ class API(MemPoolAPI):
 
     def db_height(self):
         return self._db_height
+
+    async def db_height_changed(self) -> None:
+        await asyncio.Event().wait()  # wait forever: fall back to polling
 
     def cached_height(self):
         return self._cached_height

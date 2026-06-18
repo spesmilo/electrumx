@@ -444,6 +444,7 @@ class SessionManager:
         raw = await self.raw_header(height)
         self.hsub_results = {'hex': raw.hex(), 'height': height}
         self.notified_height = height
+        self.logger.debug(f"new notified_height: {self.notified_height}")
 
     def _session_references(self, items: Iterable[str] | Any, special_strings):
         '''Return a SessionReferences object.'''

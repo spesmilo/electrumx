@@ -13,7 +13,7 @@ import itertools
 import time
 from calendar import timegm
 from struct import pack
-from typing import TYPE_CHECKING, Type, Sequence
+from typing import TYPE_CHECKING, Type, Sequence, Any, Iterable, Optional
 
 import aiohttp
 from aiorpcx import JSONRPC
@@ -73,6 +73,7 @@ class Daemon:
         self.init_retry = init_retry
         self.max_retry = max_retry
         self._height = None
+        self.height_changed = asyncio.Event()
         self.available_rpcs = {}
         self.session = None
 
@@ -108,7 +109,21 @@ class Daemon:
         if daemon_version < required_version:
             raise RuntimeError(f"Bitcoin Core {daemon_version=} < {required_version=}.")
 
-    def set_url(self, url):
+    async def check_daemon_indexes(self):
+        assert self.session is not None and self.coin is not None, f"{self.session=}, {self.coin=}"
+        if not self.coin.REQUIRED_DAEMON_INDEXES:
+            return
+        index_info = await self.getindexinfo()
+        for req_index in self.coin.REQUIRED_DAEMON_INDEXES:
+            if req_index not in index_info:
+                raise RuntimeError(
+                    f"bitcoind missing required index: {req_index}. "
+                    f"You should set {req_index}=1 in your bitcoin.conf config file, and reindex.")
+            if not index_info[req_index]["synced"]:
+                # Should we raise? Not raising allows syncing a fresh bitcoind and e-x "in parallel".
+                self.logger.warning(f"bitcoind required index {req_index!r} is still syncing!")
+
+    def set_url(self, url: str) -> None:
         '''Set the URLS to the given list, and switch to the first one.'''
         urls = url.split(',')
         urls = [self.coin.sanitize_url(url) for url in urls]
@@ -119,7 +134,7 @@ class Daemon:
         self.url_index = 0
         self.urls = urls
 
-    def current_url(self):
+    def current_url(self) -> str:
         '''Returns the current daemon URL.'''
         return self.urls[self.url_index]
 
@@ -241,7 +256,7 @@ class Daemon:
             return await self._send(payload, processor)
         return []
 
-    async def _is_rpc_available(self, method):
+    async def _is_rpc_available(self, method: str) -> bool:
         '''Return whether given RPC method is available in the daemon.
 
         Results are cached and the daemon will generally not be queried with
@@ -258,23 +273,23 @@ class Daemon:
             self.available_rpcs[method] = available
         return available
 
-    async def block_hex_hashes(self, first, count) -> Sequence[str]:
-        '''Return the hex hashes of count block starting at height first.'''
+    async def block_hex_hashes(self, first: int, count: int) -> Sequence[str]:
+        '''Return the hex hashes (hum) of count block starting at height first.'''
         params_iterable = ((h, ) for h in range(first, first + count))
         return await self._send_vector('getblockhash', params_iterable)
 
-    async def deserialised_block(self, hex_hash):
+    async def deserialised_block(self, bhash_hum: str) -> dict:
         '''Return the deserialised block with the given hex hash.'''
-        return await self._send_single('getblock', (hex_hash, True))
+        return await self._send_single('getblock', (bhash_hum, True))
 
-    async def raw_blocks(self, hex_hashes: Sequence[str]) -> Sequence[bytes]:
+    async def raw_blocks(self, bhashes_hum: Sequence[str]) -> Sequence[bytes]:
         '''Return the raw binary blocks with the given hex hashes.'''
-        params_iterable = ((h, False) for h in hex_hashes)
+        params_iterable = ((h, False) for h in bhashes_hum)
         blocks = await self._send_vector('getblock', params_iterable)
         # Convert hex string to bytes
         return [hex_to_bytes(block) for block in blocks]
 
-    async def mempool_hashes(self):
+    async def mempool_txids_hum(self) -> Sequence[str]:
         '''Update our record of the daemon's mempool hashes.'''
         return await self._send_single('getrawmempool')
 
@@ -312,6 +327,11 @@ class Daemon:
             self._mempoolinfo_cache = (val, time.time())
             return val
 
+    async def getindexinfo(self):
+        """Return the result of the 'getindexinfo' RPC call."""
+        # note: not cached as it's not exposed to client sessions
+        return await self._send_single('getindexinfo')
+
     async def relayfee(self):
         """Same as getmempoolinfo['minrelaytxfee'].
         The minimum fee required for a transaction to be relayed on by the daemon to the
@@ -332,23 +352,30 @@ class Daemon:
             'incrementalrelayfee': mempool_info['incrementalrelayfee'],
         }
 
-    async def getrawtransaction(self, hex_hash, verbose=False):
+    async def getrawtransaction(self, txid_hum: str, verbose=False):
         '''Return the serialized raw transaction with the given hash.'''
         # Cast to int because some coin daemons are old and require it
         return await self._send_single('getrawtransaction',
-                                       (hex_hash, int(verbose)))
+                                       (txid_hum, int(verbose)))
 
-    async def getrawtransactions(self, hex_hashes, replace_errs=True):
+    async def getrawtransactions(self, txids_hum: Iterable[str], replace_errs=True) -> Sequence[bytes | None]:
         '''Return the serialized raw transactions with the given hashes.
 
         Replaces errors with None by default.'''
-        params_iterable = ((hex_hash, 0) for hex_hash in hex_hashes)
+        params_iterable = ((txid_hum, 0) for txid_hum in txids_hum)
         txs = await self._send_vector('getrawtransaction', params_iterable,
                                       replace_errs=replace_errs)
         # Convert hex strings to bytes
         return [hex_to_bytes(tx) if tx else None for tx in txs]
 
-    async def broadcast_transaction(self, raw_tx):
+    async def gettxspendingprevout(self, prev_txid_hum: str, txout_idx: int) -> dict[str, Any]:
+        """Query the daemon to find (if any) the spender of given outpoint."""
+        outpoints = [{"txid": prev_txid_hum, "vout": txout_idx}, ]
+        options = {"mempool_only": False}
+        tx_items = await self._send_single('gettxspendingprevout', (outpoints, options))
+        return tx_items[0]
+
+    async def broadcast_transaction(self, raw_tx: str) -> str:
         '''Broadcast a transaction to the network.'''
         return await self._send_single('sendrawtransaction', (raw_tx, ))
 
@@ -356,12 +383,23 @@ class Daemon:
         """Broadcast a package of transactions to the network using 'submitpackage'."""
         return await self._send_single('submitpackage', (raw_txs, ))
 
-    async def height(self):
+    async def testmempoolaccept(self, raw_txs: Sequence[str]):
+        """Query the daemon to test mempool acceptance of txs,
+        without adding them to the mempool or broadcasting them.
+        """
+        return await self._send_single('testmempoolaccept', (raw_txs, ))
+
+    async def height(self) -> int:
         '''Query the daemon for its current height.'''
+        old_height = self._height
         self._height = await self._send_single('getblockcount')
+        if old_height != self._height:
+            self.logger.debug(f"new height: {self._height}")
+            self.height_changed.set()
+            self.height_changed.clear()
         return self._height
 
-    def cached_height(self):
+    def cached_height(self) -> Optional[int]:
         '''Return the cached daemon height.
 
         If the daemon has not been queried yet this returns None.'''
@@ -406,9 +444,9 @@ class LegacyRPCDaemon(Daemon):
     as in the underlying blockchain but it is good enough for our indexing
     purposes.'''
 
-    async def raw_blocks(self, hex_hashes):
+    async def raw_blocks(self, bhashes_hum):
         '''Return the raw binary blocks with the given hex hashes.'''
-        params_iterable = ((h, ) for h in hex_hashes)
+        params_iterable = ((h, ) for h in bhashes_hum)
         block_info = await self._send_vector('getblock', params_iterable)
 
         blocks = []
@@ -462,10 +500,10 @@ class FakeEstimateLegacyRPCDaemon(LegacyRPCDaemon, FakeEstimateFeeDaemon):
 
 
 class DecredDaemon(Daemon):
-    async def raw_blocks(self, hex_hashes):
+    async def raw_blocks(self, bhashes_hum):
         '''Return the raw binary blocks with the given hex hashes.'''
 
-        params_iterable = ((h, False) for h in hex_hashes)
+        params_iterable = ((h, False) for h in bhashes_hum)
         blocks = await self._send_vector('getblock', params_iterable)
 
         raw_blocks = []
@@ -480,7 +518,7 @@ class DecredDaemon(Daemon):
             valid_tx_tree[prev] = self.is_valid_tx_tree(votebits)
 
         processed_raw_blocks = []
-        for hash, raw_block in zip(hex_hashes, raw_blocks):
+        for hash, raw_block in zip(bhashes_hum, raw_blocks):
             if hash in valid_tx_tree:
                 is_valid = valid_tx_tree[hash]
             else:
@@ -527,8 +565,8 @@ class DecredDaemon(Daemon):
             self._height = height
         return height
 
-    async def mempool_hashes(self):
-        mempool = await super().mempool_hashes()
+    async def mempool_txids_hum(self):
+        mempool = await super().mempool_txids_hum()
         # Add current tip transactions to the 'fake' mempool.
         real_height = await self._send_single('getblockcount')
         tip_hash = await self._send_single('getblockhash', (real_height,))
@@ -580,9 +618,9 @@ class ZcoinMtpDaemon(Daemon):
                 raw_block[self.coin.MTP_HEADER_DATA_END*2:]
         return raw_block
 
-    async def raw_blocks(self, hex_hashes):
+    async def raw_blocks(self, bhashes_hum):
         '''Return the raw binary blocks with the given hex hashes.'''
-        params_iterable = ((h, False) for h in hex_hashes)
+        params_iterable = ((h, False) for h in bhashes_hum)
         blocks = await self._send_vector('getblock', params_iterable)
         # Convert hex string to bytes
         return [hex_to_bytes(self.strip_mtp_data(block)) for block in blocks]

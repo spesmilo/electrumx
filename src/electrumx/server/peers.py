@@ -14,7 +14,7 @@ import ssl
 import time
 from collections import Counter, defaultdict
 from ipaddress import IPv4Address, IPv6Address
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Type, Any, Optional
 from functools import partial
 
 import aiohttp
@@ -419,16 +419,20 @@ class PeerManager:
         result = await session.send_request(message)
         assert_good(message, result, dict)
 
+        # Compare heights.
+        MAX_TIP_HEIGHT_DIFF = 5
         our_height = self.db.db_height
         their_height = result.get('height')
         if not isinstance(their_height, int):
             raise BadPeerError(f'invalid height {their_height}')
-        if abs(our_height - their_height) > 5:
+        if abs(our_height - their_height) > MAX_TIP_HEIGHT_DIFF:
             raise BadPeerError(f'bad height {their_height:,d} '
                                f'(ours: {our_height:,d})')
 
         # Check prior header too in case of hard fork.
-        check_height = min(our_height, their_height)
+        # Allow short chain-splits. On Bitcoin testnet4, <6 block splits and reorgs are *very* common.
+        MAX_CHAINSPLIT_LEN = 10
+        check_height = max(0, min(our_height, their_height) - MAX_CHAINSPLIT_LEN)
         raw_header = await self.db.raw_header(check_height)
         ours = raw_header.hex()
         message = 'blockchain.block.header'
@@ -519,7 +523,7 @@ class PeerManager:
         '''Add a peer passed by the admin over LocalRPC.'''
         await self._note_peers([Peer.from_real_name(real_name, 'RPC')], check_ports=True)
 
-    async def on_add_peer(self, features, source_addr):
+    async def on_add_peer(self, features: dict[str, Any] | Any, source_addr: Optional[str]):
         '''Add a peer (but only if the peer resolves to the source).'''
         if self.env.peer_discovery != self.env.PD_ON:
             return False

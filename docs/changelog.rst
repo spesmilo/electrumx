@@ -2,6 +2,76 @@
  ChangeLog
 ===========
 
+Version 2.0 (not yet released)
+==============================
+
+TODO expand
+
+* Breaking changes to on-disk database. Server operators need to manually delete old DB,
+  no migration path. New DB will be rebuilt while rescanning again from genesis.
+
+   - in return, no more manual "history compaction" and unexpected downtimes every year:
+     no more "DB::flush_count overflow" (`spesmilo/electrumx#88`_)
+   - the size of the new DB is comparable to the old one, however:
+
+* We now require Bitcoin Core to have `txospenderindex=1` (added in Bitcoin Core 31)
+  in addition to `txindex=1`.  This is needed to serve the `blockchain.outpoint.subscribe` RPC
+  added in Electrum Protocol 1.7.
+
+  For reference, on Bitcoin mainnet around height=950k,
+
+   - the ElectrumX db uses around 122 GiB (using LevelDB, roughly same for both of e-x 1.x and 2.0),
+      - note: using RocksDB 9, it is a bit smaller, around 106 GiB
+   - `.bitcoin/blocks/` uses 788 GiB,
+   - `.bitcoin/chainstate/` uses 12 GiB,
+   - `.bitcoin/indexes/txindex/` uses 66 GiB,
+   - `.bitcoin/indexes/txospenderindex/` uses 88 GiB (new!)
+
+  - This also means that we now require Bitcoin Core 31.0 or newer (for `COIN=Bitcoin`).
+
+* env: the previously optional envvar `DB_ENGINE`, is now mandatory.
+
+  - choose either `leveldb` or `rocksdb`
+  - in ElectrumX 1.x versions, the default was leveldb.
+
+  You need to install the appropriate dependencies for your engine, see the `[leveldb]` and
+  `[rocksdb]` pip extras and the "Database Engine" section of the HOWTO.
+
+  Previously RocksDB was difficult to use as the python bindings for it have been unmaintained for years.
+  By the super-slop-powers of LLMs, we revived the python bindings and made it compatible with modern
+  cpython, cython, and rocksdb. The changes are reviewable and not really slop. (see `spesmilo/electrumx#347`_)
+
+  LevelDB was written with HDDs in mind. RocksDB is more modern
+  and on an SSD takes around ~25% less time than LevelDB to sync from genesis.
+  Given that this release contains breaking DB changes and a resync is needed anyway, maybe try out RocksDB :)
+
+* protocol:
+   - new: implement electrum protocol version 1.7  (`spesmilo/electrum-protocol#2`_).
+     The min supported protocol version remains 1.4, the max is now 1.7.
+
+
+Version 1.20.0 (03 June 2026)
+=============================
+
+Small fixes and general maintenance.
+
+After this release, the master branch will move towards a 2.0 release, which will require
+a resync from genesis. So for a while, master might be less stable than usual.
+
+* fix: lib/tx.py: vsize calculation was off by 6-8 vbytes (`spesmilo/electrumx#328`_).
+  Added tests. The discrepancy was externally observable via the `mempool.get_fee_histogram` RPC.
+* fix: don't get stuck during shutdown waiting for SessionManager to stop (`spesmilo/electrumx#339`_)
+* fix: protocol: name of arg for broadcast_package RPC: tx_package->raw_txs (`c9b72e7e`_)
+* changed: peer discovery: allow short chain splits (`spesmilo/electrumx#351`_)
+* changed: rm 'attrs' as a direct dependency, use stdlib `dataclasses` instead (`spesmilo/electrumx#345`_)
+* new: daemon: check early "txindex" is enabled for bitcoind, error if missing (`spesmilo/electrumx#349`_)
+* new: coins: add Bitcoin mutinynet (`spesmilo/electrumx#352`_)
+* maintenance: coins: some clean-up (`spesmilo/electrumx#344`_, `spesmilo/electrumx#348`_, ...)
+* maintenance: moved CI from Cirrus CI to Github Actions (`spesmilo/electrumx#340`_)
+
+(We also made some changes to make RocksDB practical and nicer to use, but if you currently use LevelDB,
+maybe consider waiting for 2.0 before you resync the DB)
+
 
 Version 1.19.0 (11 Nov 2025)
 =============================
@@ -276,6 +346,7 @@ This fork maintained by:
 .. _#67:  https://github.com/spesmilo/electrumx/pull/67
 .. _#70:  https://github.com/spesmilo/electrumx/pull/70
 .. _spesmilo/electrumx#75:  https://github.com/spesmilo/electrumx/pull/75
+.. _spesmilo/electrumx#88:  https://github.com/spesmilo/electrumx/issues/88
 .. _spesmilo/electrumx#122:  https://github.com/spesmilo/electrumx/pull/122
 .. _spesmilo/electrumx#248:  https://github.com/spesmilo/electrumx/pull/248
 .. _spesmilo/electrumx#273:  https://github.com/spesmilo/electrumx/pull/273
@@ -287,6 +358,16 @@ This fork maintained by:
 .. _spesmilo/electrumx#322:  https://github.com/spesmilo/electrumx/pull/322
 .. _spesmilo/electrumx#323:  https://github.com/spesmilo/electrumx/pull/323
 .. _spesmilo/electrumx#326:  https://github.com/spesmilo/electrumx/pull/326
+.. _spesmilo/electrumx#328:  https://github.com/spesmilo/electrumx/pull/328
+.. _spesmilo/electrumx#339:  https://github.com/spesmilo/electrumx/pull/339
+.. _spesmilo/electrumx#340:  https://github.com/spesmilo/electrumx/pull/340
+.. _spesmilo/electrumx#344:  https://github.com/spesmilo/electrumx/pull/344
+.. _spesmilo/electrumx#345:  https://github.com/spesmilo/electrumx/pull/345
+.. _spesmilo/electrumx#347:  https://github.com/spesmilo/electrumx/pull/347
+.. _spesmilo/electrumx#348:  https://github.com/spesmilo/electrumx/pull/348
+.. _spesmilo/electrumx#349:  https://github.com/spesmilo/electrumx/pull/349
+.. _spesmilo/electrumx#351:  https://github.com/spesmilo/electrumx/pull/351
+.. _spesmilo/electrumx#352:  https://github.com/spesmilo/electrumx/pull/352
 
 
 .. _4b3f6510:  https://github.com/spesmilo/electrumx/commit/4b3f6510e94670a013c1abe6247cdd2b0e7e6f8c
@@ -301,7 +382,9 @@ This fork maintained by:
 .. _5f4dd2cd:  https://github.com/spesmilo/electrumx/commit/5f4dd2cdb414464484407affbbaae6b7407696cb
 .. _f5582b29:  https://github.com/spesmilo/electrumx/commit/f5582b29792625e8cca7cf137a6718c2520bb9cb
 .. _0ba87447:  https://github.com/spesmilo/electrumx/commit/0ba87447cb293cfc4a8a26c1c27842b95666875a
+.. _c9b72e7e:  https://github.com/spesmilo/electrumx/commit/c9b72e7ea76bfb706b2df3e90c739116bf49678d
 
 
+.. _spesmilo/electrum-protocol#2:  https://github.com/spesmilo/electrum-protocol/pull/2
 .. _spesmilo/electrum-protocol#6:  https://github.com/spesmilo/electrum-protocol/pull/6
 

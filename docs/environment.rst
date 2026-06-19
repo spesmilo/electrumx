@@ -30,6 +30,17 @@ These environment variables are always required:
   relative to the parent process working directory.  This is the
   directory of the `run` script if you use it.
 
+.. envvar:: DB_ENGINE
+
+  Database engine for the UTXO and history database.
+  Choose one of ``leveldb`` or ``rocksdb``.
+  You will need to install the appropriate python package for your engine.
+  In ElectrumX 1.x versions, the default was leveldb.
+  Warning: It is not possible to switch back and forth,
+  the on-disk DB formats are not compatible with each other: you have to resync from genesis.
+  LevelDB was written with HDDs in mind. RocksDB is more modern
+  and on an SSD takes around ~25% less time than LevelDB to sync from genesis.
+
 .. envvar:: DAEMON_URL
 
   A comma-separated list of daemon URLs.  If more than one is provided
@@ -203,13 +214,6 @@ These environment variables are optional:
 
   Must be a :envvar:`NET` from one of the **Coin** classes in
   `lib/coins.py`_.  Defaults to ``mainnet``.
-
-.. envvar:: DB_ENGINE
-
-  Database engine for the UTXO and history database.  The default is
-  ``leveldb``.  The other alternative is ``rocksdb``.  You will need
-  to install the appropriate python package for your engine.  The
-  value is not case sensitive.
 
 .. envvar:: DONATION_ADDRESS
 

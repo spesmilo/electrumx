@@ -16,6 +16,7 @@ BASE_DB_DIR = '/some/dir'
 
 base_environ = {
     'DB_DIRECTORY': BASE_DB_DIR,
+    'DB_ENGINE': 'rocksdb',
     'DAEMON_URL': BASE_DAEMON_URL,
     'COIN': 'BitcoinSV',
 }
@@ -307,7 +308,20 @@ def test_DONATION_ADDRESS():
 
 
 def test_DB_ENGINE():
-    assert_default('DB_ENGINE', 'db_engine', 'leveldb')
+    assert_required('DB_ENGINE')
+    setup_base_env()
+
+    os.environ['DB_ENGINE'] = "rocksdb"
+    e = Env()
+    assert e.db_engine == "rocksdb"
+
+    os.environ['DB_ENGINE'] = "leveldb"
+    e = Env()
+    assert e.db_engine == "leveldb"
+
+    os.environ['DB_ENGINE'] = "custom-something"
+    with pytest.raises(Env.Error):
+        e = Env()
 
 
 def test_MAX_SEND():

@@ -41,7 +41,6 @@ def _does_coin_require_testcase(coin: Coin) -> bool:
         return False
     # legacy whitelist: these coins do not have tests. FIXME
     if coin in [
-        coins.Bitcoin,
         coins.BitcoinCash,
         coins.Viacoin,
         coins.Argentum,
@@ -95,15 +94,15 @@ def test_block(block_details):
     block = coin.block(raw_block, block_info['height'])
 
     try:
-        assert coin.header_hash(
+        assert coin.header_hash_rev(
             block.header) == hex_str_to_hash(block_info['hash'])
     except ImportError as e:
         pytest.skip(str(e))
-    assert (coin.header_prevhash(block.header)
+    assert (coin.header_prevhash_rev(block.header)
             == hex_str_to_hash(block_info['previousblockhash']))
     assert len(block_info['tx']) == len(block.transactions)
     for n, tx in enumerate(block.transactions):
-        assert tx.txid == hex_str_to_hash(block_info['tx'][n])
+        assert tx.txid_rev == hex_str_to_hash(block_info['tx'][n])
 
 
 def test_all_coins_are_covered():

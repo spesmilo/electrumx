@@ -483,7 +483,7 @@ class DeserializerAxe(Deserializer):
             locktime=locktime,
             tx_type=tx_type,
             extra_payload=extra_payload,
-            txid=txid,
-            wtxid=txid,
+            txid_rev=txid,
+            wtxid_rev=txid,
         )
         return tx

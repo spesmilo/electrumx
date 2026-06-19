@@ -10,18 +10,16 @@ authors = [
 description = "Server implementation for the Electrum protocol"
 keywords = ["asyncio", "bitcoin", "electrum", "electrum-server"]
 readme = "README.md"
-license = {'file'="LICENSE"}
+license = "MIT"
+license-files = ["LICENCE"]
 requires-python = ">=3.10"
 dependencies = [
     "aiorpcx[ws]>=0.25.0,<0.26",
-    "attrs",  # TODO try to use stdlib dataclasses instead
-    "plyvel",
     "aiohttp>=3.3,<4",
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Framework :: AsyncIO",
-    "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: Unix",
     "Programming Language :: Python :: 3.10",
@@ -37,18 +35,21 @@ Repository = "https://github.com/spesmilo/electrumx"
 [project.scripts]
 electrumx_server = "electrumx.cli.electrumx_server:main"
 electrumx_rpc = "electrumx.cli.electrumx_rpc:main"
-electrumx_compact_history = "electrumx.cli.electrumx_compact_history:main"
 
 [tool.setuptools.dynamic]
 version = { attr = 'electrumx.__version__' }
 
 [project.optional-dependencies]
-dev = [
-    "objgraph",
+# DB_ENGINE choices. The user MUST install at least one.
+leveldb = [
+    "plyvel",
 ]
 rocksdb = [
-    "python-rocksdb>=0.6.9",
-    "Cython<3.0",
+    "rocksdb-ng",  # Felix's fork. ref https://github.com/f321x/python-rocksdb
+]
+# misc
+dev = [
+    "objgraph",
 ]
 rapidjson = [
     "python-rapidjson>=0.4.1,<2.0",

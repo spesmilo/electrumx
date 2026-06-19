@@ -6,6 +6,7 @@
 # and warranty status of this software.
 
 from asyncio import Event
+from typing import Set, Dict, Tuple
 
 from aiorpcx import _version as aiorpcx_version
 
@@ -31,43 +32,83 @@ class Notifications:
     # notifications appropriately.
 
     def __init__(self):
-        self._touched_mp = {}
-        self._touched_bp = {}
+        self._touched_hashxs_mp = {}  # type: Dict[int, Set[bytes]]
+        self._touched_hashxs_bp = {}  # type: Dict[int, Set[bytes]]
+        self._touched_outpoints_mp = {}  # type: Dict[int, Set[Tuple[bytes, int]]]
+        self._touched_outpoints_bp = {}  # type: Dict[int, Set[Tuple[bytes, int]]]
         self._highest_block = -1
 
     async def _maybe_notify(self):
-        tmp, tbp = self._touched_mp, self._touched_bp
-        common = set(tmp).intersection(tbp)
-        if common:
-            height = max(common)
-        elif tmp and max(tmp) == self._highest_block:
+        th_mp, th_bp = self._touched_hashxs_mp, self._touched_hashxs_bp
+        # figure out block height
+        common_heights = set(th_mp).intersection(th_bp)
+        if common_heights:
+            height = max(common_heights)
+        elif th_mp and max(th_mp) == self._highest_block:
             height = self._highest_block
         else:
             # Either we are processing a block and waiting for it to
             # come in, or we have not yet had a mempool update for the
             # new block height
             return
-        touched = tmp.pop(height)
-        for old in [h for h in tmp if h <= height]:
-            del tmp[old]
-        for old in [h for h in tbp if h <= height]:
-            touched.update(tbp.pop(old))
-        await self.notify(height, touched)
+        # hashXs
+        touched_hashxs = th_mp.pop(height)
+        for old in [h for h in th_mp if h <= height]:
+            del th_mp[old]
+        for old in [h for h in th_bp if h <= height]:
+            touched_hashxs.update(th_bp.pop(old))
+        # outpoints
+        to_mp, to_bp = self._touched_outpoints_mp, self._touched_outpoints_bp
+        touched_outpoints = to_mp.pop(height)
+        for old in [h for h in to_mp if h <= height]:
+            del to_mp[old]
+        for old in [h for h in to_bp if h <= height]:
+            touched_outpoints.update(to_bp.pop(old))
 
-    async def notify(self, height, touched):
+        await self.notify(
+            height=height,
+            touched_hashxs=touched_hashxs,
+            touched_outpoints=touched_outpoints,
+        )
+
+    async def notify(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height: int,
+    ):
         pass
 
-    async def start(self, height, notify_func):
+    async def start(self, height: int, notify_func):
         self._highest_block = height
         self.notify = notify_func
-        await self.notify(height, set())
+        await self.notify(
+            height=height,
+            touched_hashxs=set(),
+            touched_outpoints=set(),
+        )
 
-    async def on_mempool(self, touched, height):
-        self._touched_mp[height] = touched
+    async def on_mempool(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height: int,
+    ):
+        self._touched_hashxs_mp[height] = touched_hashxs
+        self._touched_outpoints_mp[height] = touched_outpoints
         await self._maybe_notify()
 
-    async def on_block(self, touched, height):
-        self._touched_bp[height] = touched
+    async def on_block(
+            self,
+            *,
+            touched_hashxs: Set[bytes],
+            touched_outpoints: Set[Tuple[bytes, int]],
+            height: int,
+    ):
+        self._touched_hashxs_bp[height] = touched_hashxs
+        self._touched_outpoints_bp[height] = touched_outpoints
         self._highest_block = height
         await self._maybe_notify()
 
@@ -107,8 +148,9 @@ class Controller(ServerBase):
                 return db.db_height
             notifications.height = daemon.height
             notifications.db_height = get_db_height
+            notifications.db_height_changed = db.db_flushed_event.wait
             notifications.cached_height = daemon.cached_height
-            notifications.mempool_hashes = daemon.mempool_hashes
+            notifications.mempool_txids_hum = daemon.mempool_txids_hum
             notifications.raw_transactions = daemon.getrawtransactions
             notifications.lookup_utxos = db.lookup_utxos
             MemPoolAPI.register(Notifications)
@@ -131,7 +173,10 @@ class Controller(ServerBase):
             await daemon.height()
 
             # Check if daemon is recent enough
+            # note: we only check the first daemon
+            #       (DAEMON_URL might be set to a list of daemons)
             await daemon.check_daemon_version()
+            await daemon.check_daemon_indexes()
 
             caught_up_event = Event()
             mempool_event = Event()

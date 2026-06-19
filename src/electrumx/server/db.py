@@ -11,25 +11,35 @@
 
 from array import array
 import ast
+import asyncio
 import os
 import time
 from bisect import bisect_right
 from dataclasses import dataclass
 from glob import glob
-from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING
+from typing import Dict, List, Sequence, Tuple, Optional, TYPE_CHECKING, Union
 
-import attr
 from aiorpcx import run_in_thread, sleep
 
 import electrumx.lib.util as util
-from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN
+from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN, hex_str_to_hash
 from electrumx.lib.merkle import Merkle, MerkleCache
 from electrumx.lib.util import (
-    formatted_time, pack_be_uint16, pack_be_uint32, pack_le_uint64, pack_le_uint32,
-    unpack_le_uint32, unpack_be_uint32, unpack_le_uint64
+    formatted_time,
 )
+from electrumx.lib.tx import TXOSpendStatus
 from electrumx.server.storage import db_class, Storage
-from electrumx.server.history import History, TXNUM_LEN
+from electrumx.server.history import (
+    History,
+)
+from electrumx.server.db_util import (
+    DBTooOldForMigrations,
+    pack_txnum, unpack_txnum, TXNUM_LEN,
+    pack_txoutidx, unpack_txoutidx, TXOUTIDX_LEN,
+    pack_satoshis_val, unpack_satoshis_val,
+    pack_block_height, unpack_block_height, BHEIGHT_LEN,
+    pack_dyn_header_offset, unpack_dyn_header_offset, DYN_HEADER_OFFSET_LEN,
+)
 
 if TYPE_CHECKING:
     from electrumx.server.env import Env
@@ -39,22 +49,22 @@ if TYPE_CHECKING:
 class UTXO:
     tx_num: int      # index of tx in chain order
     tx_pos: int      # tx output idx
-    tx_hash: bytes   # txid
+    txid_rev: bytes | None
     height: int      # block height
     value: int       # in satoshis
 
 
-@attr.s(slots=True)
+@dataclass(slots=True)
 class FlushData:
-    height = attr.ib()
-    tx_count = attr.ib()
-    headers = attr.ib()
-    block_tx_hashes = attr.ib()  # type: List[bytes]
+    height: int
+    tx_count: int
+    headers: list[bytes]
+    block_txids_rev: list[bytes]
     # The following are flushed to the UTXO DB if undo_infos is not None
-    undo_infos = attr.ib()  # type: List[Tuple[Sequence[bytes], int]]
-    adds = attr.ib()  # type: Dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
-    deletes = attr.ib()  # type: List[bytes]  # b'h' db keys, and b'u' db keys
-    tip = attr.ib()
+    undo_infos: list[tuple[Sequence[bytes], int]]
+    adds: dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
+    deletes: list[bytes]  # b'h' db keys, and b'u' db keys
+    tip: bytes
 
 
 COMP_TXID_LEN = 4
@@ -67,7 +77,8 @@ class DB:
     it was shutdown uncleanly.
     '''
 
-    DB_VERSIONS = (6, 7, 8)
+    DB_VERSIONS = (11, )
+    DB_STATE_KEY = b'state'
 
     utxo_db: Optional['Storage']
 
@@ -106,34 +117,37 @@ class DB:
         # "undo data: list of UTXOs spent at block height"
         self.utxo_db = None
 
-        self.utxo_flush_count = 0
         self.fs_height = -1
         self.fs_tx_count = 0
         self.db_height = -1
         self.db_tx_count = 0
         self.db_tip = None  # type: Optional[bytes]
-        self.tx_counts = None
         self.last_flush = time.time()
         self.last_flush_tx_count = 0
         self.wall_time = 0
         self.first_sync = True
         self.db_version = -1
+        self.db_flushed_event = asyncio.Event()
 
         self.logger.info(f'using {self.env.db_engine} for DB backend')
 
         # Header merkle cache
         self.merkle = Merkle()
-        self.header_mc = MerkleCache(self.merkle, self.fs_block_hashes)
+        self.header_mc = MerkleCache(self.merkle, self.fs_block_hashes_rev)
 
         # on-disk: raw block headers in chain order
         self.headers_file = util.LogicalFile('meta/headers', 2, 16000000)
         # on-disk: cumulative number of txs at the end of height N
+        self.tx_counts = None  # type: Optional[array]  # in-memory
         self.tx_counts_file = util.LogicalFile('meta/txcounts', 2, 2000000)
-        # on-disk: 32 byte txids in chain order, allows (tx_num -> txid) map
+        # on-disk: 32 byte txids in chain order, allows (tx_num -> txid_rev) map
         self.hashes_file = util.LogicalFile('meta/hashes', 4, 16000000)
         if not self.coin.STATIC_BLOCK_HEADERS:
             self.headers_offsets_file = util.LogicalFile(
                 'meta/headers_offsets', 2, 16000000)
+
+        # in-memory: (block_hash_rev -> block_height) map
+        self.bhash_to_bheight = None  # type: Optional[dict[bytes, int]]
 
     async def _read_tx_counts(self):
         if self.tx_counts is not None:
@@ -149,7 +163,7 @@ class DB:
         else:
             assert self.db_tx_count == 0
 
-    async def _open_dbs(self, for_sync: bool, compacting: bool):
+    async def _open_dbs(self, *, for_sync: bool):
         assert self.utxo_db is None
 
         # First UTXO DB
@@ -168,16 +182,18 @@ class DB:
         self.read_utxo_state()
 
         # Then history DB
-        self.utxo_flush_count = self.history.open_db(self.db_class, for_sync,
-                                                     self.utxo_flush_count,
-                                                     compacting)
+        self.history.open_db(
+            db_class=self.db_class,
+            for_sync=for_sync,
+            utxo_db_tx_count=self.db_tx_count,
+        )
         self.clear_excess_undo_info()
 
-        # Read TX counts (requires meta directory)
+        # Now prepare in-memory structures.
+        # - Read TX counts (requires meta directory)
         await self._read_tx_counts()
-
-    async def open_for_compacting(self):
-        await self._open_dbs(True, True)
+        # - (block_hash_rev -> block_height) map
+        await self._prep_bhash_to_bheight_map()
 
     async def open_for_sync(self):
         '''Open the databases to sync to the daemon.
@@ -186,7 +202,7 @@ class DB:
         synchronization.  When serving clients we want the open files for
         serving network connections.
         '''
-        await self._open_dbs(True, False)
+        await self._open_dbs(for_sync=True)
 
     async def open_for_serving(self):
         '''Open the databases for serving.  If they are already open they are
@@ -197,7 +213,7 @@ class DB:
             self.utxo_db.close()
             self.history.close_db()
             self.utxo_db = None
-        await self._open_dbs(False, False)
+        await self._open_dbs(for_sync=False)
 
     # Header merkle cache
 
@@ -212,6 +228,25 @@ class DB:
     async def header_branch_and_root(self, length, height):
         return await self.header_mc.branch_and_root(length, height)
 
+    # -- (block_hash -> block_height) map
+    async def _prep_bhash_to_bheight_map(self) -> None:
+        if self.bhash_to_bheight is not None:
+            return
+        self.bhash_to_bheight = {}
+        count = self.db_height + 1
+        block_hashes = await self.fs_block_hashes_rev(0, count)
+        if len(block_hashes) != count:
+            raise Exception(
+                f"failed to prep bhash_to_bheight. "
+                f"wanted {count} bhashes, only got {len(block_hashes)}")
+        for bheight, bhash in enumerate(block_hashes):
+            self.bhash_to_bheight[bhash] = bheight
+        # note: for new blocks, the block_processor will keep the map up-to-date
+
+    def get_blockheight_from_blockhash(self, block_hash_hum: str) -> Optional[int]:
+        bhash_rev = hex_str_to_hash(block_hash_hum)
+        return self.bhash_to_bheight.get(bhash_rev, None)
+
     # Flushing
     def assert_flushed(self, flush_data):
         '''Asserts state is fully flushed.'''
@@ -219,7 +254,7 @@ class DB:
         assert flush_data.height == self.fs_height == self.db_height
         assert flush_data.tip == self.db_tip
         assert not flush_data.headers
-        assert not flush_data.block_tx_hashes
+        assert not flush_data.block_txids_rev
         assert not flush_data.adds
         assert not flush_data.deletes
         assert not flush_data.undo_infos
@@ -236,12 +271,13 @@ class DB:
         prior_flush = self.last_flush
         tx_delta = flush_data.tx_count - self.last_flush_tx_count
 
-        # Flush to file system
+        # 1. Flush to file system
         self.flush_fs(flush_data)
 
-        # Then history
+        # 2. Then hist_db
         self.flush_history()
 
+        # 3. Then utxo_db
         # Flush state last as it reads the wall time.
         with self.utxo_db.write_batch() as batch:
             if flush_utxos:
@@ -253,7 +289,7 @@ class DB:
         self.flush_state(self.utxo_db)
 
         elapsed = self.last_flush - start_time
-        self.logger.info(f'flush #{self.history.flush_count:,d} took '
+        self.logger.info(f'flush took '
                          f'{elapsed:.1f}s.  Height {flush_data.height:,d} '
                          f'txs: {flush_data.tx_count:,d} ({tx_delta:+,d})')
 
@@ -268,6 +304,9 @@ class DB:
             self.logger.info(f'sync time: {formatted_time(self.wall_time)}  '
                              f'ETA: {formatted_time(eta)}')
 
+        self.db_flushed_event.set()
+        self.db_flushed_event.clear()
+
     def flush_fs(self, flush_data):
         '''Write headers, tx counts and block tx hashes to the filesystem.
 
@@ -277,15 +316,15 @@ class DB:
         '''
         prior_tx_count = (self.tx_counts[self.fs_height]
                           if self.fs_height >= 0 else 0)
-        assert len(flush_data.block_tx_hashes) == len(flush_data.headers)
+        assert len(flush_data.block_txids_rev) == len(flush_data.headers)
         assert flush_data.height == self.fs_height + len(flush_data.headers)
         assert flush_data.tx_count == (self.tx_counts[-1] if self.tx_counts
                                        else 0)
         assert len(self.tx_counts) == flush_data.height + 1
-        hashes = b''.join(flush_data.block_tx_hashes)
-        flush_data.block_tx_hashes.clear()
-        assert len(hashes) % 32 == 0
-        assert len(hashes) // 32 == flush_data.tx_count - prior_tx_count
+        txids_rev = b''.join(flush_data.block_txids_rev)
+        flush_data.block_txids_rev.clear()
+        assert len(txids_rev) % 32 == 0
+        assert len(txids_rev) // 32 == flush_data.tx_count - prior_tx_count
 
         # Write the headers, tx counts, and tx hashes
         start_time = time.monotonic()
@@ -299,7 +338,7 @@ class DB:
         self.tx_counts_file.write(offset,
                                   self.tx_counts[height_start:].tobytes())
         offset = prior_tx_count * 32
-        self.hashes_file.write(offset, hashes)
+        self.hashes_file.write(offset, txids_rev)
 
         self.fs_height = flush_data.height
         self.fs_tx_count = flush_data.tx_count
@@ -331,7 +370,7 @@ class DB:
         for key, value in flush_data.adds.items():
             # key: txid+out_idx, value: hashX+tx_num+value_sats
             hashX = value[:HASHX_LEN]
-            txout_idx = key[-4:]
+            txout_idx = key[-TXOUTIDX_LEN:]
             tx_num = value[HASHX_LEN: HASHX_LEN+TXNUM_LEN]
             value_sats = value[-8:]
             suffix = txout_idx + tx_num
@@ -352,7 +391,6 @@ class DB:
                              f'{spend_count:,d} spends in '
                              f'{elapsed:.1f}s, committing...')
 
-        self.utxo_flush_count = self.history.flush_count
         self.db_height = flush_data.height
         self.db_tx_count = flush_data.tx_count
         self.db_tip = flush_data.tip
@@ -365,25 +403,39 @@ class DB:
         self.last_flush_tx_count = self.fs_tx_count
         self.write_utxo_state(batch)
 
-    def flush_backup(self, flush_data, touched):
+    def flush_backup(self, flush_data: FlushData, touched_hashxs):
         '''Like flush_dbs() but when backing up.  All UTXOs are flushed.'''
         assert not flush_data.headers
-        assert not flush_data.block_tx_hashes
+        assert not flush_data.block_txids_rev
         assert flush_data.height < self.db_height
         self.history.assert_flushed()
 
         start_time = time.time()
         tx_delta = flush_data.tx_count - self.last_flush_tx_count
 
+        # 1. (fake-)Flush to file system: this just updates pointers
         self.backup_fs(flush_data.height, flush_data.tx_count)
-        self.history.backup(touched, flush_data.tx_count)
+
+        # Crucially, we flush utxo_db and hist_db in the reverse order compared to when advancing,
+        #   to maintain the invariant that hist_db_tx_count >= utxo_db_tx_count even if we crash.
+        # 2. Then utxo_db
         with self.utxo_db.write_batch() as batch:
             self.flush_utxo_db(batch, flush_data)
             # Flush state last as it reads the wall time.
             self.flush_state(batch)
 
+        # 3. Then hist_db
+        self.history.backup(
+            hashXs=touched_hashxs,
+            tx_count=flush_data.tx_count,
+        )
+
+        # Update and put the wall time again - otherwise we drop the
+        # time it took to commit the batch
+        self.flush_state(self.utxo_db)
+
         elapsed = self.last_flush - start_time
-        self.logger.info(f'backup flush #{self.history.flush_count:,d} took '
+        self.logger.info(f'backup flush took '
                          f'{elapsed:.1f}s.  Height {flush_data.height:,d} '
                          f'txs: {flush_data.tx_count:,d} ({tx_delta:+,d})')
 
@@ -394,15 +446,15 @@ class DB:
         offsets = []
         for h in headers:
             offset += len(h)
-            offsets.append(pack_le_uint64(offset))
+            offsets.append(pack_dyn_header_offset(offset))
         # For each header we get the offset of the next header, hence we
         # start writing from the next height
-        pos = (height_start + 1) * 8
+        pos = (height_start + 1) * DYN_HEADER_OFFSET_LEN
         self.headers_offsets_file.write(pos, b''.join(offsets))
 
-    def dynamic_header_offset(self, height):
+    def dynamic_header_offset(self, height: int) -> int:
         assert not self.coin.STATIC_BLOCK_HEADERS
-        offset, = unpack_le_uint64(self.headers_offsets_file.read(height * 8, 8))
+        offset = unpack_dyn_header_offset(self.headers_offsets_file.read(height * DYN_HEADER_OFFSET_LEN, DYN_HEADER_OFFSET_LEN))
         return offset
 
     def dynamic_header_len(self, height):
@@ -416,14 +468,14 @@ class DB:
         # Truncate header_mc: header count is 1 more than the height.
         self.header_mc.truncate(height + 1)
 
-    async def raw_header(self, height):
+    async def raw_header(self, height: int) -> bytes:
         '''Return the binary header at the given height.'''
         header, n = await self.read_headers(height, 1)
         if n != 1:
             raise IndexError(f'height {height:,d} out of range')
         return header
 
-    async def read_headers(self, start_height, count):
+    async def read_headers(self, start_height: int, count: int) -> Tuple[bytes, int]:
         '''Requires start_height >= 0, count >= 0.  Reads as many headers as
         are available starting at start_height up to count.  This
         would be zero if start_height is beyond self.db_height, for
@@ -447,19 +499,19 @@ class DB:
 
         return await run_in_thread(read_headers)
 
-    def fs_tx_hash(self, tx_num):
-        '''Return a pair (tx_hash, tx_height) for the given tx number.
+    def fs_txid_rev(self, tx_num: int) -> Tuple[Optional[bytes], int]:
+        '''Return a pair (txid_rev, tx_height) for the given tx number.
 
         If the tx_height is not on disk, returns (None, tx_height).'''
         tx_height = bisect_right(self.tx_counts, tx_num)
         if tx_height > self.db_height:
-            tx_hash = None
+            txid_rev = None
         else:
-            tx_hash = self.hashes_file.read(tx_num * 32, 32)
-        return tx_hash, tx_height
+            txid_rev = self.hashes_file.read(tx_num * 32, 32)
+        return txid_rev, tx_height
 
-    def fs_tx_hashes_at_blockheight(self, block_height):
-        '''Return a list of tx_hashes at given block height,
+    def fs_txids_rev_at_blockheight(self, block_height: int) -> Sequence[bytes]:
+        '''Return a list of txids_rev at given block height,
         in the same order as in the block.
         '''
         if block_height > self.db_height:
@@ -470,14 +522,14 @@ class DB:
         else:
             first_tx_num = 0
         num_txs_in_block = self.tx_counts[block_height] - first_tx_num
-        tx_hashes = self.hashes_file.read(first_tx_num * 32, num_txs_in_block * 32)
-        assert num_txs_in_block == len(tx_hashes) // 32
-        return [tx_hashes[idx * 32: (idx+1) * 32] for idx in range(num_txs_in_block)]
+        txids_rev = self.hashes_file.read(first_tx_num * 32, num_txs_in_block * 32)
+        assert num_txs_in_block == len(txids_rev) // 32
+        return [txids_rev[idx * 32: (idx+1) * 32] for idx in range(num_txs_in_block)]
 
-    async def tx_hashes_at_blockheight(self, block_height):
-        return await run_in_thread(self.fs_tx_hashes_at_blockheight, block_height)
+    async def txids_rev_at_blockheight(self, block_height: int) -> Sequence[bytes]:
+        return await run_in_thread(self.fs_txids_rev_at_blockheight, block_height)
 
-    async def fs_block_hashes(self, height, count):
+    async def fs_block_hashes_rev(self, height: int, count: int) -> Sequence[bytes]:
         headers_concat, headers_count = await self.read_headers(height, count)
         if headers_count != count:
             raise self.DBError(f'only got {headers_count:,d} headers starting '
@@ -489,10 +541,10 @@ class DB:
             headers.append(headers_concat[offset:offset + hlen])
             offset += hlen
 
-        return [self.coin.header_hash(header) for header in headers]
+        return [self.coin.header_hash_rev(header) for header in headers]
 
-    async def limited_history(self, hashX, *, limit=1000):
-        '''Return an unpruned, sorted list of (tx_hash, height) tuples of
+    async def limited_history(self, hashX: bytes, *, limit: int = 1000) -> Sequence[tuple[bytes, int]]:
+        '''Return an unpruned, sorted list of (txid_rev, height) tuples of
         confirmed transactions that touched the address, earliest in
         the blockchain first.  Includes both spending and receiving
         transactions.  By default returns at most 1000 entries.  Set
@@ -500,12 +552,12 @@ class DB:
         '''
         def read_history():
             tx_nums = list(self.history.get_txnums(hashX, limit))
-            fs_tx_hash = self.fs_tx_hash
-            return [fs_tx_hash(tx_num) for tx_num in tx_nums]
+            fs_txid_rev = self.fs_txid_rev
+            return [fs_txid_rev(tx_num) for tx_num in tx_nums]
 
         while True:
             history = await run_in_thread(read_history)
-            if all(hash is not None for hash, height in history):
+            if all(txid_rev is not None for txid_rev, height in history):
                 return history
             self.logger.warning(f'limited_history: tx hash '
                                 f'not found (reorg?), retrying...')
@@ -513,38 +565,38 @@ class DB:
 
     # -- Undo information
 
-    def min_undo_height(self, max_height):
+    def min_undo_height(self, max_height: int) -> int:
         '''Returns a height from which we should store undo info.'''
         return max_height - self.env.reorg_limit + 1
 
     def undo_key(self, height: int) -> bytes:
         '''DB key for undo information at the given height.'''
-        return b'U' + pack_be_uint32(height)
+        return b'U' + pack_block_height(height)
 
-    def read_undo_info(self, height):
+    def read_undo_info(self, height: int) -> bytes:
         '''Read undo information from a file for the current height.'''
         return self.utxo_db.get(self.undo_key(height))
 
     def flush_undo_infos(
             self, batch_put, undo_infos: Sequence[Tuple[Sequence[bytes], int]]
-    ):
+    ) -> None:
         '''undo_infos is a list of (undo_info, height) pairs.'''
         for undo_info, height in undo_infos:
             batch_put(self.undo_key(height), b''.join(undo_info))
 
-    def raw_block_prefix(self):
+    def raw_block_prefix(self) -> str:
         return 'meta/block'
 
-    def raw_block_path(self, height):
+    def raw_block_path(self, height: int) -> str:
         return f'{self.raw_block_prefix()}{height:d}'
 
-    def read_raw_block(self, height):
+    def read_raw_block(self, height: int) -> bytes:
         '''Returns a raw block read from disk.  Raises FileNotFoundError
         if the block isn't on-disk.'''
         with util.open_file(self.raw_block_path(height)) as f:
             return f.read(-1)
 
-    def write_raw_block(self, block, height):
+    def write_raw_block(self, block: bytes, height: int) -> None:
         '''Write a raw block to disk.'''
         with util.open_truncate(self.raw_block_path(height)) as f:
             f.write(block)
@@ -555,13 +607,13 @@ class DB:
         except FileNotFoundError:
             pass
 
-    def clear_excess_undo_info(self):
+    def clear_excess_undo_info(self) -> None:
         '''Clear excess undo info.  Only most recent N are kept.'''
         prefix = b'U'
         min_height = self.min_undo_height(self.db_height)
         keys = []
         for key, _hist in self.utxo_db.iterator(prefix=prefix):
-            height, = unpack_be_uint32(key[-4:])
+            height = unpack_block_height(key[-BHEIGHT_LEN:])
             if height >= min_height:
                 break
             keys.append(key)
@@ -587,14 +639,13 @@ class DB:
 
     # -- UTXO database
 
-    def read_utxo_state(self):
-        state = self.utxo_db.get(b'state')
+    def read_utxo_state(self) -> None:
+        state = self.utxo_db.get(self.DB_STATE_KEY)
         if not state:
             self.db_height = -1
             self.db_tx_count = 0
             self.db_tip = b'\0' * 32
             self.db_version = max(self.DB_VERSIONS)
-            self.utxo_flush_count = 0
             self.wall_time = 0
             self.first_sync = True
         else:
@@ -603,20 +654,15 @@ class DB:
                 raise self.DBError('failed reading state from DB')
             self.db_version = state['db_version']
             if self.db_version not in self.DB_VERSIONS:
-                raise self.DBError(f'your UTXO DB version is {self.db_version} '
-                                   f'but this software only handles versions '
-                                   f'{self.DB_VERSIONS}')
-            # backwards compat
+                raise DBTooOldForMigrations(
+                    db_name="UTXO", db_version=self.db_version, supported_versions=self.DB_VERSIONS)
             genesis_hash = state['genesis']
-            if isinstance(genesis_hash, bytes):
-                genesis_hash = genesis_hash.decode()
             if genesis_hash != self.coin.GENESIS_HASH:
                 raise self.DBError(f'DB genesis hash {genesis_hash} does not '
                                    f'match coin {self.coin.GENESIS_HASH}')
             self.db_height = state['height']
             self.db_tx_count = state['tx_count']
             self.db_tip = state['tip']
-            self.utxo_flush_count = state['utxo_flush_count']
             self.wall_time = state['wall_time']
             self.first_sync = state['first_sync']
 
@@ -627,7 +673,7 @@ class DB:
 
         # Upgrade DB
         if self.db_version != max(self.DB_VERSIONS):
-            self.upgrade_db()
+            raise Exception("missing db upgrade")  # call future upgrade logic here
 
         # Log some stats
         self.logger.info(f'UTXO DB version: {self.db_version:d}')
@@ -643,164 +689,74 @@ class DB:
                 f'sync time so far: {util.formatted_time(self.wall_time)}'
             )
 
-    def upgrade_db(self):
-        self.logger.info(f'UTXO DB version: {self.db_version}')
-        self.logger.info('Upgrading your DB; this can take some time...')
-
-        def upgrade_u_prefix(prefix):
-            count = 0
-            with self.utxo_db.write_batch() as batch:
-                batch_delete = batch.delete
-                batch_put = batch.put
-                # Key: b'u' + address_hashX + tx_idx + tx_num
-                for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                    if len(db_key) == 21:
-                        return
-                    break
-                if self.db_version == 6:
-                    for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                        count += 1
-                        batch_delete(db_key)
-                        batch_put(db_key[:14] + b'\0\0' + db_key[14:] + b'\0', db_value)
-                else:
-                    for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                        count += 1
-                        batch_delete(db_key)
-                        batch_put(db_key + b'\0', db_value)
-            return count
-
-        last = time.monotonic()
-        count = 0
-        for cursor in range(65536):
-            prefix = b'u' + pack_be_uint16(cursor)
-            count += upgrade_u_prefix(prefix)
-            now = time.monotonic()
-            if now > last + 10:
-                last = now
-                self.logger.info(f'DB 1 of 3: {count:,d} entries updated, '
-                                 f'{cursor * 100 / 65536:.1f}% complete')
-        self.logger.info('DB 1 of 3 upgraded successfully')
-
-        def upgrade_h_prefix(prefix):
-            count = 0
-            with self.utxo_db.write_batch() as batch:
-                batch_delete = batch.delete
-                batch_put = batch.put
-                # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
-                for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                    if len(db_key) == 14:
-                        return
-                    break
-                if self.db_version == 6:
-                    for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                        count += 1
-                        batch_delete(db_key)
-                        batch_put(db_key[:7] + b'\0\0' + db_key[7:] + b'\0', db_value)
-                else:
-                    for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                        count += 1
-                        batch_delete(db_key)
-                        batch_put(db_key + b'\0', db_value)
-            return count
-
-        last = time.monotonic()
-        count = 0
-        for cursor in range(65536):
-            prefix = b'h' + pack_be_uint16(cursor)
-            count += upgrade_h_prefix(prefix)
-            now = time.monotonic()
-            if now > last + 10:
-                last = now
-                self.logger.info(f'DB 2 of 3: {count:,d} entries updated, '
-                                 f'{cursor * 100 / 65536:.1f}% complete')
-
-        # Upgrade tx_counts file
-        size = (self.db_height + 1) * 8
-        tx_counts = self.tx_counts_file.read(0, size)
-        if len(tx_counts) == (self.db_height + 1) * 4:
-            tx_counts = array('I', tx_counts)
-            tx_counts = array('Q', tx_counts)
-            self.tx_counts_file.write(0, tx_counts.tobytes())
-
-        self.db_version = max(self.DB_VERSIONS)
-        with self.utxo_db.write_batch() as batch:
-            self.write_utxo_state(batch)
-        self.logger.info('DB 2 of 3 upgraded successfully')
-
-    def write_utxo_state(self, batch):
+    def write_utxo_state(self, batch) -> None:
         '''Write (UTXO) state to the batch.'''
         state = {
             'genesis': self.coin.GENESIS_HASH,
             'height': self.db_height,
             'tx_count': self.db_tx_count,
             'tip': self.db_tip,
-            'utxo_flush_count': self.utxo_flush_count,
             'wall_time': self.wall_time,
             'first_sync': self.first_sync,
             'db_version': self.db_version,
         }
-        batch.put(b'state', repr(state).encode())
+        batch.put(self.DB_STATE_KEY, repr(state).encode())
 
-    def set_flush_count(self, count):
-        self.utxo_flush_count = count
-        with self.utxo_db.write_batch() as batch:
-            self.write_utxo_state(batch)
-
-    async def all_utxos(self, hashX):
+    async def all_utxos(self, hashX: bytes) -> Sequence[UTXO]:
         '''Return all UTXOs for an address sorted in no particular order.'''
         def read_utxos():
-            utxos = []
+            utxos = []  # type: list[UTXO]
             utxos_append = utxos.append
-            txnum_padding = bytes(8-TXNUM_LEN)
             # Key: b'u' + address_hashX + txout_idx + tx_num
             # Value: the UTXO value as a 64-bit unsigned integer
             prefix = b'u' + hashX
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
-                txout_idx, = unpack_le_uint32(db_key[-TXNUM_LEN-4:-TXNUM_LEN])
-                tx_num, = unpack_le_uint64(db_key[-TXNUM_LEN:] + txnum_padding)
-                value, = unpack_le_uint64(db_value)
-                tx_hash, height = self.fs_tx_hash(tx_num)
-                utxos_append(UTXO(tx_num, txout_idx, tx_hash, height, value))
+                txout_idx = unpack_txoutidx(db_key[-TXNUM_LEN-TXOUTIDX_LEN:-TXNUM_LEN])
+                tx_num = unpack_txnum(db_key[-TXNUM_LEN:])
+                value = unpack_satoshis_val(db_value)
+                txid_rev, height = self.fs_txid_rev(tx_num)
+                utxos_append(UTXO(tx_num, txout_idx, txid_rev, height, value))
             return utxos
 
         while True:
             utxos = await run_in_thread(read_utxos)
-            if all(utxo.tx_hash is not None for utxo in utxos):
+            if all(utxo.txid_rev is not None for utxo in utxos):
                 return utxos
             self.logger.warning(f'all_utxos: tx hash not '
                                 f'found (reorg?), retrying...')
             await sleep(0.25)
 
-    async def lookup_utxos(self, prevouts):
+    async def lookup_utxos(self, prevouts: Sequence[tuple[bytes, int]]) -> Sequence[Optional[tuple[bytes, int]]]:
         '''For each prevout, lookup it up in the DB and return a (hashX,
         value) pair or None if not found.
 
         Used by the mempool code.
         '''
-        def lookup_hashXs():
+        def lookup_hashXs() -> Sequence[tuple[Optional[bytes], Optional[bytes]]]:
             '''Return (hashX, suffix) pairs, or None if not found,
             for each prevout.
             '''
-            def lookup_hashX(tx_hash, tx_idx):
-                idx_packed = pack_le_uint32(tx_idx)
-                txnum_padding = bytes(8-TXNUM_LEN)
+            def lookup_hashX(txid_rev: bytes, tx_idx: int) -> tuple[Optional[bytes], Optional[bytes]]:
+                idx_packed = pack_txoutidx(tx_idx)
 
                 # Key: b'h' + compressed_tx_hash + tx_idx + tx_num
                 # Value: hashX
-                prefix = b'h' + tx_hash[:COMP_TXID_LEN] + idx_packed
+                prefix = b'h' + txid_rev[:COMP_TXID_LEN] + idx_packed
 
                 # Find which entry, if any, the TX_HASH matches.
                 for db_key, hashX in self.utxo_db.iterator(prefix=prefix):
                     tx_num_packed = db_key[-TXNUM_LEN:]
-                    tx_num, = unpack_le_uint64(tx_num_packed + txnum_padding)
-                    hash, _height = self.fs_tx_hash(tx_num)
-                    if hash == tx_hash:
+                    tx_num = unpack_txnum(tx_num_packed)
+                    hash, _height = self.fs_txid_rev(tx_num)
+                    if hash == txid_rev:
                         return hashX, idx_packed + tx_num_packed
                 return None, None
             return [lookup_hashX(*prevout) for prevout in prevouts]
 
-        def lookup_utxos(hashX_pairs):
-            def lookup_utxo(hashX, suffix):
+        def lookup_utxos(
+                hashX_pairs: Sequence[tuple[Optional[bytes], Optional[bytes]]],
+        ) -> Sequence[Optional[tuple[bytes, int]]]:
+            def lookup_utxo(hashX: bytes, suffix: bytes) -> Optional[tuple[bytes, int]]:
                 if not hashX:
                     # This can happen when the daemon is a block ahead
                     # of us and has mempool txs spending outputs from
@@ -814,7 +770,7 @@ class DB:
                     # This can happen if the DB was updated between
                     # getting the hashXs and getting the UTXOs
                     return None
-                value, = unpack_le_uint64(db_value)
+                value = unpack_satoshis_val(db_value)
                 return hashX, value
             return [lookup_utxo(*hashX_pair) for hashX_pair in hashX_pairs]
 

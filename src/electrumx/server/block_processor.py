@@ -45,7 +45,7 @@ class Prefetcher:
             coin: Type['Coin'],
             blocks_event: asyncio.Event,
             *,
-            polling_delay_secs,
+            polling_delay_secs: float,
     ):
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.daemon = daemon
@@ -65,7 +65,7 @@ class Prefetcher:
         self.ave_size = self.min_cache_size // 10
         self.polling_delay = polling_delay_secs
 
-    async def main_loop(self, bp_height):
+    async def main_loop(self, bp_height: int) -> None:
         '''Loop forever polling for more blocks.'''
         await self.reset_height(bp_height)
         while True:
@@ -93,7 +93,7 @@ class Prefetcher:
         self.refill_event.set()
         return blocks
 
-    async def reset_height(self, height):
+    async def reset_height(self, height: int) -> None:
         '''Reset to prefetch blocks from the block processor's height.
 
         Used in blockchain reorganisations.  This coroutine can be
@@ -116,7 +116,7 @@ class Prefetcher:
         else:
             self.logger.info(f'caught up to daemon height {daemon_height:,d}')
 
-    async def _prefetch_blocks(self):
+    async def _prefetch_blocks(self) -> bool:
         '''Prefetch some blocks and put them on the queue.
 
         Repeats until the queue is full or caught up.
@@ -271,7 +271,7 @@ class BlockProcessor:
                                 'resetting the prefetcher')
             await self.prefetcher.reset_height(self.height)
 
-    async def reorg_chain(self, count=None) -> None:
+    async def reorg_chain(self, count: Optional[int] = None) -> None:
         '''Handle a chain reorganisation.
 
         Count is the number of blocks to simulate a reorg, or None for
@@ -356,7 +356,7 @@ class BlockProcessor:
 
         return start, count
 
-    def estimate_txs_remaining(self):
+    def estimate_txs_remaining(self) -> float:
         # Try to estimate how many txs there are to go
         daemon_height = self.daemon.cached_height()
         coin = self.coin
@@ -367,7 +367,7 @@ class BlockProcessor:
                 max(coin.TX_COUNT - self.tx_count, 0)) * realism
 
     # - Flushing
-    def flush_data(self):
+    def flush_data(self) -> FlushData:
         '''The data for a flush.  The lock must be taken.'''
         assert self.state_lock.locked()
         return FlushData(
@@ -381,14 +381,17 @@ class BlockProcessor:
             tip=self.tip,
         )
 
-    async def flush(self, flush_utxos):
+    async def flush(self, flush_utxos: bool) -> None:
         # side-effect: fields of FlushData will be cleared (passed by reference)
         def flush():
-            self.db.flush_dbs(self.flush_data(), flush_utxos,
-                              self.estimate_txs_remaining)
+            self.db.flush_dbs(
+                flush_data=self.flush_data(),
+                flush_utxos=flush_utxos,
+                estimate_txs_remaining=self.estimate_txs_remaining,
+            )
         await self.run_in_thread_with_lock(flush)
 
-    async def _maybe_flush(self):
+    async def _maybe_flush(self) -> None:
         # If caught up, flush everything as client queries are
         # performed on the DB.
         if self._caught_up_event.is_set():
@@ -425,7 +428,7 @@ class BlockProcessor:
             return utxo_MB >= cache_MB * 4 // 5
         return None
 
-    def advance_blocks(self, blocks: Sequence['Block']):
+    def advance_blocks(self, blocks: Sequence['Block']) -> None:
         '''Synchronously advance the blocks.
 
         It is already verified they correctly connect onto our tip.
@@ -470,7 +473,7 @@ class BlockProcessor:
         undo_info_append = undo_info.append
         update_touched_hashxs = self.touched_hashxs.update
         add_touched_outpoint = self.touched_outpoints.add
-        hashXs_by_tx = []
+        hashXs_by_tx = []  # type: list[list[bytes]]
         append_hashXs = hashXs_by_tx.append
         _pack_txoutidx = pack_txoutidx
         _pack_sats = pack_satoshis_val
@@ -478,7 +481,7 @@ class BlockProcessor:
 
         for tx in txs:
             txid_rev = tx.txid_rev
-            hashXs = []
+            hashXs = []  # type: list[bytes]
             append_hashX = hashXs.append
             tx_numb = _pack_txnum(tx_num)
 
@@ -516,7 +519,7 @@ class BlockProcessor:
 
         return undo_info
 
-    def backup_blocks(self, raw_blocks: Sequence[bytes]):
+    def backup_blocks(self, raw_blocks: Sequence[bytes]) -> None:
         '''Backup the raw blocks and flush.
 
         The blocks should be in order of decreasing height, starting at.
@@ -550,7 +553,7 @@ class BlockProcessor:
             self,
             txs: Sequence[Tx],
             is_unspendable: Callable[[bytes], bool],
-    ):
+    ) -> None:
         # Prevout values, in order down the block (coinbase first if present)
         # undo_info is in reverse block order
         undo_info = self.db.read_undo_info(self.height)

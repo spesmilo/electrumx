@@ -13,7 +13,7 @@ import bisect
 import time
 from array import array
 from collections import defaultdict
-from typing import TYPE_CHECKING, Type, Optional, Sequence
+from typing import TYPE_CHECKING, Type, Optional, Sequence, Iterable
 
 import electrumx.lib.util as util
 from electrumx.server.db_util import (
@@ -56,12 +56,12 @@ class History:
         self.read_state()
         self.clear_excess(utxo_db_tx_count)
 
-    def close_db(self):
+    def close_db(self) -> None:
         if self.db:
             self.db.close()
             self.db = None
 
-    def read_state(self):
+    def read_state(self) -> None:
         state = self.db.get(self.DB_STATE_KEY)
         if state:
             state = ast.literal_eval(state.decode())
@@ -107,11 +107,11 @@ class History:
         with self.db.write_batch() as batch:
             for key in keys:
                 batch.delete(key)
-            self.write_state(batch)
+            self._write_state(batch)
 
         self.logger.info('deleted excess history entries')
 
-    def write_state(self, batch):
+    def _write_state(self, batch) -> None:
         '''Write state to the history DB.'''
         state = {
             'hist_db_tx_count': self.hist_db_tx_count,
@@ -120,7 +120,7 @@ class History:
         }
         batch.put(self.DB_STATE_KEY, repr(state).encode())
 
-    def add_unflushed(self, hashXs_by_tx, first_tx_num):
+    def add_unflushed(self, hashXs_by_tx: list[list[bytes]], first_tx_num: int) -> None:
         unflushed = self.unflushed
         count = 0
         tx_num = None
@@ -135,13 +135,13 @@ class History:
             assert self.hist_db_tx_count_next + len(hashXs_by_tx) == tx_num + 1
             self.hist_db_tx_count_next = tx_num + 1
 
-    def unflushed_memsize(self):
+    def unflushed_memsize(self) -> int:
         return len(self.unflushed) * 180 + self.unflushed_count * TXNUM_LEN
 
-    def assert_flushed(self):
+    def assert_flushed(self) -> None:
         assert not self.unflushed
 
-    def flush(self):
+    def flush(self) -> None:
         start_time = time.monotonic()
         unflushed = self.unflushed
         chunks = util.chunks
@@ -152,7 +152,7 @@ class History:
                     db_key = b'H' + hashX + tx_num
                     batch.put(db_key, b'')
             self.hist_db_tx_count = self.hist_db_tx_count_next
-            self.write_state(batch)
+            self._write_state(batch)
 
         count = len(unflushed)
         unflushed.clear()
@@ -163,7 +163,7 @@ class History:
             self.logger.info(f'flushed history in {elapsed:.1f}s '
                              f'for {count:,d} addrs')
 
-    def backup(self, hashXs, tx_count):
+    def backup(self, *, hashXs: Iterable[bytes], tx_count: int) -> None:
         self.assert_flushed()
         nremoves = 0
         with self.db.write_batch() as batch:
@@ -183,11 +183,11 @@ class History:
                     batch.delete(key)
             self.hist_db_tx_count = tx_count
             self.hist_db_tx_count_next = self.hist_db_tx_count
-            self.write_state(batch)
+            self._write_state(batch)
 
         self.logger.info(f'backing up removed {nremoves:,d} history entries')
 
-    def get_txnums(self, hashX, limit=1000):
+    def get_txnums(self, hashX: bytes, limit: int = 1000) -> Iterable[int]:
         '''Generator that returns an unpruned, sorted list of tx_nums in the
         history of a hashX.  Includes both spending and receiving
         transactions.  By default yields at most 1000 entries.  Set

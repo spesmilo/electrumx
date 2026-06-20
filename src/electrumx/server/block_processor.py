@@ -204,6 +204,7 @@ class BlockProcessor:
 
         # Caches of unflushed items.
         self.headers = []  # type: list[bytes]
+        self._bhash_to_bheight = dict()  # type: dict[bytes, int]
         self.txids_rev = []  # type: List[bytes]
         self.undo_infos = []  # type: List[Tuple[Sequence[bytes], int]]
 
@@ -374,6 +375,7 @@ class BlockProcessor:
             height=self.height,
             tx_count=self.tx_count,
             headers=self.headers,
+            bhash_to_bheight=self._bhash_to_bheight,
             block_txids_rev=self.txids_rev,
             undo_infos=self.undo_infos,
             adds=self.utxo_cache,
@@ -444,7 +446,7 @@ class BlockProcessor:
             is_unspendable = (is_unspendable_genesis if height >= genesis_activation
                               else is_unspendable_legacy)
             undo_info = self.advance_txs(block.transactions, is_unspendable)
-            self.db.bhash_to_bheight[header_hash] = height
+            self._bhash_to_bheight[header_hash] = height
             if height >= min_height:
                 self.undo_infos.append((undo_info, height))
                 self.db.write_raw_block(block.raw, height)
@@ -543,7 +545,7 @@ class BlockProcessor:
             is_unspendable = (is_unspendable_genesis if self.height >= genesis_activation
                               else is_unspendable_legacy)
             self.backup_txs(block.transactions, is_unspendable)
-            assert self.height == self.db.bhash_to_bheight.pop(header_hash)
+            self._bhash_to_bheight[header_hash] = self.height
             self.height -= 1
             self.db.tx_counts.pop()
 

@@ -337,7 +337,7 @@ class MemPool:
         hashXs = self.hashXs
         txo_to_spender = self.txo_to_spender
 
-        if mempool_height != self.api.db_height():
+        if mempool_height != self.api.db_height():  # FIXME should compare blockhash
             raise DBSyncError
 
         # First handle txs that have disappeared

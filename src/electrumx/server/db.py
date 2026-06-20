@@ -121,7 +121,7 @@ class DB:
         self.fs_tx_count = 0
         self.db_height = -1
         self.db_tx_count = 0
-        self.db_tip = None  # type: Optional[bytes]
+        self.db_tip = None  # type: Optional[bytes]  # block_hash_rev
         self.last_flush = time.time()
         self.last_flush_tx_count = 0
         self.wall_time = 0

@@ -197,7 +197,7 @@ class BlockProcessor:
         self.touched_outpoints = set()  # type: Set[Tuple[bytes, int]]
         self.reorg_count = 0
         self.height = -1
-        self.tip = None  # type: Optional[bytes]
+        self.tip = None  # type: Optional[bytes]  # block_hash_rev
         self.tip_advanced_event = asyncio.Event()
         self.tx_count = 0
         self._caught_up_event = None

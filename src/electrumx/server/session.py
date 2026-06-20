@@ -25,6 +25,7 @@ from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any, Tupl
 from typing import Callable
 import random
 import inspect
+import logging
 
 import aiorpcx
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
@@ -160,10 +161,14 @@ def retry_on_chain_sync_error(func=None, *, check_chaintip: bool):
     @functools.wraps(func)
     async def handle_chain_sync_error(self: 'ElectrumX', *args, **kw_args):
         session_mgr = self.session_mgr
-        sleeps = [0, 0.5, 2.5, 5, 10]
+        # note: the last sleep is ~infinite.  A timeout from env.request_timeout will trigger instead.
+        sleeps = [0, 0.5, 2.5, 5, 10, 10**6]  # seconds
+        t0 = time.monotonic()
         for attempt, sleep_time in enumerate(sleeps):
             if sleep_time != 0:
-                # A previous attempt failed. Sleep a bit before retrying. If the height changes, try again right away.
+                # A previous attempt failed. Sleep until the height changes.
+                # (This is a bit racy: we might miss the height changing if it changes before we start
+                #  awaiting the event. So we cap the sleep to sleep_time, and then retry anyway.)
                 async with ignore_after(sleep_time):
                     await session_mgr.notified_height_changed.wait()
             chaintip1 = chaintip2 = None
@@ -180,13 +185,32 @@ def retry_on_chain_sync_error(func=None, *, check_chaintip: bool):
                     raise ChainSyncError(message="chaintip moved while processing request")
             except ChainSyncError as e:
                 self.bump_cost(0.1)  # paranoia: maybe client can force ChainSyncError due to logic bug
-                self.logger.debug(f"got {e!r} while processing request: {func}. retrying ({attempt=}).")
+                time_elapsed = time.monotonic() - t0
+                if time_elapsed > 10.0:
+                    self.logger.debug(
+                        f"got {e!r} while processing request: {func}. retrying ({attempt=}). "
+                        f"time taken: {time_elapsed:.4f} sec")
                 continue  # try again
             assert chaintip1 == chaintip2
+            # success!  sending response now.
+            if attempt != 0:
+                time_elapsed = time.monotonic() - t0
+                self.logger.log(
+                    logging.INFO if time_elapsed > 5.0 else logging.DEBUG,
+                    f"responding to request after ChainSyncError, ({attempt=}): "
+                    f"{func}. time taken: {time_elapsed:.4f} sec")
             return res
+        # exhausted all attempts.  sending error.
+        # note: we should only get here if notified_height_changed at least once while processing the request,
+        #       and we got a ChainSyncError both when trying before and when trying after that.
+        #       That likely means the chaintip moved at least twice.
+        time_elapsed = time.monotonic() - t0
+        self.logger.info(
+            f"sending RPCError to client after exhausting all attempts for ChainSyncError. "
+            f"{func}. time taken: {time_elapsed:.4f} sec")
         raise RPCError(
             BAD_REQUEST,
-            "chaintip moved too many times (or DB not in sync with daemon) while processing request")
+            "chaintip moved too many times, or DB not in sync with daemon, while processing request")
     return handle_chain_sync_error
 
 

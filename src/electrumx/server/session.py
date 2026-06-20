@@ -1732,6 +1732,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0 + len(utxos) / 50)
         return {'confirmed': confirmed, 'unconfirmed': unconfirmed}
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_get_balance(self, scripthash: str | Any) -> dict[str, Any]:
         '''Return the confirmed and unconfirmed balance of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
@@ -1761,21 +1762,25 @@ class ElectrumX(SessionBase):
         #       if we *also* get a cache-miss (but the cache is only cleared when notified_height is updated).
         return conf + unconf
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_get_history(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the confirmed and unconfirmed history of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.confirmed_and_unconfirmed_history(hashX)
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_get_mempool(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the mempool transactions touching a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.unconfirmed_history(hashX)
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_listunspent(self, scripthash: str | Any) -> Sequence[dict[str, Any]]:
         '''Return the list of UTXOs of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.hashX_listunspent(hashX)
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_subscribe(self, scripthash: str | Any) -> Optional[str]:
         '''Subscribe to a script hash.
 
@@ -1824,9 +1829,10 @@ class ElectrumX(SessionBase):
         d["chaintip"] = self.session_mgr.get_block_ref_for_chaintip().to_protocol_json()
         return d
 
-    def phandle_scriptpubkey_subscribe(self, spk: str) -> collections.abc.Awaitable[Optional[str]]:
+    @retry_on_chain_sync_error(check_chaintip=True)
+    async def phandle_scriptpubkey_subscribe(self, spk: str) -> Optional[str]:
         scripthash = spk_to_scripthash(spk)
-        return self.phandle_scripthash_subscribe(scripthash)
+        return await self.phandle_scripthash_subscribe(scripthash)
 
     def phandle_scriptpubkey_unsubscribe(self, spk: str) -> collections.abc.Awaitable[bool]:
         scripthash = spk_to_scripthash(spk)

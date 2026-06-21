@@ -25,6 +25,7 @@ from typing import Iterable, Optional, TYPE_CHECKING, Sequence, Union, Any, Tupl
 from typing import Callable
 import random
 import inspect
+import logging
 
 import aiorpcx
 from aiorpcx import (Event, JSONRPCAutoDetect, JSONRPCConnection,
@@ -160,30 +161,56 @@ def retry_on_chain_sync_error(func=None, *, check_chaintip: bool):
     @functools.wraps(func)
     async def handle_chain_sync_error(self: 'ElectrumX', *args, **kw_args):
         session_mgr = self.session_mgr
-        sleeps = [0, 0.5, 2.5, 5, 10]
+        # note: the last sleep is ~infinite.  A timeout from env.request_timeout will trigger instead.
+        sleeps = [0, 0.5, 2.5, 5, 10, 10**6]  # seconds
+        t0 = time.monotonic()
         for attempt, sleep_time in enumerate(sleeps):
             if sleep_time != 0:
-                # A previous attempt failed. Sleep a bit before retrying. If the height changes, try again right away.
+                # A previous attempt failed. Sleep until the height changes.
+                # (This is a bit racy: we might miss the height changing if it changes before we start
+                #  awaiting the event. So we cap the sleep to sleep_time, and then retry anyway.)
                 async with ignore_after(sleep_time):
                     await session_mgr.notified_height_changed.wait()
             chaintip1 = chaintip2 = None
+            reorgcnt1 = reorgcnt2 = None
             try:
                 if check_chaintip:
                     chaintip1 = session_mgr.get_block_ref_for_chaintip()
+                    reorgcnt1 = session_mgr._reorg_count
                 res = await func(self, *args, **kw_args)
                 if check_chaintip:
                     chaintip2 = session_mgr.get_block_ref_for_chaintip()
-                if chaintip1 != chaintip2:
+                    reorgcnt2 = session_mgr._reorg_count
+                if not (chaintip1 == chaintip2 and reorgcnt1 == reorgcnt2):
                     raise ChainSyncError(message="chaintip moved while processing request")
             except ChainSyncError as e:
                 self.bump_cost(0.1)  # paranoia: maybe client can force ChainSyncError due to logic bug
-                self.logger.debug(f"got {e!r} while processing request: {func}. retrying ({attempt=}).")
+                time_elapsed = time.monotonic() - t0
+                if time_elapsed > 10.0:
+                    self.logger.debug(
+                        f"got {e!r} while processing request: {func}. retrying ({attempt=}). "
+                        f"time taken: {time_elapsed:.4f} sec")
                 continue  # try again
             assert chaintip1 == chaintip2
+            # success!  sending response now.
+            if attempt != 0:
+                time_elapsed = time.monotonic() - t0
+                self.logger.log(
+                    logging.INFO if time_elapsed > 5.0 else logging.DEBUG,
+                    f"responding to request after ChainSyncError, ({attempt=}): "
+                    f"{func}. time taken: {time_elapsed:.4f} sec")
             return res
+        # exhausted all attempts.  sending error.
+        # note: we should only get here if notified_height_changed at least once while processing the request,
+        #       and we got a ChainSyncError both when trying before and when trying after that.
+        #       That likely means the chaintip moved at least twice.
+        time_elapsed = time.monotonic() - t0
+        self.logger.info(
+            f"sending RPCError to client after exhausting all attempts for ChainSyncError. "
+            f"{func}. time taken: {time_elapsed:.4f} sec")
         raise RPCError(
             BAD_REQUEST,
-            "chaintip moved too many times (or DB not in sync with daemon) while processing request")
+            "chaintip moved too many times, or DB not in sync with daemon, while processing request")
     return handle_chain_sync_error
 
 
@@ -262,6 +289,7 @@ class SessionManager:
         ] = LRUCache(maxsize=1000)
         self.oc_txo_status_cache = LRUCache(maxsize=1000)  # type: LRUCache[tuple[bytes, int], TXOSpendStatus]
         self.notified_height = None  # type: int | None
+        self.notified_tip = None  # type: bytes | None  # block_hash_rev
         self.notified_height_changed = asyncio.Event()
         self.hsub_results = None  # type: dict[str, Any] | None
         self._task_group = OldTaskGroup()
@@ -516,9 +544,10 @@ class SessionManager:
         '''
         # Paranoia: a reorg could race and leave db_height lower
         height = min(height, self.db.db_height)
-        raw = await self.raw_header(height)
-        self.hsub_results = {'hex': raw.hex(), 'height': height}
+        raw_header = await self.raw_header(height)
+        self.hsub_results = {'hex': raw_header.hex(), 'height': height}
         self.notified_height = height
+        self.notified_tip = self.env.coin.header_hash_rev(raw_header)
         self.notified_height_changed.set()
         self.notified_height_changed.clear()
         self.logger.debug(f"new notified_height: {self.notified_height}")
@@ -864,22 +893,29 @@ class SessionManager:
         """Returns a BlockRef for the current chaintip of the DB.
         Raises ChainSyncError if the DB height is not up-to-date with the daemon height.
         """
-        daemon_height = self.daemon.cached_height()
+        # daemon_height = self.daemon.cached_height()
         bp_height = self.bp.height
+        bp_tip = self.bp.tip
         db_height = self.db.db_height
+        db_tip = self.db.db_tip
         notif_height = self.notified_height
-        # typical propagation: daemon_height -> bp_height -> db_height -> notified_height
-        # note: no need to compare tip hashes, heights are sufficient. A reorg would necessarily bump the height.
-        #       Well, except if multiple daemons are configured via DAEMON_URL, and they are on different sides
-        #       of a chainsplit, and we just switched between the daemons...
-        if not (daemon_height == bp_height == db_height == notif_height):
+        notif_tip = self.notified_tip
+        # example propagation: daemon_height --(10s)-> bp_height --(0.1s)-> db_height --(1s)-> notified_height
+        # note: we only care about internal consistency: we allow daemon_height to differ. This also
+        #       significantly reduces the size of the critical time window.
+        #       We try to give the illusion of a consistent monolithic information-source to the client.
+        #       Most protocol method handlers only use e-x's db and mempool to resolve requests,
+        #       the few that also query bitcoind need to implement their own logic to make sure
+        #       the state they present is consistent with e-x's current db state.
+        if not (bp_height == db_height == notif_height):
+            raise ChainSyncError(message="DB is lagging behind daemon")
+        if not (bp_tip == db_tip == notif_tip):
             raise ChainSyncError(message="DB is lagging behind daemon")
         assert db_height >= 0
-        tip_hash = self.db.db_tip
-        assert tip_hash is not None
+        assert db_tip is not None
         return BlockRef(
             height=db_height,
-            hash_rev=tip_hash,
+            hash_rev=db_tip,
         )
 
     async def _merkle_branch(
@@ -1596,6 +1632,9 @@ class ElectrumX(SessionBase):
         funder_bhash = funder_item.get("blockhash")
         funder_bheight = None  # type: Optional[int]
         if funder_bhash is not None:
+            # If the daemon's height is higher than our db.db_height, or the daemon *just* reorged,
+            # the db might fail to map this block_hash to a height: that's good for internal consistency.
+            # If our db has not caught up to a change yet, that change should be hidden from clients.
             funder_bheight = self.db.get_blockheight_from_blockhash(funder_bhash)
         if funder_bheight is None:  # if in mempool, will defer to mempool.spender_for_txo
             return TXOSpendStatus(funder_height=None)  # utxo never existed (in chain)
@@ -1717,6 +1756,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0 + len(utxos) / 50)
         return {'confirmed': confirmed, 'unconfirmed': unconfirmed}
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_get_balance(self, scripthash: str | Any) -> dict[str, Any]:
         '''Return the confirmed and unconfirmed balance of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
@@ -1746,21 +1786,25 @@ class ElectrumX(SessionBase):
         #       if we *also* get a cache-miss (but the cache is only cleared when notified_height is updated).
         return conf + unconf
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_get_history(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the confirmed and unconfirmed history of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.confirmed_and_unconfirmed_history(hashX)
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_get_mempool(self, scripthash: str | Any) -> list[dict[str, Any]]:
         '''Return the mempool transactions touching a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.unconfirmed_history(hashX)
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_listunspent(self, scripthash: str | Any) -> Sequence[dict[str, Any]]:
         '''Return the list of UTXOs of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
         return await self.hashX_listunspent(hashX)
 
+    @retry_on_chain_sync_error(check_chaintip=True)
     async def phandle_scripthash_subscribe(self, scripthash: str | Any) -> Optional[str]:
         '''Subscribe to a script hash.
 
@@ -1809,9 +1853,10 @@ class ElectrumX(SessionBase):
         d["chaintip"] = self.session_mgr.get_block_ref_for_chaintip().to_protocol_json()
         return d
 
-    def phandle_scriptpubkey_subscribe(self, spk: str) -> collections.abc.Awaitable[Optional[str]]:
+    @retry_on_chain_sync_error(check_chaintip=True)
+    async def phandle_scriptpubkey_subscribe(self, spk: str) -> Optional[str]:
         scripthash = spk_to_scripthash(spk)
-        return self.phandle_scripthash_subscribe(scripthash)
+        return await self.phandle_scripthash_subscribe(scripthash)
 
     def phandle_scriptpubkey_unsubscribe(self, spk: str) -> collections.abc.Awaitable[bool]:
         scripthash = spk_to_scripthash(spk)

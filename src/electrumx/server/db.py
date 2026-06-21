@@ -54,11 +54,12 @@ class UTXO:
     value: int       # in satoshis
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, kw_only=True)
 class FlushData:
     height: int
     tx_count: int
     headers: list[bytes]
+    bhash_to_bheight: dict[bytes, int]  # block_hash_rev -> block_height
     block_txids_rev: list[bytes]
     # The following are flushed to the UTXO DB if undo_infos is not None
     undo_infos: list[tuple[Sequence[bytes], int]]
@@ -121,7 +122,7 @@ class DB:
         self.fs_tx_count = 0
         self.db_height = -1
         self.db_tx_count = 0
-        self.db_tip = None  # type: Optional[bytes]
+        self.db_tip = None  # type: Optional[bytes]  # block_hash_rev
         self.last_flush = time.time()
         self.last_flush_tx_count = 0
         self.wall_time = 0
@@ -135,6 +136,9 @@ class DB:
         self.merkle = Merkle()
         self.header_mc = MerkleCache(self.merkle, self.fs_block_hashes_rev)
 
+        # note: all on-disk and in-memory dbs are consistent with each other if BlockProcessor.tip == DB.tip.
+        #       (the mempool is out-of-scope here)
+
         # on-disk: raw block headers in chain order
         self.headers_file = util.LogicalFile('meta/headers', 2, 16000000)
         # on-disk: cumulative number of txs at the end of height N
@@ -146,7 +150,7 @@ class DB:
             self.headers_offsets_file = util.LogicalFile(
                 'meta/headers_offsets', 2, 16000000)
 
-        # in-memory: (block_hash_rev -> block_height) map
+        # in-memory: (block_hash_rev -> block_height) full map
         self.bhash_to_bheight = None  # type: Optional[dict[bytes, int]]
 
     async def _read_tx_counts(self) -> None:
@@ -241,7 +245,7 @@ class DB:
                 f"wanted {count} bhashes, only got {len(block_hashes)}")
         for bheight, bhash in enumerate(block_hashes):
             self.bhash_to_bheight[bhash] = bheight
-        # note: for new blocks, the block_processor will keep the map up-to-date
+        assert len(self.bhash_to_bheight) == self.db_height + 1
 
     def get_blockheight_from_blockhash(self, block_hash_hum: str) -> Optional[int]:
         bhash_rev = hex_str_to_hash(block_hash_hum)
@@ -254,6 +258,7 @@ class DB:
         assert flush_data.height == self.fs_height == self.db_height
         assert flush_data.tip == self.db_tip
         assert not flush_data.headers
+        assert not flush_data.bhash_to_bheight
         assert not flush_data.block_txids_rev
         assert not flush_data.adds
         assert not flush_data.deletes
@@ -270,6 +275,7 @@ class DB:
         '''Flush out cached state.  History is always flushed; UTXOs are
         flushed if flush_utxos.'''
         if flush_data.height == self.db_height:
+            assert flush_data.tip == self.db_tip, f"block_hash mismatch at {flush_data.height}"
             self.assert_flushed(flush_data)
             return
 
@@ -323,6 +329,7 @@ class DB:
         prior_tx_count = (self.tx_counts[self.fs_height]
                           if self.fs_height >= 0 else 0)
         assert len(flush_data.block_txids_rev) == len(flush_data.headers)
+        assert len(flush_data.bhash_to_bheight) == len(flush_data.headers)
         assert flush_data.height == self.fs_height + len(flush_data.headers)
         assert flush_data.tx_count == (self.tx_counts[-1] if self.tx_counts
                                        else 0)
@@ -339,6 +346,9 @@ class DB:
         self.headers_file.write(offset, b''.join(flush_data.headers))
         self.fs_update_header_offsets(offset_start=offset, height_start=height_start, headers=flush_data.headers)
         flush_data.headers.clear()
+        self.bhash_to_bheight.update(flush_data.bhash_to_bheight)
+        assert len(self.bhash_to_bheight) == flush_data.height + 1
+        flush_data.bhash_to_bheight.clear()
 
         offset = height_start * self.tx_counts.itemsize
         self.tx_counts_file.write(offset,
@@ -414,13 +424,14 @@ class DB:
         assert not flush_data.headers
         assert not flush_data.block_txids_rev
         assert flush_data.height < self.db_height
+        assert len(flush_data.bhash_to_bheight) == (self.db_height - flush_data.height)
         self.history.assert_flushed()
 
         start_time = time.time()
         tx_delta = flush_data.tx_count - self.last_flush_tx_count
 
         # 1. (fake-)Flush to file system: this just updates pointers
-        self._backup_fs(flush_data.height, flush_data.tx_count)
+        self._backup_fs(flush_data)
 
         # Crucially, we flush utxo_db and hist_db in the reverse order compared to when advancing,
         #   to maintain the invariant that hist_db_tx_count >= utxo_db_tx_count even if we crash.
@@ -467,12 +478,18 @@ class DB:
         return self.dynamic_header_offset(height + 1)\
                - self.dynamic_header_offset(height)
 
-    def _backup_fs(self, height: int, tx_count: int) -> None:
+    def _backup_fs(self, flush_data: FlushData) -> None:
         '''Back up during a reorg.  This just updates our pointers.'''
-        self.fs_height = height
-        self.fs_tx_count = tx_count
+        self.fs_height = flush_data.height
+        self.fs_tx_count = flush_data.tx_count
+
+        for bhash, bheight in flush_data.bhash_to_bheight.items():
+            assert bheight == self.bhash_to_bheight.pop(bhash)
+        flush_data.bhash_to_bheight.clear()
+        assert len(self.bhash_to_bheight) == flush_data.height + 1
+
         # Truncate header_mc: header count is 1 more than the height.
-        self.header_mc.truncate(height + 1)
+        self.header_mc.truncate(flush_data.height + 1)
 
     async def raw_header(self, height: int) -> bytes:
         '''Return the binary header at the given height.'''

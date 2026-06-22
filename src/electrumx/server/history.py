@@ -91,13 +91,22 @@ class History:
             raise RuntimeError(f"corrupted DB. {self.hist_db_tx_count=} < {utxo_db_tx_count=}")
 
         assert self.hist_db_tx_count > utxo_db_tx_count
-        self.logger.info('DB shut down uncleanly.  Scanning for excess history flushes...')
+        self.logger.info(
+            'DB shut down uncleanly. Scanning for excess history flushes... '
+            'This might take a loooong time. :/'
+        )
 
-        keys = []
-        for db_key, db_val in self.db.iterator(prefix=b'H'):
+        utxo_db_tx_count_bytes = pack_txnum(utxo_db_tx_count)
+        keys = []  # FIXME could grow large in-memory?
+        for iter_cnt, (db_key, _db_val) in enumerate(self.db.iterator(prefix=b'H')):
+            if iter_cnt % 10_000_000 == 0:
+                self.logger.info(
+                    f'Scanning for excess history flushes... num history entries checked: '
+                    f'{iter_cnt // 1_000_000} million. will delete: {len(keys):,d}')
             tx_numb = db_key[-TXNUM_LEN:]
-            tx_num = unpack_txnum(tx_numb)
-            if tx_num >= utxo_db_tx_count:
+            # we exploit that pack_txnum uses big-endian byte-order, and just compare the bytes directly:
+            # tx_num = unpack_txnum(tx_numb)
+            if tx_numb >= utxo_db_tx_count_bytes:
                 keys.append(db_key)
 
         self.logger.info(f'deleting {len(keys):,d} history entries')

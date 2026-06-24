@@ -133,18 +133,15 @@ class History:
             self,
             hashXs_by_tx: list[list[bytes]],
             first_tx_num: int,
-            *,
-            bump_tx_count_next: bool,
     ) -> None:
         unflushed = self.unflushed
-        tx_num = None
         for tx_num, hashXs in enumerate(hashXs_by_tx, start=first_tx_num):
             tx_numb = pack_txnum(tx_num)
             for hashX in hashXs:
                 unflushed.add(hashX + tx_numb)
-        if tx_num is not None and bump_tx_count_next:
-            assert self.hist_db_tx_count_next + len(hashXs_by_tx) == tx_num + 1
-            self.hist_db_tx_count_next = tx_num + 1
+
+    def update_tx_count_next(self, tx_count: int) -> None:
+        self.hist_db_tx_count_next = tx_count
 
     def unflushed_memsize(self) -> int:
         # note: the magic numbers here were estimated using util.deep_getsizeof

@@ -52,8 +52,6 @@ class ServerBase:
         self.logger = class_logger(__name__, self.__class__.__name__)
         version_str = ' '.join(sys.version.splitlines())
         self.logger.info(f'Python version: {version_str}')
-        gil_enabled = sys._is_gil_enabled() if hasattr(sys, "_is_gil_enabled") else "unknown"
-        self.logger.info(f'Python GIL enabled: {gil_enabled}')
         self.env = env
         self.start_time = 0
 

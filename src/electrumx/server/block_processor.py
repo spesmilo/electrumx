@@ -12,6 +12,8 @@
 import asyncio
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+import sys
 import time
 from typing import Sequence, Tuple, List, Callable, Optional, TYPE_CHECKING, Type, Set
 
@@ -194,6 +196,12 @@ class BlockProcessor:
         )
         self.logger = class_logger(__name__, self.__class__.__name__)
 
+        # Check if GIL is enabled.  note: instantiating the DB can force-enable the GIL
+        # if it imports compiled extensions that don't declare free-threading compatibility.
+        # By now, DB() init has already run, so no more changes are expected.
+        self._gil_enabled = sys._is_gil_enabled() if hasattr(sys, "_is_gil_enabled") else True
+        self.logger.info(f'Python GIL enabled: {self._gil_enabled}')
+
         # Meta
         self.next_cache_check = 0
         self.touched_hashxs = set()     # type: Set[bytes]
@@ -240,10 +248,12 @@ class BlockProcessor:
         if not raw_blocks:
             return
         first = self.height + 1
-        # blocks = [self.coin.block(raw_block, first + n)
-        #           for n, raw_block in enumerate(raw_blocks)]
-        blocks = self.pool_executor1.map(self.coin.block, raw_blocks, range(first, first + (len(raw_blocks))))
-        blocks = list(blocks)  # join threads
+        if self._gil_enabled:
+            blocks = [self.coin.block(raw_block, first + n)
+                      for n, raw_block in enumerate(raw_blocks)]
+        else:
+            blocks = self.pool_executor1.map(self.coin.block, raw_blocks, range(first, first + (len(raw_blocks))))
+            blocks = list(blocks)  # join threads
         headers = [block.header for block in blocks]
         hprevs = [self.coin.header_prevhash_rev(h) for h in headers]
         chain = [self.tip] + [self.coin.header_hash_rev(h) for h in headers[:-1]]
@@ -457,34 +467,42 @@ class BlockProcessor:
         self.tx_count = tx_num
 
         # process tx outputs
-        blk_process_outputs = []  # type: list[concurrent.futures.Future]
+        blk_process_outputs = []  # type: list[Callable[[], Callable[[], None]]]
         height = self.height
         for block in blocks:
             height += 1
-            fut = self.pool_executor1.submit(
+            func = partial(
                 self.advance_txs_process_outputs,
                 block.transactions,
                 height=height,
             )
-            blk_process_outputs.append(fut)
-        for fut in blk_process_outputs:
-            add_unflushed_hist = fut.result()
+            if self._gil_enabled:
+                blk_process_outputs.append(func)
+            else:
+                fut = self.pool_executor1.submit(func)
+                blk_process_outputs.append(lambda fut=fut: fut.result())
+        for func in blk_process_outputs:
+            add_unflushed_hist = func()
             add_unflushed_hist()
 
         # process tx inputs
-        blk_process_inputs = []  # type: list[concurrent.futures.Future]
+        blk_process_inputs = []  # type: list[Callable[[], Callable[[], None]]]
         height = self.height
         for block in blocks:
             height += 1
-            fut = self.pool_executor1.submit(
+            func = partial(
                 self.advance_txs_process_inputs,
                 block.transactions,
                 height=height,
                 add_undo_info=height >= min_height,
             )
-            blk_process_inputs.append(fut)
-        for fut in blk_process_inputs:
-            add_unflushed_hist = fut.result()
+            if self._gil_enabled:
+                blk_process_inputs.append(func)
+            else:
+                fut = self.pool_executor1.submit(func)
+                blk_process_inputs.append(lambda fut=fut: fut.result())
+        for func in blk_process_inputs:
+            add_unflushed_hist = func()
             add_unflushed_hist()
 
         height = self.height
@@ -546,10 +564,13 @@ class BlockProcessor:
             for tx_pos, tx in txs_chunk:
                 process_txouts_for_single_tx(tx_pos=tx_pos, tx=tx)
 
-        list(self.pool_executor2.map(
-            process_txouts_for_chunk,
-            chunks(list(enumerate(txs)), 200),
-        ))
+        if self._gil_enabled:
+            process_txouts_for_chunk(enumerate(txs))
+        else:
+            list(self.pool_executor2.map(
+                process_txouts_for_chunk,
+                chunks(list(enumerate(txs)), 200),
+            ))
 
         # -- barrier. all threads have been joined.
         for hashXs in hashXs_by_tx:
@@ -597,6 +618,8 @@ class BlockProcessor:
             for tx_pos, tx in txs_chunk:
                 process_txins_for_single_tx(tx_pos=tx_pos, tx=tx)
 
+        # we split this workload across threads regardless of self._gil_enabled,
+        # as spend_utxo() is disk-IO-bound:
         list(self.pool_executor2.map(
             process_txins_for_chunk,
             chunks(list(enumerate(txs)), 200),

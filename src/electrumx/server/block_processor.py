@@ -459,20 +459,27 @@ class BlockProcessor:
         height = self.height
         for block in blocks:
             height += 1
+            tx_num_start = self.db.tx_counts[height-1] if height > 0 else 0
             is_unspendable = (is_unspendable_genesis if height >= genesis_activation
                               else is_unspendable_legacy)
-            tx_num_start = self.db.tx_counts[height-1] if height > 0 else 0
-            self.advance_txs_process_outputs(
+            add_unflushed_hist1 = self.advance_txs_process_outputs(
                 block.transactions,
                 tx_num_start=tx_num_start,
                 is_unspendable=is_unspendable,
             )
-            self.advance_txs_process_inputs(
+            add_unflushed_hist1()
+
+        height = self.height
+        for block in blocks:
+            height += 1
+            tx_num_start = self.db.tx_counts[height - 1] if height > 0 else 0
+            add_unflushed_hist2 = self.advance_txs_process_inputs(
                 block.transactions,
                 tx_num_start=tx_num_start,
                 height=height,
                 add_undo_info=height >= min_height,
             )
+            add_unflushed_hist2()
 
         height = self.height
         for block in blocks:
@@ -494,7 +501,7 @@ class BlockProcessor:
             *,
             is_unspendable: Callable[[bytes], bool],
             tx_num_start: int,
-    ) -> None:
+    ) -> Callable[[], None]:
 
         # Use local vars for speed in the loops
         script_hashX = self.coin.hashX_from_script
@@ -537,7 +544,8 @@ class BlockProcessor:
         # -- barrier. all threads have been joined.
         for hashXs in hashXs_by_tx:
             update_touched_hashxs(hashXs)
-        self.db.history.add_unflushed(hashXs_by_tx, tx_num_start, bump_tx_count_next=False)
+
+        return lambda: self.db.history.add_unflushed(hashXs_by_tx, tx_num_start, bump_tx_count_next=False)
 
     def advance_txs_process_inputs(
             self,
@@ -546,7 +554,7 @@ class BlockProcessor:
             tx_num_start: int,
             height: int,
             add_undo_info: bool,
-    ) -> None:
+    ) -> Callable[[], None]:
 
         # Use local vars for speed in the loops
         bl_undo_info = [b"" for _ in txs]  # type: list[bytes]
@@ -586,10 +594,11 @@ class BlockProcessor:
         # -- barrier. all threads have been joined.
         for hashXs in hashXs_by_tx:
             update_touched_hashxs(hashXs)
-        self.db.history.add_unflushed(hashXs_by_tx, tx_num_start, bump_tx_count_next=True)
 
         if add_undo_info:
             self.undo_infos[height] = bl_undo_info
+
+        return lambda: self.db.history.add_unflushed(hashXs_by_tx, tx_num_start, bump_tx_count_next=True)
 
     def backup_blocks(self, raw_blocks: Sequence[bytes]) -> None:
         '''Backup the raw blocks and flush.

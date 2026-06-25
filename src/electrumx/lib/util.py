@@ -28,29 +28,29 @@
 
 
 from array import array
-import asyncio
 import inspect
 from ipaddress import ip_address
 import logging
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
-from typing import Set, Any
+from typing import Any
 
 import aiorpcx
 
 
-# Use system-compiled JSON lib if available, fallback to stdlib
+# Use orjson (faster 3rd party library) if available, fallback to stdlib
 try:
-    import rapidjson as json
-except ImportError:
-    try:
-        import ujson as json
-    except ImportError:
-        import json
+    import orjson
+    json_deserialize = orjson.loads
 
-json_deserialize = json.loads
-json_serialize = json.dumps
+    def json_serialize(obj: Any) -> str:
+        return orjson.dumps(obj).decode()  # orjson.dumps() returns bytes
+except ImportError:
+    import json
+    json_deserialize = json.loads
+    json_serialize = json.dumps
+
 
 # Logging utilities
 

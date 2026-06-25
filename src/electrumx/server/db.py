@@ -62,9 +62,9 @@ class FlushData:
     bhash_to_bheight: dict[bytes, int]  # block_hash_rev -> block_height
     block_txids_rev: list[bytes]
     # The following are flushed to the UTXO DB if undo_infos is not None
-    undo_infos: list[tuple[Sequence[bytes], int]]
+    undo_infos: dict[int, Sequence[bytes]]  # height -> undo_info
     adds: dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
-    deletes: list[bytes]  # b'h' db keys, and b'u' db keys
+    deletes: list[bytes]  # b'h' db keys, and b'u' db keys.  order does not matter
     tip: bytes
 
 
@@ -601,10 +601,10 @@ class DB:
         return self.utxo_db.get(self.undo_key(height))
 
     def flush_undo_infos(
-            self, batch_put, undo_infos: Sequence[Tuple[Sequence[bytes], int]]
+            self, batch_put, undo_infos: dict[int, Sequence[bytes]],
     ) -> None:
-        '''undo_infos is a list of (undo_info, height) pairs.'''
-        for undo_info, height in undo_infos:
+        '''undo_infos is a (height -> undo_info) map.'''
+        for height, undo_info in undo_infos.items():
             batch_put(self.undo_key(height), b''.join(undo_info))
 
     def raw_block_prefix(self) -> str:

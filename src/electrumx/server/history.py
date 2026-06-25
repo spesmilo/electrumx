@@ -16,6 +16,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Type, Optional, Sequence, Iterable
 
 import electrumx.lib.util as util
+from electrumx.lib.hash import HASHX_LEN
 from electrumx.server.db_util import (
     DBTooOldForMigrations,
     pack_txnum, unpack_txnum, TXNUM_LEN,
@@ -34,8 +35,7 @@ class History:
 
     def __init__(self):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
-        self.unflushed = defaultdict(bytearray)
-        self.unflushed_count = 0
+        self.unflushed = set()  # type: set[bytes]
         self.hist_db_tx_count = 0
         self.hist_db_tx_count_next = 0  # after next flush, next value for self.hist_db_tx_count
         self.db_version = max(self.DB_VERSIONS)
@@ -129,23 +129,24 @@ class History:
         }
         batch.put(self.DB_STATE_KEY, repr(state).encode())
 
-    def add_unflushed(self, hashXs_by_tx: list[list[bytes]], first_tx_num: int) -> None:
+    def add_unflushed(
+            self,
+            hashXs_by_tx: list[list[bytes]],
+            first_tx_num: int,
+    ) -> None:
+        """This method must be thread-safe. (runs on bp.pool_executor)"""
         unflushed = self.unflushed
-        count = 0
-        tx_num = None
         for tx_num, hashXs in enumerate(hashXs_by_tx, start=first_tx_num):
             tx_numb = pack_txnum(tx_num)
-            hashXs = set(hashXs)
             for hashX in hashXs:
-                unflushed[hashX] += tx_numb
-            count += len(hashXs)
-        self.unflushed_count += count
-        if tx_num is not None:
-            assert self.hist_db_tx_count_next + len(hashXs_by_tx) == tx_num + 1
-            self.hist_db_tx_count_next = tx_num + 1
+                unflushed.add(hashX + tx_numb)
+
+    def update_tx_count_next(self, tx_count: int) -> None:
+        self.hist_db_tx_count_next = tx_count
 
     def unflushed_memsize(self) -> int:
-        return len(self.unflushed) * 180 + self.unflushed_count * TXNUM_LEN
+        # note: the magic numbers here were estimated using util.deep_getsizeof
+        return len(self.unflushed) * 85 + len(self.unflushed) * (HASHX_LEN + TXNUM_LEN)
 
     def assert_flushed(self) -> None:
         assert not self.unflushed
@@ -153,24 +154,21 @@ class History:
     def flush(self) -> None:
         start_time = time.monotonic()
         unflushed = self.unflushed
-        chunks = util.chunks
 
         with self.db.write_batch() as batch:
-            for hashX in sorted(unflushed):
-                for tx_num in chunks(unflushed[hashX], TXNUM_LEN):
-                    db_key = b'H' + hashX + tx_num
-                    batch.put(db_key, b'')
+            for hashX_txnum in sorted(unflushed):
+                db_key = b'H' + hashX_txnum
+                batch.put(db_key, b'')
             self.hist_db_tx_count = self.hist_db_tx_count_next
             self._write_state(batch)
 
         count = len(unflushed)
         unflushed.clear()
-        self.unflushed_count = 0
 
         if self.db.for_sync:
             elapsed = time.monotonic() - start_time
             self.logger.info(f'flushed history in {elapsed:.1f}s '
-                             f'for {count:,d} addrs')
+                             f'for {count:,d} history entries')
 
     def backup(self, *, hashXs: Iterable[bytes], tx_count: int) -> None:
         self.assert_flushed()

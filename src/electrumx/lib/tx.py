@@ -51,6 +51,8 @@ class SkipTxDeserialize(Exception):
 
 
 # note: slotted dataclasses are a bit faster than namedtuples
+# note: frozen dataclasses are much slower than non-frozen
+#       ref https://rednafi.com/python/statically-enforcing-frozen-dataclasses/
 @dataclass(kw_only=True, slots=True)
 class Tx:
     '''Class representing a transaction.'''

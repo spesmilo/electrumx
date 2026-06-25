@@ -129,7 +129,13 @@ class History:
         }
         batch.put(self.DB_STATE_KEY, repr(state).encode())
 
-    def add_unflushed(self, hashXs_by_tx: list[list[bytes]], first_tx_num: int) -> None:
+    def add_unflushed(
+            self,
+            hashXs_by_tx: list[list[bytes]],
+            first_tx_num: int,
+            *,
+            bump_tx_count_next: bool,
+    ) -> None:
         unflushed = self.unflushed
         count = 0
         tx_num = None
@@ -140,7 +146,7 @@ class History:
                 unflushed[hashX] += tx_numb
             count += len(hashXs)
         self.unflushed_count += count
-        if tx_num is not None:
+        if tx_num is not None and bump_tx_count_next:
             assert self.hist_db_tx_count_next + len(hashXs_by_tx) == tx_num + 1
             self.hist_db_tx_count_next = tx_num + 1
 

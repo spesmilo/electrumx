@@ -451,8 +451,14 @@ class BlockProcessor:
             header_hash = coin.header_hash_rev(block.header)
             is_unspendable = (is_unspendable_genesis if height >= genesis_activation
                               else is_unspendable_legacy)
-            undo_info = self.advance_txs(block.transactions, is_unspendable)
+            tx_num_start = self.tx_count
+            self.txids_rev.append(b''.join(tx.txid_rev for tx in block.transactions))
+            self.advance_txs_process_outputs(block.transactions, is_unspendable=is_unspendable, tx_num_start=tx_num_start)
+            undo_info = self.advance_txs_process_inputs(block.transactions, tx_num_start=tx_num_start)
             self._bhash_to_bheight[header_hash] = height
+            tx_num_end = tx_num_start + len(block.transactions)
+            self.tx_count = tx_num_end
+            self.db.tx_counts.append(tx_num_end)
             if height >= min_height:
                 self.undo_infos.append((undo_info, height))
                 self.db.write_raw_block(block.raw, height)
@@ -465,19 +471,17 @@ class BlockProcessor:
         self.tip_advanced_event.clear()
         self.logger.debug(f"new height: {self.height}")
 
-    def advance_txs(
+    def advance_txs_process_outputs(
             self,
             txs: Sequence[Tx],
+            *,
             is_unspendable: Callable[[bytes], bool],
-    ) -> Sequence[bytes]:
-        self.txids_rev.append(b''.join(tx.txid_rev for tx in txs))
+            tx_num_start: int,
+    ) -> None:
 
         # Use local vars for speed in the loops
-        bl_undo_info = [b"" for _ in txs]  # type: list[bytes]
-        tx_num_start = self.tx_count
         script_hashX = self.coin.hashX_from_script
         put_utxo = self.utxo_cache.__setitem__
-        spend_utxo = self.spend_utxo
         update_touched_hashxs = self.touched_hashxs.update
         add_touched_outpoint = self.touched_outpoints.add
         hashXs_by_tx = [[] for _ in txs]  # type: list[list[bytes]]
@@ -514,6 +518,27 @@ class BlockProcessor:
         ))
 
         # -- barrier. all threads have been joined.
+        for hashXs in hashXs_by_tx:
+            update_touched_hashxs(hashXs)
+        self.db.history.add_unflushed(hashXs_by_tx, tx_num_start, bump_tx_count_next=False)
+
+    def advance_txs_process_inputs(
+            self,
+            txs: Sequence[Tx],
+            *,
+            tx_num_start: int,
+    ) -> Sequence[bytes]:
+
+        # Use local vars for speed in the loops
+        bl_undo_info = [b"" for _ in txs]  # type: list[bytes]
+        spend_utxo = self.spend_utxo
+        update_touched_hashxs = self.touched_hashxs.update
+        add_touched_outpoint = self.touched_outpoints.add
+        hashXs_by_tx = [[] for _ in txs]  # type: list[list[bytes]]
+        _pack_txoutidx = pack_txoutidx
+        _pack_sats = pack_satoshis_val
+        _pack_txnum = pack_txnum
+
         # 2. process tx inputs: spend UTXOs
         # note: we don't care about tx ordering in the block
         def process_txins_for_single_tx(tx_pos: int, tx: Tx) -> None:
@@ -540,15 +565,9 @@ class BlockProcessor:
         ))
 
         # -- barrier. all threads have been joined.
-        # Update touched set for notifications
         for hashXs in hashXs_by_tx:
             update_touched_hashxs(hashXs)
-
-        self.db.history.add_unflushed(hashXs_by_tx, self.tx_count)
-
-        tx_num_end = tx_num_start + len(txs)
-        self.tx_count = tx_num_end
-        self.db.tx_counts.append(tx_num_end)
+        self.db.history.add_unflushed(hashXs_by_tx, tx_num_start, bump_tx_count_next=True)
 
         return bl_undo_info
 

@@ -10,6 +10,7 @@
 
 
 import asyncio
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 import time
 from typing import Sequence, Tuple, List, Callable, Optional, TYPE_CHECKING, Type, Set
@@ -241,7 +242,7 @@ class BlockProcessor:
         first = self.height + 1
         # blocks = [self.coin.block(raw_block, first + n)
         #           for n, raw_block in enumerate(raw_blocks)]
-        blocks = self.pool_executor.map(self.coin.block, raw_blocks, range(first, first + (len(raw_blocks))))
+        blocks = self.pool_executor1.map(self.coin.block, raw_blocks, range(first, first + (len(raw_blocks))))
         blocks = list(blocks)  # join threads
         headers = [block.header for block in blocks]
         hprevs = [self.coin.header_prevhash_rev(h) for h in headers]
@@ -442,7 +443,6 @@ class BlockProcessor:
         assert self.state_lock.locked()
         assert blocks
         min_height = self.db.min_undo_height(self.daemon.cached_height())
-        genesis_activation = self.coin.GENESIS_ACTIVATION
         coin = self.coin
 
         tx_num = self.tx_count
@@ -456,30 +456,36 @@ class BlockProcessor:
             self.db.tx_counts.append(tx_num)
         self.tx_count = tx_num
 
+        # process tx outputs
+        blk_process_outputs = []  # type: list[concurrent.futures.Future]
         height = self.height
         for block in blocks:
             height += 1
-            tx_num_start = self.db.tx_counts[height-1] if height > 0 else 0
-            is_unspendable = (is_unspendable_genesis if height >= genesis_activation
-                              else is_unspendable_legacy)
-            add_unflushed_hist1 = self.advance_txs_process_outputs(
+            fut = self.pool_executor1.submit(
+                self.advance_txs_process_outputs,
                 block.transactions,
-                tx_num_start=tx_num_start,
-                is_unspendable=is_unspendable,
+                height=height,
             )
-            add_unflushed_hist1()
+            blk_process_outputs.append(fut)
+        for fut in blk_process_outputs:
+            add_unflushed_hist = fut.result()
+            add_unflushed_hist()
 
+        # process tx inputs
+        blk_process_inputs = []  # type: list[concurrent.futures.Future]
         height = self.height
         for block in blocks:
             height += 1
-            tx_num_start = self.db.tx_counts[height - 1] if height > 0 else 0
-            add_unflushed_hist2 = self.advance_txs_process_inputs(
+            fut = self.pool_executor1.submit(
+                self.advance_txs_process_inputs,
                 block.transactions,
-                tx_num_start=tx_num_start,
                 height=height,
                 add_undo_info=height >= min_height,
             )
-            add_unflushed_hist2()
+            blk_process_inputs.append(fut)
+        for fut in blk_process_inputs:
+            add_unflushed_hist = fut.result()
+            add_unflushed_hist()
 
         height = self.height
         for block in blocks:
@@ -499,9 +505,13 @@ class BlockProcessor:
             self,
             txs: Sequence[Tx],
             *,
-            is_unspendable: Callable[[bytes], bool],
-            tx_num_start: int,
+            height: int,
     ) -> Callable[[], None]:
+
+        tx_num_start = self.db.tx_counts[height - 1] if height > 0 else 0
+        is_unspendable = (
+            is_unspendable_genesis if height >= self.coin.GENESIS_ACTIVATION
+            else is_unspendable_legacy)
 
         # Use local vars for speed in the loops
         script_hashX = self.coin.hashX_from_script
@@ -536,7 +546,7 @@ class BlockProcessor:
             for tx_pos, tx in txs_chunk:
                 process_txouts_for_single_tx(tx_pos=tx_pos, tx=tx)
 
-        list(self.pool_executor.map(
+        list(self.pool_executor2.map(
             process_txouts_for_chunk,
             chunks(list(enumerate(txs)), 200),
         ))
@@ -551,10 +561,11 @@ class BlockProcessor:
             self,
             txs: Sequence[Tx],
             *,
-            tx_num_start: int,
             height: int,
             add_undo_info: bool,
     ) -> Callable[[], None]:
+
+        tx_num_start = self.db.tx_counts[height - 1] if height > 0 else 0
 
         # Use local vars for speed in the loops
         bl_undo_info = [b"" for _ in txs]  # type: list[bytes]
@@ -586,7 +597,7 @@ class BlockProcessor:
             for tx_pos, tx in txs_chunk:
                 process_txins_for_single_tx(tx_pos=tx_pos, tx=tx)
 
-        list(self.pool_executor.map(
+        list(self.pool_executor2.map(
             process_txins_for_chunk,
             chunks(list(enumerate(txs)), 200),
         ))
@@ -827,16 +838,24 @@ class BlockProcessor:
         '''
         self._caught_up_event = caught_up_event
         await self._first_open_dbs()
-        with ThreadPoolExecutor() as self.pool_executor:
-            try:
-                async with OldTaskGroup() as group:
-                    await group.spawn(self.prefetcher.main_loop(self.height))
-                    await group.spawn(self._process_prefetched_blocks())
-            # Don't flush for arbitrary exceptions as they might be a cause or consequence of
-            # corrupted data
-            except CancelledError:
-                self.logger.info('flushing to DB for a clean shutdown...')
-                await self.flush(True)
+        # create two threadpools:
+        # - multi-block level work split happens in pool1,
+        # - intra-block (txs) level work split happens in pool2.
+        # A single threadpool is not enough as that could deadlock: there might be no more threads
+        # to start work, and all existing threads might be waiting on new work they just scheduled.
+        # To avoid this, we logically nest the pools: top-level code schedules work onto pool1,
+        # code already running in pool1 schedules work onto pool2.
+        with ThreadPoolExecutor() as self.pool_executor1:
+            with ThreadPoolExecutor() as self.pool_executor2:
+                try:
+                    async with OldTaskGroup() as group:
+                        await group.spawn(self.prefetcher.main_loop(self.height))
+                        await group.spawn(self._process_prefetched_blocks())
+                # Don't flush for arbitrary exceptions as they might be a cause or consequence of
+                # corrupted data
+                except CancelledError:
+                    self.logger.info('flushing to DB for a clean shutdown...')
+                    await self.flush(True)
 
     def force_chain_reorg(self, count: int) -> bool:
         '''Force a reorg of the given number of blocks.

@@ -471,12 +471,11 @@ class BlockProcessor:
         self.txids_rev.append(b''.join(tx.txid_rev for tx in txs))
 
         # Use local vars for speed in the loops
-        undo_info = []  # type: list[bytes]
+        bl_undo_info = [b"" for _ in txs]  # type: list[bytes]
         tx_num = self.tx_count
         script_hashX = self.coin.hashX_from_script
         put_utxo = self.utxo_cache.__setitem__
         spend_utxo = self.spend_utxo
-        undo_info_append = undo_info.append
         update_touched_hashxs = self.touched_hashxs.update
         add_touched_outpoint = self.touched_outpoints.add
         hashXs_by_tx = [[] for _ in txs]  # type: list[list[bytes]]
@@ -505,16 +504,19 @@ class BlockProcessor:
 
         # Spend the inputs
         # A separate for-loop here allows any tx ordering in block.
-        for tx, hashXs in zip(txs, hashXs_by_tx):
-            add_hashXs = hashXs.append
+        for tx_pos, tx in enumerate(txs):
+            add_hashXs = hashXs_by_tx[tx_pos].append
+            tx_undo_info = []  # type: list[bytes]
+            tx_undo_info_append = tx_undo_info.append
             for txin in tx.inputs:
                 if txin.is_generation():
                     continue
                 cache_value = spend_utxo(txin.prev_txid_rev, txin.prev_idx)
-                undo_info_append(cache_value)
+                tx_undo_info_append(cache_value)
                 add_hashXs(cache_value[:HASHX_LEN])
                 prevout_tuple = (txin.prev_txid_rev, txin.prev_idx)
                 add_touched_outpoint(prevout_tuple)
+            bl_undo_info[tx_pos] = b"".join(tx_undo_info)
 
         # Update touched set for notifications
         for hashXs in hashXs_by_tx:
@@ -525,7 +527,7 @@ class BlockProcessor:
         self.tx_count = tx_num
         self.db.tx_counts.append(tx_num)
 
-        return undo_info
+        return bl_undo_info
 
     def backup_blocks(self, raw_blocks: Sequence[bytes]) -> None:
         '''Backup the raw blocks and flush.

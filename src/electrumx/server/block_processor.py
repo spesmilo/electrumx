@@ -908,10 +908,16 @@ class DecredBlockProcessor(BlockProcessor):
 
 class NameIndexBlockProcessor(BlockProcessor):
 
-    def advance_txs(self, txs, is_unspendable):
-        result = super().advance_txs(txs, is_unspendable)
+    def advance_txs_process_outputs(
+            self,
+            txs: Sequence[Tx],
+            *,
+            height: int,
+    ) -> None:
+        result = super().advance_txs_process_outputs(txs, height=height)
 
-        tx_num = self.tx_count - len(txs)
+        tx_num_start = self.db.tx_counts[height - 1] if height > 0 else 0
+        tx_num = tx_num_start
         script_name_hashX = self.coin.name_hashX_from_script
         update_touched_hashxs = self.touched_hashxs.update
         hashXs_by_tx = []
@@ -932,7 +938,7 @@ class NameIndexBlockProcessor(BlockProcessor):
             update_touched_hashxs(hashXs)
             tx_num += 1
 
-        self.db.history.add_unflushed(hashXs_by_tx, self.tx_count - len(txs))
+        self.db.history.add_unflushed(hashXs_by_tx, tx_num_start)
 
         return result
 

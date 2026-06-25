@@ -467,6 +467,7 @@ class BlockProcessor:
             txs: Sequence[Tx],
             is_unspendable: Callable[[bytes], bool],
     ) -> Sequence[bytes]:
+        # TODO split into two funcs, first fund all outputs, second spend all inputs
         self.txids_rev.append(b''.join(tx.txid_rev for tx in txs))
 
         # Use local vars for speed in the loops
@@ -478,29 +479,17 @@ class BlockProcessor:
         undo_info_append = undo_info.append
         update_touched_hashxs = self.touched_hashxs.update
         add_touched_outpoint = self.touched_outpoints.add
-        hashXs_by_tx = []  # type: list[list[bytes]]
-        append_hashXs = hashXs_by_tx.append
+        hashXs_by_tx = [[] for _ in txs]  # type: list[list[bytes]]
         _pack_txoutidx = pack_txoutidx
         _pack_sats = pack_satoshis_val
         _pack_txnum = pack_txnum
 
-        for tx in txs:
+        # Add the new UTXOs
+        for tx, hashXs in zip(txs, hashXs_by_tx):
             txid_rev = tx.txid_rev
-            hashXs = []  # type: list[bytes]
-            append_hashX = hashXs.append
+            add_hashXs = hashXs.append
             tx_numb = _pack_txnum(tx_num)
 
-            # Spend the inputs
-            for txin in tx.inputs:
-                if txin.is_generation():
-                    continue
-                cache_value = spend_utxo(txin.prev_txid_rev, txin.prev_idx)
-                undo_info_append(cache_value)
-                append_hashX(cache_value[:HASHX_LEN])
-                prevout_tuple = (txin.prev_txid_rev, txin.prev_idx)
-                add_touched_outpoint(prevout_tuple)
-
-            # Add the new UTXOs
             for idx, txout in enumerate(tx.outputs):
                 # Ignore unspendable outputs
                 if is_unspendable(txout.pk_script):
@@ -508,14 +497,28 @@ class BlockProcessor:
 
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
-                append_hashX(hashX)
+                add_hashXs(hashX)
                 put_utxo(txid_rev + _pack_txoutidx(idx),
                          hashX + tx_numb + _pack_sats(txout.value))
                 add_touched_outpoint((txid_rev, idx))
-
-            append_hashXs(hashXs)
-            update_touched_hashxs(hashXs)
             tx_num += 1
+
+        # Spend the inputs
+        # A separate for-loop here allows any tx ordering in block.
+        for tx, hashXs in zip(txs, hashXs_by_tx):
+            add_hashXs = hashXs.append
+            for txin in tx.inputs:
+                if txin.is_generation():
+                    continue
+                cache_value = spend_utxo(txin.prev_txid_rev, txin.prev_idx)
+                undo_info_append(cache_value)
+                add_hashXs(cache_value[:HASHX_LEN])
+                prevout_tuple = (txin.prev_txid_rev, txin.prev_idx)
+                add_touched_outpoint(prevout_tuple)
+
+        # Update touched set for notifications
+        for hashXs in hashXs_by_tx:
+            update_touched_hashxs(hashXs)
 
         self.db.history.add_unflushed(hashXs_by_tx, self.tx_count)
 

@@ -64,7 +64,7 @@ class FlushData:
     # The following are flushed to the UTXO DB if undo_infos is not None
     undo_infos: list[tuple[Sequence[bytes], int]]
     adds: dict[bytes, bytes]  # txid+out_idx -> hashX+tx_num+value_sats
-    deletes: list[bytes]  # b'h' db keys, and b'u' db keys
+    deletes: list[bytes]  # b'h' db keys, and b'u' db keys.  order does not matter
     tip: bytes
 
 

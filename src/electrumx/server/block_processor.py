@@ -62,7 +62,7 @@ class Prefetcher:
         self.cache_size = 0
         self.min_cache_size = 10 * 1024 * 1024
         # This makes the first fetch be 10 blocks
-        self.ave_size = self.min_cache_size // 10
+        self.ave_size = max(1, self.min_cache_size // 10)
         self.polling_delay = polling_delay_secs
 
     async def main_loop(self, bp_height: int) -> None:
@@ -72,7 +72,8 @@ class Prefetcher:
             try:
                 # Sleep a while if there is nothing to prefetch
                 await self.refill_event.wait()
-                if not await self._prefetch_blocks():
+                daemon_is_ahead = await self._prefetch_blocks()
+                if not daemon_is_ahead:
                     # The mempool logic and maybe others can independently notice the daemon's height
                     # changing. If that happens, we should wake up immediately to fetch blocks.
                     async with ignore_after(self.polling_delay):
@@ -435,6 +436,8 @@ class BlockProcessor:
 
         It is already verified they correctly connect onto our tip.
         '''
+        assert self.state_lock.locked()
+        assert blocks
         min_height = self.db.min_undo_height(self.daemon.cached_height())
         height = self.height
         genesis_activation = self.coin.GENESIS_ACTIVATION
@@ -467,7 +470,7 @@ class BlockProcessor:
         self.txids_rev.append(b''.join(tx.txid_rev for tx in txs))
 
         # Use local vars for speed in the loops
-        undo_info = []
+        undo_info = []  # type: list[bytes]
         tx_num = self.tx_count
         script_hashX = self.coin.hashX_from_script
         put_utxo = self.utxo_cache.__setitem__

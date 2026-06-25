@@ -208,7 +208,7 @@ class BlockProcessor:
         self.headers = []  # type: list[bytes]
         self._bhash_to_bheight = dict()  # type: dict[bytes, int]
         self.txids_rev = []  # type: List[bytes]
-        self.undo_infos = []  # type: List[Tuple[Sequence[bytes], int]]
+        self.undo_infos = dict()  # type: dict[int, Sequence[bytes]]
 
         # UTXO cache
         self.utxo_cache = {}
@@ -442,25 +442,42 @@ class BlockProcessor:
         assert self.state_lock.locked()
         assert blocks
         min_height = self.db.min_undo_height(self.daemon.cached_height())
-        height = self.height
         genesis_activation = self.coin.GENESIS_ACTIVATION
         coin = self.coin
 
+        tx_num = self.tx_count
+        height = self.height
         for block in blocks:
             height += 1
             header_hash = coin.header_hash_rev(block.header)
+            self._bhash_to_bheight[header_hash] = height
+            self.txids_rev.append(b''.join(tx.txid_rev for tx in block.transactions))
+            tx_num += len(block.transactions)
+            self.db.tx_counts.append(tx_num)
+        self.tx_count = tx_num
+
+        height = self.height
+        for block in blocks:
+            height += 1
             is_unspendable = (is_unspendable_genesis if height >= genesis_activation
                               else is_unspendable_legacy)
-            tx_num_start = self.tx_count
-            self.txids_rev.append(b''.join(tx.txid_rev for tx in block.transactions))
-            self.advance_txs_process_outputs(block.transactions, is_unspendable=is_unspendable, tx_num_start=tx_num_start)
-            undo_info = self.advance_txs_process_inputs(block.transactions, tx_num_start=tx_num_start)
-            self._bhash_to_bheight[header_hash] = height
-            tx_num_end = tx_num_start + len(block.transactions)
-            self.tx_count = tx_num_end
-            self.db.tx_counts.append(tx_num_end)
+            tx_num_start = self.db.tx_counts[height-1] if height > 0 else 0
+            self.advance_txs_process_outputs(
+                block.transactions,
+                tx_num_start=tx_num_start,
+                is_unspendable=is_unspendable,
+            )
+            self.advance_txs_process_inputs(
+                block.transactions,
+                tx_num_start=tx_num_start,
+                height=height,
+                add_undo_info=height >= min_height,
+            )
+
+        height = self.height
+        for block in blocks:
+            height += 1
             if height >= min_height:
-                self.undo_infos.append((undo_info, height))
                 self.db.write_raw_block(block.raw, height)
 
         headers = [block.header for block in blocks]
@@ -527,7 +544,9 @@ class BlockProcessor:
             txs: Sequence[Tx],
             *,
             tx_num_start: int,
-    ) -> Sequence[bytes]:
+            height: int,
+            add_undo_info: bool,
+    ) -> None:
 
         # Use local vars for speed in the loops
         bl_undo_info = [b"" for _ in txs]  # type: list[bytes]
@@ -569,7 +588,8 @@ class BlockProcessor:
             update_touched_hashxs(hashXs)
         self.db.history.add_unflushed(hashXs_by_tx, tx_num_start, bump_tx_count_next=True)
 
-        return bl_undo_info
+        if add_undo_info:
+            self.undo_infos[height] = bl_undo_info
 
     def backup_blocks(self, raw_blocks: Sequence[bytes]) -> None:
         '''Backup the raw blocks and flush.

@@ -239,8 +239,10 @@ class BlockProcessor:
         if not raw_blocks:
             return
         first = self.height + 1
-        blocks = [self.coin.block(raw_block, first + n)
-                  for n, raw_block in enumerate(raw_blocks)]
+        # blocks = [self.coin.block(raw_block, first + n)
+        #           for n, raw_block in enumerate(raw_blocks)]
+        blocks = self.pool_executor.map(self.coin.block, raw_blocks, range(first, first + (len(raw_blocks))))
+        blocks = list(blocks)  # join threads
         headers = [block.header for block in blocks]
         hprevs = [self.coin.header_prevhash_rev(h) for h in headers]
         chain = [self.tip] + [self.coin.header_hash_rev(h) for h in headers[:-1]]

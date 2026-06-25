@@ -486,7 +486,7 @@ class BlockProcessor:
         _pack_txnum = pack_txnum
 
         # 1. process tx outputs: fund UTXOs
-        for tx_pos, tx in enumerate(txs):
+        def process_txouts_for_single_tx(tx_pos: int, tx: Tx) -> None:
             txid_rev = tx.txid_rev
             add_hashXs = hashXs_by_tx[tx_pos].append
             tx_num = tx_num_start + tx_pos
@@ -504,6 +504,16 @@ class BlockProcessor:
                          hashX + tx_numb + _pack_sats(txout.value))
                 add_touched_outpoint((txid_rev, idx))
 
+        def process_txouts_for_chunk(txs_chunk):
+            for tx_pos, tx in txs_chunk:
+                process_txouts_for_single_tx(tx_pos=tx_pos, tx=tx)
+
+        list(self.pool_executor.map(
+            process_txouts_for_chunk,
+            chunks(list(enumerate(txs)), 200),
+        ))
+
+        # -- barrier. all threads have been joined.
         # 2. process tx inputs: spend UTXOs
         # note: we don't care about tx ordering in the block
         def process_txins_for_single_tx(tx_pos: int, tx: Tx) -> None:
@@ -529,6 +539,7 @@ class BlockProcessor:
             chunks(list(enumerate(txs)), 200),
         ))
 
+        # -- barrier. all threads have been joined.
         # Update touched set for notifications
         for hashXs in hashXs_by_tx:
             update_touched_hashxs(hashXs)

@@ -641,6 +641,7 @@ class BlockProcessor:
         The blocks should be in order of decreasing height, starting at.
         self.height.  A flush is performed once the blocks are backed up.
         '''
+        assert self.state_lock.locked()
         self.db.assert_flushed(self.flush_data())
         assert self.height >= len(raw_blocks)
         genesis_activation = self.coin.GENESIS_ACTIVATION
@@ -937,67 +938,13 @@ class NameIndexBlockProcessor(BlockProcessor):
 
 
 class LTORBlockProcessor(BlockProcessor):
-
-    def advance_txs(self, txs, is_unspendable):
-        self.txids_rev.append(b''.join(tx.txid_rev for tx in txs))
-
-        # Use local vars for speed in the loops
-        undo_info = []
-        tx_num = self.tx_count
-        script_hashX = self.coin.hashX_from_script
-        put_utxo = self.utxo_cache.__setitem__
-        spend_utxo = self.spend_utxo
-        undo_info_append = undo_info.append
-        update_touched_hashxs = self.touched_hashxs.update
-        add_touched_outpoint = self.touched_outpoints.add
-        _pack_txoutidx = pack_txoutidx
-        _pack_sats = pack_satoshis_val
-        _pack_txnum = pack_txnum
-
-        hashXs_by_tx = [set() for _ in txs]
-
-        # Add the new UTXOs
-        for tx, hashXs in zip(txs, hashXs_by_tx):
-            txid_rev = tx.txid_rev
-            add_hashXs = hashXs.add
-            tx_numb = _pack_txnum(tx_num)
-
-            for idx, txout in enumerate(tx.outputs):
-                # Ignore unspendable outputs
-                if is_unspendable(txout.pk_script):
-                    continue
-
-                # Get the hashX
-                hashX = script_hashX(txout.pk_script)
-                add_hashXs(hashX)
-                put_utxo(txid_rev + _pack_txoutidx(idx),
-                         hashX + tx_numb + _pack_sats(txout.value))
-                add_touched_outpoint((txid_rev, idx))
-            tx_num += 1
-
-        # Spend the inputs
-        # A separate for-loop here allows any tx ordering in block.
-        for tx, hashXs in zip(txs, hashXs_by_tx):
-            add_hashXs = hashXs.add
-            for txin in tx.inputs:
-                if txin.is_generation():
-                    continue
-                cache_value = spend_utxo(txin.prev_txid_rev, txin.prev_idx)
-                undo_info_append(cache_value)
-                add_hashXs(cache_value[:HASHX_LEN])
-                prevout_tuple = (txin.prev_txid_rev, txin.prev_idx)
-                add_touched_outpoint(prevout_tuple)
-
-        # Update touched set for notifications
-        for hashXs in hashXs_by_tx:
-            update_touched_hashxs(hashXs)
-
-        self.db.history.add_unflushed(hashXs_by_tx, self.tx_count)
-
-        self.tx_count = tx_num
-        self.db.tx_counts.append(tx_num)
-
-        return undo_info
+    # for Lexicographical Transaction ordering in blocks
+    # (as opposed to Topological order as used in Bitcoin)
+    # note: the base class already does not care about tx ordering inside a block
+    #       for the forward (catch-up) direction, as that better parallelizes.
+    #       This subclass is only kept for the reverse (backup) direction, for now.
+    #       We could also parallelize backup_txs in the base class for better perf,
+    #       likely removing the tx ordering assumptions, then we could rm this subclass.
 
     def backup_txs(self, txs, is_unspendable):
         undo_info = self.db.read_undo_info(self.height)

@@ -134,6 +134,7 @@ class History:
             hashXs_by_tx: list[list[bytes]],
             first_tx_num: int,
     ) -> None:
+        """This method must be thread-safe. (runs on bp.pool_executor)"""
         unflushed = self.unflushed
         for tx_num, hashXs in enumerate(hashXs_by_tx, start=first_tx_num):
             tx_numb = pack_txnum(tx_num)

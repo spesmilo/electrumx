@@ -524,6 +524,7 @@ class BlockProcessor:
             *,
             height: int,
     ) -> None:
+        """This method must be thread-safe. (runs on bp.pool_executor)"""
 
         tx_num_start = self.db.tx_counts[height - 1] if height > 0 else 0
         is_unspendable = (
@@ -584,6 +585,7 @@ class BlockProcessor:
             height: int,
             add_undo_info: bool,
     ) -> None:
+        """This method must be thread-safe. (runs on bp.pool_executor)"""
 
         tx_num_start = self.db.tx_counts[height - 1] if height > 0 else 0
 
@@ -772,6 +774,8 @@ class BlockProcessor:
         If the UTXO is not in the cache it must be on disk.  We store
         all UTXOs so not finding one indicates a logic error or DB
         corruption.
+
+        This method must be thread-safe. (runs on bp.pool_executor)
         '''
         # Fast track is it being in the cache
         idx_packed = pack_txoutidx(tx_idx)
@@ -803,7 +807,7 @@ class BlockProcessor:
             utxo_value_packed = self.db.utxo_db.get(udb_key)
             if utxo_value_packed:
                 # Remove both entries for this UTXO
-                self.db_deletes.append(hdb_key)
+                self.db_deletes.append(hdb_key)  # FIXME appending to list not guaranteed to be thread-safe
                 self.db_deletes.append(udb_key)
                 return hashX + tx_num_packed + utxo_value_packed
 

@@ -48,6 +48,9 @@ TODO expand
 * protocol:
    - new: implement electrum protocol version 1.7  (`spesmilo/electrum-protocol#2`_).
      The min supported protocol version remains 1.4, the max is now 1.7.
+* performance: json (de)serialization can now optionally use the Rust-based
+  :code:`orjson` library (via the :code:`orjson` pip extra), replacing the
+  previous :code:`ujson` and :code:`rapidjson` extras.
 
 
 Version 1.20.0 (03 June 2026)

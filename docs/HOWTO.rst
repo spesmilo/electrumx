@@ -101,9 +101,9 @@ You can install with::
 
 There are many extra Python dependencies available to fit the needs of your
 system or coins. For example, to install the RocksDB dependencies and a faster
-JSON parsing library::
+JSON (de)serialization library::
 
-    pip3 install ".[rocksdb,ujson]"
+    pip3 install ".[rocksdb,orjson]"
 
 see pyproject.toml's ``project.optional-dependencies`` for a complete list.
 

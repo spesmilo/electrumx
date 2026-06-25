@@ -220,3 +220,19 @@ def test_pack_varbytes():
         data = util.pack_varbytes(test)
         deser = tx.Deserializer(data)
         assert deser._read_varbytes() == test
+
+def test_json_serialize_deserialize():
+    obj = {
+        'coin': 'Bitcoin',
+        'height': 950000,
+        'counts': {'getblock': 2},
+        'nested': {'list': [1, 2, 3], 'flag': True, 'none': None},
+    }
+    serialized = util.json_serialize(obj)
+    assert isinstance(serialized, str)
+    assert util.json_deserialize(serialized) == {
+        'coin': 'Bitcoin',
+        'height': 950000,
+        'counts': {'getblock': 2},
+        'nested': {'list': [1, 2, 3], 'flag': True, 'none': None},
+    }

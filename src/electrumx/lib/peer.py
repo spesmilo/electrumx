@@ -25,12 +25,13 @@
 
 '''Representation of a peer server.'''
 
+from functools import cached_property
 from ipaddress import ip_address, IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from socket import AF_INET, AF_INET6
 from typing import Any
 
 from aiorpcx import is_valid_hostname
-from electrumx.lib.util import cachedproperty, protocol_tuple, version_string
+from electrumx.lib.util import protocol_tuple, version_string
 
 
 class Peer:
@@ -147,11 +148,11 @@ class Peer:
             self.other_port_pairs.add(('TCP', other.tcp_port))
         return bool(self.other_port_pairs)
 
-    @cachedproperty
+    @cached_property
     def is_tor(self):
         return self.host.endswith('.onion')
 
-    @cachedproperty
+    @cached_property
     def is_valid(self):
         ip = self.ip_address
         if ip:
@@ -159,7 +160,7 @@ class Peer:
                     and not (ip.is_multicast or ip.is_unspecified))
         return is_valid_hostname(self.host)
 
-    @cachedproperty
+    @cached_property
     def is_public(self):
         ip = self.ip_address
         if ip:
@@ -167,7 +168,7 @@ class Peer:
         else:
             return self.is_valid and self.host != 'localhost'
 
-    @cachedproperty
+    @cached_property
     def ip_address(self):
         '''The host as a python ip_address object, or None.'''
         try:
@@ -235,27 +236,27 @@ class Peer:
         result = self.features.get(key)
         return result if isinstance(result, str) else None
 
-    @cachedproperty
+    @cached_property
     def genesis_hash(self):
         '''Returns the network genesis block hash as a string if known, otherwise None.'''
         return self._string('genesis_hash')
 
-    @cachedproperty
+    @cached_property
     def ssl_port(self):
         '''Returns None if no SSL port, otherwise the port as an integer.'''
         return self._port('ssl_port')
 
-    @cachedproperty
+    @cached_property
     def tcp_port(self):
         '''Returns None if no TCP port, otherwise the port as an integer.'''
         return self._port('tcp_port')
 
-    @cachedproperty
+    @cached_property
     def server_version(self):
         '''Returns the server version as a string if known, otherwise None.'''
         return self._string('server_version')
 
-    @cachedproperty
+    @cached_property
     def pruning(self):
         '''Returns the pruning level as an integer.  None indicates no
         pruning.'''
@@ -269,12 +270,12 @@ class Peer:
         ptuple = protocol_tuple(version_str)
         return version_string(ptuple)
 
-    @cachedproperty
+    @cached_property
     def protocol_min(self):
         '''Minimum protocol version as a string, e.g., 1.0'''
         return self._protocol_version_string('protocol_min')
 
-    @cachedproperty
+    @cached_property
     def protocol_max(self):
         '''Maximum protocol version as a string, e.g., 1.1'''
         return self._protocol_version_string('protocol_max')

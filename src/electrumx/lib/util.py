@@ -83,20 +83,6 @@ def class_logger(path, classname):
     return logging.getLogger(path).getChild(classname)
 
 
-# Method decorator.  To be used for calculations that will always
-# deliver the same result.  The method cannot take any arguments
-# and should be accessed as an attribute.
-class cachedproperty:
-    def __init__(self, f):
-        self.f = f
-
-    def __get__(self, obj, type):
-        obj = obj or type
-        value = self.f(obj)
-        setattr(obj, self.f.__name__, value)
-        return value
-
-
 def formatted_time(t, sep=' '):
     '''Return a number of seconds as a string in days, hours, mins and
     maybe secs.'''

@@ -38,12 +38,27 @@ TODO expand
   `[rocksdb]` pip extras and the "Database Engine" section of the HOWTO.
 
   Previously RocksDB was difficult to use as the python bindings for it have been unmaintained for years.
-  By the super-slop-powers of LLMs, we revived the python bindings and made it compatible with modern
+  By the super-slop-powers of LLMs, we revived the python bindings as `rocksdb-ng` and made it compatible with modern
   cpython, cython, and rocksdb. The changes are reviewable and not really slop. (see `spesmilo/electrumx#347`_)
+  rocksdb-ng (starting with version 2.3) is also compatible with `free-threaded python`_, see "performance" section.
 
   LevelDB was written with HDDs in mind. RocksDB is more modern
   and on an SSD takes around ~25% less time than LevelDB to sync from genesis.
   Given that this release contains breaking DB changes and a resync is needed anyway, maybe try out RocksDB :)
+
+* performance:
+
+   - the BlockProcessor is now massively multi-threaded, both inside a single block and across a span of blocks.
+     This can mainly only be taken advantage of if the GIL (Global Interpreter Lock) is disabled, that is,
+     when using a `free-threaded python`_ interpreter: e.g. cpython `3.14t`, compiled with `--disable-gil`.
+     On a decent modern machine with a multi-core CPU, this has been measured to cut initial sync time
+     from genesis to a bit less than half. OTOH, much more RAM is required for the parallel processing
+     (example: approx 2 GB when syncing with GIL, 8 GB when syncing without GIL).
+
+   - processing a single block at the tip, when already caught up, is expected to take around half the time,
+     regardless of the GIL. Still, without the GIL, it is even faster.
+
+   - for more details, see `spesmilo/electrumx#369`_
 
 * protocol:
    - new: implement electrum protocol version 1.7  (`spesmilo/electrum-protocol#2`_).
@@ -371,6 +386,7 @@ This fork maintained by:
 .. _spesmilo/electrumx#349:  https://github.com/spesmilo/electrumx/pull/349
 .. _spesmilo/electrumx#351:  https://github.com/spesmilo/electrumx/pull/351
 .. _spesmilo/electrumx#352:  https://github.com/spesmilo/electrumx/pull/352
+.. _spesmilo/electrumx#369:  https://github.com/spesmilo/electrumx/pull/369
 
 
 .. _4b3f6510:  https://github.com/spesmilo/electrumx/commit/4b3f6510e94670a013c1abe6247cdd2b0e7e6f8c
@@ -390,4 +406,6 @@ This fork maintained by:
 
 .. _spesmilo/electrum-protocol#2:  https://github.com/spesmilo/electrum-protocol/pull/2
 .. _spesmilo/electrum-protocol#6:  https://github.com/spesmilo/electrum-protocol/pull/6
+
+.. _free-threaded python:  https://docs.python.org/3/howto/free-threading-python.html
 

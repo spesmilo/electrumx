@@ -384,11 +384,9 @@ class MemPool:
         if new_hashes:
             group = OldTaskGroup()
             for hashes in chunks(new_hashes, 200):
-                coro = self._fetch_and_accept(
+                coro = self._fetch_raw_txs_and_utxos(
                     new_txids_rev=hashes,
                     all_txids_rev=all_txids_rev,
-                    touched_hashxs=touched_hashxs,
-                    touched_outpoints=touched_outpoints,
                 )
                 await group.spawn(coro)
             if mempool_height != self.api.db_height():
@@ -397,9 +395,9 @@ class MemPool:
             tx_map = {}  # type: dict[bytes, MemPoolTx]
             utxo_map = {}  # type: dict[tuple[bytes, int], tuple[bytes, int]]
             async for task in group:
-                deferred, unspent = task.result()
-                tx_map.update(deferred)
-                utxo_map.update(unspent)
+                partial_tx_map, partial_utxo_map = task.result()
+                tx_map.update(partial_tx_map)
+                utxo_map.update(partial_utxo_map)
 
             # Accept candidate txs from tx_map into our mempool.
             # We only accept candidates for which we can find a UTXO for each tx input:
@@ -430,16 +428,14 @@ class MemPool:
             if tx_map:
                 self.logger.error(f'{len(tx_map)} txs dropped')
 
-    async def _fetch_and_accept(
+    async def _fetch_raw_txs_and_utxos(
             self,
             *,
             new_txids_rev: set[bytes],  # (some) new candidate txs for our mempool
             all_txids_rev: set[bytes],  # complete view of daemon's mempool
-            touched_hashxs: Set[bytes],  # set of hashXs
-            touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
     ) -> tuple[dict[bytes, MemPoolTx],
                dict[tuple[bytes, int], Optional[tuple[bytes, int]]]]:
-        '''Fetch a list of mempool transactions.'''
+        '''Fetch a list of mempool transactions, and lookup corresponding UTXOs in the DB.'''
         txids_hum_iter = (hash_to_hex_str(hash) for hash in new_txids_rev)
         raw_txs = await self.api.raw_transactions(txids_hum_iter)
 
@@ -489,12 +485,7 @@ class MemPool:
         utxos = await self.api.lookup_utxos(prevouts)
         utxo_map = {prevout: utxo for prevout, utxo in zip(prevouts, utxos)}
 
-        return self._accept_transactions(
-            tx_map=tx_map,
-            utxo_map=utxo_map,
-            touched_hashxs=touched_hashxs,
-            touched_outpoints=touched_outpoints,
-        )
+        return tx_map, utxo_map
 
     #
     # External interface

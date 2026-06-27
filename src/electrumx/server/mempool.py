@@ -16,6 +16,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict, Optional, Set, Iterable
 import math
+from graphlib import TopologicalSorter
 
 from aiorpcx import run_in_thread, sleep, ignore_after
 
@@ -235,6 +236,7 @@ class MemPool:
             utxo_map: Dict[Tuple[bytes, int], Optional[Tuple[bytes, int]]],  # prevout->(hashX,value_in_sats)
             touched_hashxs: Set[bytes],  # set of hashXs
             touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
+            topologically_sort: bool,
     ) -> Tuple[Dict[bytes, MemPoolTx],
                Dict[Tuple[bytes, int], Optional[Tuple[bytes, int]]]]:
         '''Accept transactions in tx_map to the mempool if all their inputs
@@ -247,10 +249,27 @@ class MemPool:
         txs = self.txs
         txo_to_spender = self.txo_to_spender
 
+        if topologically_sort:
+            # Sort tx_map so that parent txs come first (in case of unconf chain).
+            # This is just an optimization so that fewer txs will get "deferred", leading to better perf.
+            # Dependencies outside tx_map (already in chainstate (utxo_map), or our mempool (self.txs),
+            # or MISSING) are ignored.
+            cand_to_parents = {
+                txid: {parent_txid for (parent_txid, txout_idx) in tx.prevouts
+                       if parent_txid in tx_map}
+                for (txid, tx) in tx_map.items()}
+            cand_txids = list(TopologicalSorter(cand_to_parents).static_order())
+            assert len(tx_map) == len(cand_to_parents) == len(cand_txids), \
+                f"{len(tx_map)=}, {len(cand_to_parents)=}, {len(cand_txids)=}"
+            del cand_to_parents
+        else:
+            cand_txids = tx_map.keys()
+
         deferred = {}  # type: dict[bytes, MemPoolTx]
         unspent = set(utxo_map)
-        # Try to find all prevouts so we can accept the TX
-        for txid_rev, tx in tx_map.items():
+        # Try to find all prevouts so we can accept the candidate TXs from tx_map into our mempool
+        for txid_rev in cand_txids:
+            tx = tx_map[txid_rev]
             in_pairs = []
             try:
                 for prevout in tx.prevouts:
@@ -382,25 +401,32 @@ class MemPool:
                 tx_map.update(deferred)
                 utxo_map.update(unspent)
 
-            prior_count = 0
-            # FIXME: this is not particularly efficient.
-            #        tx_map contains candidate txs we are trying to - but haven't yet - add to our mempool.
-            #        We only accept candidates for which we can find a UTXO for each tx input:
-            #        - some UTXOs we find in the DB=utxo_map (chainstate),
-            #        - some we find in self.txs (our memool),
-            #        - some we might only find in tx_map (among the candidates: consider long chain of unconfirmed txs)
-            #        - some we might not find anywhere: if DB is corrupted or bitcoind gave inconsistent mempool, or other race
-            #        In each iteration, we loop over tx_map and move accepted transactions from it to self.txs.
-            #        In the worst degenerate case, this could be O(n^2).
-            #        Could we instead topologically sort tx_map??
-            while tx_map and len(tx_map) != prior_count:
-                prior_count = len(tx_map)
+            # Accept candidate txs from tx_map into our mempool.
+            # We only accept candidates for which we can find a UTXO for each tx input:
+            # - some UTXOs we find in the DB=utxo_map (chainstate),
+            # - some we find in self.txs (our memool),
+            # - some we might only find in tx_map (among the candidates: consider long chain of unconfirmed txs)
+            # - some we might not find anywhere: if DB is corrupted or bitcoind gave inconsistent mempool, or other race
+            # In each iteration, we loop over tx_map and move accepted transactions from it to self.txs.
+            # In the worst degenerate case, this could be O(n^2). To avoid that, we topologically sort tx_map.
+            t0 = time.monotonic()
+            first_txmap_size = len(tx_map)
+            prior_txmap_size = 0
+            iter_count = 0
+            while tx_map and len(tx_map) != prior_txmap_size:
+                prior_txmap_size = len(tx_map)
                 tx_map, utxo_map = self._accept_transactions(
                     tx_map=tx_map,
                     utxo_map=utxo_map,
                     touched_hashxs=touched_hashxs,
                     touched_outpoints=touched_outpoints,
+                    topologically_sort=True,
                 )
+                iter_count += 1
+            time_elapsed = time.monotonic() - t0
+            if time_elapsed > 0.1:
+                self.logger.debug(
+                    f'accept_transactions() while-loop took {time_elapsed:.2f}s. txs={first_txmap_size}, {iter_count=}')
             if tx_map:
                 self.logger.error(f'{len(tx_map)} txs dropped')
 

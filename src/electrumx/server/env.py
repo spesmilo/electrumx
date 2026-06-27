@@ -52,7 +52,7 @@ class Env(EnvBase):
             assert issubclass(coin, Coin)
             self.coin = coin
         else:
-            coin_name = self.required('COIN').strip()
+            coin_name = self.default('COIN', 'Bitcoin').strip()
             network = self.default('NET', 'mainnet').strip()
             self.coin = Coin.lookup_coin_class(coin_name, network)
 

@@ -18,7 +18,6 @@ base_environ = {
     'DB_DIRECTORY': BASE_DB_DIR,
     'DB_ENGINE': 'rocksdb',
     'DAEMON_URL': BASE_DAEMON_URL,
-    'COIN': 'Bitcoin',
 }
 
 

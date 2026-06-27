@@ -19,11 +19,6 @@ Required
 
 These environment variables are always required:
 
-.. envvar:: COIN
-
-  Must be a :attr:`NAME` from one of the :class:`Coin` classes in
-  `lib/coins.py`_. For example, ``Bitcoin``.
-
 .. envvar:: DB_DIRECTORY
 
   The path to the database directory.  Relative paths should be
@@ -194,6 +189,16 @@ Miscellaneous
 
 These environment variables are optional:
 
+.. envvar:: COIN
+
+  Must be a :attr:`NAME` from one of the :class:`Coin` classes in
+  `lib/coins.py`_.  Defaults to ``Bitcoin``.
+
+.. envvar:: NET
+
+  Must be a :attr:`NET` from one of the :class:`Coin` classes in
+  `lib/coins.py`_.  Defaults to ``mainnet``.
+
 .. envvar:: LOG_FORMAT
 
   The Python logging `format string
@@ -209,11 +214,6 @@ These environment variables are optional:
 
   Set this environment variable to anything non-empty to allow running
   ElectrumX as root.
-
-.. envvar:: NET
-
-  Must be a :envvar:`NET` from one of the **Coin** classes in
-  `lib/coins.py`_.  Defaults to ``mainnet``.
 
 .. envvar:: DONATION_ADDRESS
 

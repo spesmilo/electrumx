@@ -19,11 +19,6 @@ Required
 
 These environment variables are always required:
 
-.. envvar:: COIN
-
-  Must be a :attr:`NAME` from one of the :class:`Coin` classes in
-  `lib/coins.py`_. For example, ``Bitcoin``.
-
 .. envvar:: DB_DIRECTORY
 
   The path to the database directory.  Relative paths should be
@@ -168,9 +163,9 @@ Here are some examples of valid services::
 
   Here is an example value of the :envvar:`REPORT_SERVICES` environment variable::
 
-    tcp://sv.usebsv.com:50001,ssl://sv.usebsv.com:50002,wss://sv.usebsv.com:50004
+    tcp://example.com:50001,ssl://example.com:50002,wss://example.com:50004
 
-  This advertizes **tcp**, **ssl**, **wss** services at :const:`sv.usebsv.com` on ports
+  This advertizes **tcp**, **ssl**, **wss** services at :const:`example.com` on ports
   50001, 50002 and 50004 respectively.
 
 .. note:: Certificate Authority-signed certificates don't work over Tor, so you should
@@ -194,6 +189,16 @@ Miscellaneous
 
 These environment variables are optional:
 
+.. envvar:: COIN
+
+  Must be a :attr:`NAME` from one of the :class:`Coin` classes in
+  `lib/coins.py`_.  Defaults to ``Bitcoin``.
+
+.. envvar:: NET
+
+  Must be a :attr:`NET` from one of the :class:`Coin` classes in
+  `lib/coins.py`_.  Defaults to ``mainnet``.
+
 .. envvar:: LOG_FORMAT
 
   The Python logging `format string
@@ -209,11 +214,6 @@ These environment variables are optional:
 
   Set this environment variable to anything non-empty to allow running
   ElectrumX as root.
-
-.. envvar:: NET
-
-  Must be a :envvar:`NET` from one of the **Coin** classes in
-  `lib/coins.py`_.  Defaults to ``mainnet``.
 
 .. envvar:: DONATION_ADDRESS
 

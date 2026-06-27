@@ -18,7 +18,6 @@ base_environ = {
     'DB_DIRECTORY': BASE_DB_DIR,
     'DB_ENGINE': 'rocksdb',
     'DAEMON_URL': BASE_DAEMON_URL,
-    'COIN': 'BitcoinSV',
 }
 
 
@@ -92,13 +91,13 @@ def test_COIN_NET():
     '''Test COIN and NET defaults and redirection.'''
     setup_base_env()
     e = Env()
-    assert e.coin == lib_coins.BitcoinSV
+    assert e.coin == lib_coins.BitcoinMainnet
     os.environ['NET'] = 'testnet'
     e = Env()
-    assert e.coin == lib_coins.BitcoinSVTestnet
+    assert e.coin == lib_coins.BitcoinTestnet3
     os.environ['NET'] = ' testnet '
     e = Env()
-    assert e.coin == lib_coins.BitcoinSVTestnet
+    assert e.coin == lib_coins.BitcoinTestnet3
     os.environ.pop('NET')
     os.environ['COIN'] = ' Litecoin '
     e = Env()
@@ -274,7 +273,7 @@ def test_REPORT_SERVICES_localhost():
 
 def test_REORG_LIMIT():
     assert_integer('REORG_LIMIT', 'reorg_limit',
-                   lib_coins.BitcoinSV.REORG_LIMIT)
+                   lib_coins.Bitcoin.REORG_LIMIT)
 
 
 def test_COST_HARD_LIMIT():
@@ -427,5 +426,5 @@ def test_ban_versions():
 
 
 def test_coin_class_provided():
-    e = Env(lib_coins.BitcoinSV)
-    assert e.coin == lib_coins.BitcoinSV
+    e = Env(lib_coins.Bitcoin)
+    assert e.coin == lib_coins.Bitcoin

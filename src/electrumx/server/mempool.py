@@ -30,6 +30,9 @@ if TYPE_CHECKING:
     from electrumx.lib.coins import Coin
 
 
+DB_UTXO_MAP = dict[tuple[bytes, int], Optional[tuple[bytes, int]]]  # prevout->(hashX,value_in_sats)
+
+
 @dataclass(slots=True)
 class MemPoolTx:
     prevouts: Sequence[tuple[bytes, int]]  # (txid_rev, txout_idx)
@@ -233,12 +236,11 @@ class MemPool:
             self,
             *,
             tx_map: Dict[bytes, MemPoolTx],  # txid_rev->tx
-            utxo_map: Dict[Tuple[bytes, int], Optional[Tuple[bytes, int]]],  # prevout->(hashX,value_in_sats)
+            utxo_map: DB_UTXO_MAP,  # prevout->(hashX,value_in_sats)
             touched_hashxs: Set[bytes],  # set of hashXs
             touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
             topologically_sort: bool,
-    ) -> Tuple[Dict[bytes, MemPoolTx],
-               Dict[Tuple[bytes, int], Optional[Tuple[bytes, int]]]]:
+    ) -> tuple[dict[bytes, MemPoolTx], DB_UTXO_MAP]:
         '''Accept transactions in tx_map to the mempool if all their inputs
         can be found in the existing mempool or a utxo_map from the
         DB.
@@ -393,7 +395,7 @@ class MemPool:
                 raise DBSyncError
 
             tx_map = {}  # type: dict[bytes, MemPoolTx]
-            utxo_map = {}  # type: dict[tuple[bytes, int], tuple[bytes, int]]
+            utxo_map = {}  # type: DB_UTXO_MAP
             async for task in group:
                 partial_tx_map, partial_utxo_map = task.result()
                 tx_map.update(partial_tx_map)
@@ -433,8 +435,7 @@ class MemPool:
             *,
             new_txids_rev: set[bytes],  # (some) new candidate txs for our mempool
             all_txids_rev: set[bytes],  # complete view of daemon's mempool
-    ) -> tuple[dict[bytes, MemPoolTx],
-               dict[tuple[bytes, int], Optional[tuple[bytes, int]]]]:
+    ) -> tuple[dict[bytes, MemPoolTx], DB_UTXO_MAP]:
         '''Fetch a list of mempool transactions, and lookup corresponding UTXOs in the DB.'''
         txids_hum_iter = (hash_to_hex_str(hash) for hash in new_txids_rev)
         raw_txs = await self.api.raw_transactions(txids_hum_iter)

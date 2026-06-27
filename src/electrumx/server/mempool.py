@@ -401,34 +401,30 @@ class MemPool:
                 tx_map.update(partial_tx_map)
                 utxo_map.update(partial_utxo_map)
 
-            # Accept candidate txs from tx_map into our mempool.
-            # We only accept candidates for which we can find a UTXO for each tx input:
-            # - some UTXOs we find in the DB=utxo_map (chainstate),
-            # - some we find in self.txs (our memool),
-            # - some we might only find in tx_map (among the candidates: consider long chain of unconfirmed txs)
-            # - some we might not find anywhere: if DB is corrupted or bitcoind gave inconsistent mempool, or other race
-            # In each iteration, we loop over tx_map and move accepted transactions from it to self.txs.
-            # In the worst degenerate case, this could be O(n^2). To avoid that, we topologically sort tx_map.
-            t0 = time.monotonic()
-            first_txmap_size = len(tx_map)
-            prior_txmap_size = 0
-            iter_count = 0
-            while tx_map and len(tx_map) != prior_txmap_size:
-                prior_txmap_size = len(tx_map)
-                tx_map, utxo_map = self._accept_transactions(
-                    tx_map=tx_map,
-                    utxo_map=utxo_map,
-                    touched_hashxs=touched_hashxs,
-                    touched_outpoints=touched_outpoints,
-                    topologically_sort=True,
-                )
-                iter_count += 1
-            time_elapsed = time.monotonic() - t0
-            if time_elapsed > 0.1:
-                self.logger.debug(
-                    f'accept_transactions() while-loop took {time_elapsed:.2f}s. txs={first_txmap_size}, {iter_count=}')
-            if tx_map:
-                self.logger.error(f'{len(tx_map)} txs dropped')
+            def accept_txs_loop() -> None:
+                # Accept candidate txs from tx_map into our mempool.
+                # We only accept candidates for which we can find a UTXO for each tx input:
+                # - some UTXOs we find in the DB=utxo_map (chainstate),
+                # - some we find in self.txs (our memool),
+                # - some we might only find in tx_map (among the candidates: consider long chain of unconfirmed txs)
+                # - some we might not find anywhere: if DB is corrupted or bitcoind gave inconsistent mempool, or other race
+                # In each iteration, we loop over tx_map and move accepted transactions from it to self.txs.
+                # In the worst degenerate case, this could be O(n^2). To avoid that, we topologically sort tx_map.
+                nonlocal tx_map, utxo_map
+                prior_txmap_size = 0
+                while tx_map and len(tx_map) != prior_txmap_size:
+                    prior_txmap_size = len(tx_map)
+                    tx_map, utxo_map = self._accept_transactions(
+                        tx_map=tx_map,
+                        utxo_map=utxo_map,
+                        touched_hashxs=touched_hashxs,
+                        touched_outpoints=touched_outpoints,
+                        topologically_sort=True,
+                    )
+                if tx_map:
+                    self.logger.error(f'{len(tx_map)} txs dropped')
+
+            await run_in_thread(accept_txs_loop)
 
     async def _fetch_raw_txs_and_utxos(
             self,

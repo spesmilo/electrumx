@@ -232,11 +232,11 @@ class MemPool:
             self,
             *,
             tx_map: Dict[bytes, MemPoolTx],  # txid_rev->tx
-            utxo_map: Dict[Tuple[bytes, int], Tuple[bytes, int]],  # prevout->(hashX,value_in_sats)
+            utxo_map: Dict[Tuple[bytes, int], Optional[Tuple[bytes, int]]],  # prevout->(hashX,value_in_sats)
             touched_hashxs: Set[bytes],  # set of hashXs
             touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
     ) -> Tuple[Dict[bytes, MemPoolTx],
-               Dict[Tuple[bytes, int], Tuple[bytes, int]]]:
+               Dict[Tuple[bytes, int], Optional[Tuple[bytes, int]]]]:
         '''Accept transactions in tx_map to the mempool if all their inputs
         can be found in the existing mempool or a utxo_map from the
         DB.
@@ -247,15 +247,16 @@ class MemPool:
         txs = self.txs
         txo_to_spender = self.txo_to_spender
 
-        deferred = {}
+        deferred = {}  # type: dict[bytes, MemPoolTx]
         unspent = set(utxo_map)
         # Try to find all prevouts so we can accept the TX
         for txid_rev, tx in tx_map.items():
             in_pairs = []
             try:
                 for prevout in tx.prevouts:
+                    # first, look for parent tx among confirmed UTXOs:
                     utxo = utxo_map.get(prevout)
-                    if not utxo:  # i.e. parent also unconfirmed
+                    if not utxo:  # second, look for parent tx in mempool
                         prev_hash, prev_index = prevout
                         # Raises KeyError if prev_hash is not in txs
                         utxo = txs[prev_hash].out_pairs[prev_index]
@@ -341,6 +342,7 @@ class MemPool:
             raise DBSyncError
 
         # First handle txs that have disappeared
+        # TODO split disappeared txs workload into a threadpool, chunks of ~200 txs
         for txid_rev in (set(txs) - all_txids_rev):
             tx = txs.pop(txid_rev)
             # hashXs
@@ -373,15 +375,24 @@ class MemPool:
             if mempool_height != self.api.db_height():
                 raise DBSyncError
 
-            tx_map = {}
-            utxo_map = {}
+            tx_map = {}  # type: dict[bytes, MemPoolTx]
+            utxo_map = {}  # type: dict[tuple[bytes, int], tuple[bytes, int]]
             async for task in group:
                 deferred, unspent = task.result()
                 tx_map.update(deferred)
                 utxo_map.update(unspent)
 
             prior_count = 0
-            # FIXME: this is not particularly efficient
+            # FIXME: this is not particularly efficient.
+            #        tx_map contains candidate txs we are trying to - but haven't yet - add to our mempool.
+            #        We only accept candidates for which we can find a UTXO for each tx input:
+            #        - some UTXOs we find in the DB=utxo_map (chainstate),
+            #        - some we find in self.txs (our memool),
+            #        - some we might only find in tx_map (among the candidates: consider long chain of unconfirmed txs)
+            #        - some we might not find anywhere: if DB is corrupted or bitcoind gave inconsistent mempool, or other race
+            #        In each iteration, we loop over tx_map and move accepted transactions from it to self.txs.
+            #        In the worst degenerate case, this could be O(n^2).
+            #        Could we instead topologically sort tx_map??
             while tx_map and len(tx_map) != prior_count:
                 prior_count = len(tx_map)
                 tx_map, utxo_map = self._accept_transactions(
@@ -396,11 +407,12 @@ class MemPool:
     async def _fetch_and_accept(
             self,
             *,
-            new_txids_rev: Set[bytes],  # new txs being added to mempool
-            all_txids_rev: Set[bytes],  # existing txs in mempool
+            new_txids_rev: set[bytes],  # (some) new candidate txs for our mempool
+            all_txids_rev: set[bytes],  # complete view of daemon's mempool
             touched_hashxs: Set[bytes],  # set of hashXs
             touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
-    ):
+    ) -> tuple[dict[bytes, MemPoolTx],
+               dict[tuple[bytes, int], Optional[tuple[bytes, int]]]]:
         '''Fetch a list of mempool transactions.'''
         txids_hum_iter = (hash_to_hex_str(hash) for hash in new_txids_rev)
         raw_txs = await self.api.raw_transactions(txids_hum_iter)

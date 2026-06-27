@@ -168,9 +168,9 @@ Here are some examples of valid services::
 
   Here is an example value of the :envvar:`REPORT_SERVICES` environment variable::
 
-    tcp://sv.usebsv.com:50001,ssl://sv.usebsv.com:50002,wss://sv.usebsv.com:50004
+    tcp://example.com:50001,ssl://example.com:50002,wss://example.com:50004
 
-  This advertizes **tcp**, **ssl**, **wss** services at :const:`sv.usebsv.com` on ports
+  This advertizes **tcp**, **ssl**, **wss** services at :const:`example.com` on ports
   50001, 50002 and 50004 respectively.
 
 .. note:: Certificate Authority-signed certificates don't work over Tor, so you should

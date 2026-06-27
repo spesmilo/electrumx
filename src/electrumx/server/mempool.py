@@ -349,7 +349,7 @@ class MemPool:
     async def _process_mempool(
             self,
             *,
-            all_txids_rev: Set[bytes],  # set of txids_rev
+            all_txids_rev: Set[bytes],  # set of txids_rev  # complete view of daemon's mempool
             touched_hashxs: Set[bytes],  # set of hashXs
             touched_outpoints: Set[TxOutpoint],  # set of outpoints
             mempool_height: int,
@@ -362,7 +362,7 @@ class MemPool:
         if mempool_height != self.api.db_height():  # FIXME should compare blockhash
             raise DBSyncError
 
-        # First handle txs that have disappeared
+        # 1. Handle txs that have disappeared (evicted, just got mined, etc)
         # TODO split disappeared txs workload into a threadpool, chunks of ~200 txs
         for txid_rev in (set(txs) - all_txids_rev):
             tx = txs.pop(txid_rev)
@@ -381,9 +381,10 @@ class MemPool:
             for out_idx, out_pair in enumerate(tx.out_pairs):
                 touched_outpoints.add((txid_rev, out_idx))
 
-        # Process new transactions
+        # 2. Process new transactions
         new_hashes = list(all_txids_rev.difference(txs))
         if new_hashes:
+            # 2.1. fetch raw txs from bitcoin daemon
             group = OldTaskGroup()
             for hashes in chunks(new_hashes, 200):
                 coro = self._fetch_raw_txs_and_utxos(
@@ -401,6 +402,7 @@ class MemPool:
                 tx_map.update(partial_tx_map)
                 utxo_map.update(partial_utxo_map)
 
+            # 2.2. accept txs into our mempool
             def accept_txs_loop() -> None:
                 # Accept candidate txs from tx_map into our mempool.
                 # We only accept candidates for which we can find a UTXO for each tx input:

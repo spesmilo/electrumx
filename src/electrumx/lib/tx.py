@@ -125,6 +125,9 @@ class TXOSpendStatus:
         assert (self.spender_txid_rev is not None) == (self.spender_height is not None), (self.spender_txid_rev, self.spender_height)
 
 
+TxOutpoint = tuple[bytes, int]  # (txid_rev, txout_idx)
+
+
 class Deserializer:
     '''Deserializes blocks into transactions.
 

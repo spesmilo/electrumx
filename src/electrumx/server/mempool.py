@@ -23,19 +23,19 @@ from aiorpcx import run_in_thread, sleep, ignore_after
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
 from electrumx.lib.tx import SkipTxDeserialize
 from electrumx.lib.util import class_logger, chunks, OldTaskGroup
-from electrumx.lib.tx import TXOSpendStatus
+from electrumx.lib.tx import TXOSpendStatus, TxOutpoint
 from electrumx.server.db import UTXO
 
 if TYPE_CHECKING:
     from electrumx.lib.coins import Coin
 
 
-DB_UTXO_MAP = dict[tuple[bytes, int], Optional[tuple[bytes, int]]]  # prevout->(hashX,value_in_sats)
+DB_UTXO_MAP = dict[TxOutpoint, Optional[tuple[bytes, int]]]  # prevout->(hashX,value_in_sats)
 
 
 @dataclass(slots=True)
 class MemPoolTx:
-    prevouts: Sequence[tuple[bytes, int]]  # (txid_rev, txout_idx)
+    prevouts: Sequence[TxOutpoint]  # (txid_rev, txout_idx)
     # A pair is a (hashX, value) tuple
     in_pairs: Optional[Sequence[tuple[bytes, int]]]  # (hashX, value_in_sats)
     out_pairs: Sequence[tuple[bytes, int]]  # (hashX, value_in_sats)
@@ -96,7 +96,7 @@ class MemPoolAPI(ABC):
         txids_hum is an iterable of hexadecimal hash strings.'''
 
     @abstractmethod
-    async def lookup_utxos(self, prevouts: Sequence[Tuple[bytes, int]]) -> Sequence[Optional[Tuple[bytes, int]]]:
+    async def lookup_utxos(self, prevouts: Sequence[TxOutpoint]) -> Sequence[Optional[Tuple[bytes, int]]]:
         '''Return a list of (hashX, value) pairs, one for each prevout if unspent,
         otherwise return None if spent or not found (for the given prevout).
 
@@ -108,7 +108,7 @@ class MemPoolAPI(ABC):
             self,
             *,
             touched_hashxs: Set[bytes],
-            touched_outpoints: Set[Tuple[bytes, int]],
+            touched_outpoints: Set[TxOutpoint],
             height: int,
     ):
         '''Called each time the mempool is synchronized.  touched_hashxs and
@@ -146,7 +146,7 @@ class MemPool:
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.txs = {}  # type: Dict[bytes, MemPoolTx]  # txid_rev->tx
         self.hashXs = defaultdict(set)  # type: Dict[Optional[bytes], Set[bytes]]  # hashX->txids_rev
-        self.txo_to_spender = {}  # type: Dict[Tuple[bytes, int], bytes]  # prevout->txid_rev
+        self.txo_to_spender = {}  # type: Dict[TxOutpoint, bytes]  # prevout->txid_rev
         self.cached_compact_histogram = []  # type: Sequence[tuple[float, int]]
         self.refresh_secs = refresh_secs
         self.log_status_secs = log_status_secs
@@ -238,7 +238,7 @@ class MemPool:
             tx_map: Dict[bytes, MemPoolTx],  # txid_rev->tx
             utxo_map: DB_UTXO_MAP,  # prevout->(hashX,value_in_sats)
             touched_hashxs: Set[bytes],  # set of hashXs
-            touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
+            touched_outpoints: Set[TxOutpoint],  # set of outpoints
             topologically_sort: bool,
     ) -> tuple[dict[bytes, MemPoolTx], DB_UTXO_MAP]:
         '''Accept transactions in tx_map to the mempool if all their inputs
@@ -351,7 +351,7 @@ class MemPool:
             *,
             all_txids_rev: Set[bytes],  # set of txids_rev
             touched_hashxs: Set[bytes],  # set of hashXs
-            touched_outpoints: Set[Tuple[bytes, int]],  # set of outpoints
+            touched_outpoints: Set[TxOutpoint],  # set of outpoints
             mempool_height: int,
     ) -> None:
         # Re-sync with the new set of hashes
@@ -516,7 +516,7 @@ class MemPool:
         '''Return a compact fee histogram of the current mempool.'''
         return self.cached_compact_histogram
 
-    async def potential_spends(self, hashX: bytes) -> set[tuple[bytes, int]]:
+    async def potential_spends(self, hashX: bytes) -> set[TxOutpoint]:
         '''Return a set of (prev_hash, prev_idx) pairs from mempool
         transactions that touch hashX.
 

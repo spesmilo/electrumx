@@ -879,6 +879,7 @@ class SessionManager:
                 self.logger.warning('timed out waiting for server resources to close')
             servers_to_remove = list(self.servers.keys())
             self._remove_servers(servers_to_remove)
+            self.logger.info(f"all servers closed")
 
     def extra_cost(self, session: 'SessionBase') -> float:
         # Note there is no guarantee that session is still in self.sessions.  Example traceback:

@@ -817,19 +817,25 @@ class BlockProcessor:
 
     async def _process_prefetched_blocks(self) -> None:
         '''Loop forever processing blocks as they arrive.'''
-        while True:
-            if self.height == self.daemon.cached_height():
-                if not self._caught_up_event.is_set():
-                    await self._first_caught_up()
-                    self._caught_up_event.set()
-            await self.blocks_event.wait()
-            self.blocks_event.clear()
-            if self.reorg_count:
-                await self.reorg_chain(self.reorg_count)
-                self.reorg_count = 0
-            else:
-                blocks = self.prefetcher.get_prefetched_blocks()
-                await self.check_and_advance_blocks(blocks)
+        try:
+            while True:
+                if self.height == self.daemon.cached_height():
+                    if not self._caught_up_event.is_set():
+                        await self._first_caught_up()
+                        self._caught_up_event.set()
+                await self.blocks_event.wait()
+                self.blocks_event.clear()
+                if self.reorg_count:
+                    await self.reorg_chain(self.reorg_count)
+                    self.reorg_count = 0
+                else:
+                    blocks = self.prefetcher.get_prefetched_blocks()
+                    await self.check_and_advance_blocks(blocks)
+        except Exception as e:
+            self.logger.error(f'_process_prefetched_blocks got exception: {e}')
+            raise
+        finally:
+            self.logger.info(f'_process_prefetched_blocks exiting')
 
     async def _first_caught_up(self) -> None:
         self.logger.info(f'caught up to height {self.height}')
@@ -883,6 +889,11 @@ class BlockProcessor:
                 except CancelledError:
                     self.logger.info('flushing to DB for a clean shutdown...')
                     await self.flush(True)
+                except Exception as e:
+                    self.logger.exception(f'fetch_and_process_blocks taskgroup died.')
+                    raise
+                finally:
+                    self.logger.info('fetch_and_process_blocks taskgroup stopped.')
 
     def force_chain_reorg(self, count: int) -> bool:
         '''Force a reorg of the given number of blocks.

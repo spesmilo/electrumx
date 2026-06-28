@@ -186,7 +186,12 @@ class Controller(ServerBase):
                 await group.spawn(db.populate_header_merkle_cache())
                 await group.spawn(mempool.keep_synchronized(mempool_event))
 
-            async with OldTaskGroup() as group:
-                await group.spawn(session_mgr.serve(notifications, mempool_event))
-                await group.spawn(bp.fetch_and_process_blocks(caught_up_event))
-                await group.spawn(wait_for_catchup())
+            try:
+                async with OldTaskGroup() as group:
+                    await group.spawn(session_mgr.serve(notifications, mempool_event))
+                    await group.spawn(bp.fetch_and_process_blocks(caught_up_event))
+                    await group.spawn(wait_for_catchup())
+            except Exception as e:
+                self.logger.exception("taskgroup died.")
+            finally:
+                self.logger.info("taskgroup stopped.")

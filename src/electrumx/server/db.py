@@ -171,27 +171,31 @@ class DB:
         assert self.utxo_db is None
 
         # First UTXO DB
-        self.utxo_db = self.db_class('utxo', for_sync)
-        if self.utxo_db.is_new:
-            self.logger.info('created new database')
-            self.logger.info('creating metadata directory')
-            os.mkdir('meta')
-            with util.open_file('COIN', create=True) as f:
-                f.write(f'ElectrumX databases and metadata for '
-                        f'{self.coin.NAME} {self.coin.NET}'.encode())
-            if not self.coin.STATIC_BLOCK_HEADERS:
-                self.headers_offsets_file.write(0, b'\0\0\0\0\0\0\0\0')
-        else:
-            self.logger.info(f'opened UTXO DB (for sync: {for_sync})')
-        self.read_utxo_state()
+        def open_utxo_db():
+            self.utxo_db = self.db_class('utxo', for_sync)
+            if self.utxo_db.is_new:
+                self.logger.info('created new database')
+                self.logger.info('creating metadata directory')
+                os.mkdir('meta')
+                with util.open_file('COIN', create=True) as f:
+                    f.write(f'ElectrumX databases and metadata for '
+                            f'{self.coin.NAME} {self.coin.NET}'.encode())
+                if not self.coin.STATIC_BLOCK_HEADERS:
+                    self.headers_offsets_file.write(0, b'\0\0\0\0\0\0\0\0')
+            else:
+                self.logger.info(f'opened UTXO DB (for sync: {for_sync})')
+            self.read_utxo_state()
+        await run_in_thread(open_utxo_db)
 
         # Then history DB
-        self.history.open_db(
-            db_class=self.db_class,
-            for_sync=for_sync,
-            utxo_db_tx_count=self.db_tx_count,
-        )
-        self.clear_excess_undo_info()
+        def open_hist_db():
+            self.history.open_db(
+                db_class=self.db_class,
+                for_sync=for_sync,
+                utxo_db_tx_count=self.db_tx_count,
+            )
+            self.clear_excess_undo_info()
+        await run_in_thread(open_hist_db)
 
         # Now prepare in-memory structures.
         # - Read TX counts (requires meta directory)

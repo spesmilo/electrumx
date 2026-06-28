@@ -209,7 +209,6 @@ class BlockProcessor:
         self.reorg_count = 0
         self.height = -1
         self.tip = None  # type: Optional[bytes]  # block_hash_rev
-        self.tip_advanced_event = asyncio.Event()
         self.tx_count = 0
         self._caught_up_event = None
 
@@ -407,6 +406,8 @@ class BlockProcessor:
                 estimate_txs_remaining=self.estimate_txs_remaining,
             )
         await self.run_in_thread_with_lock(flush)
+        self.db.db_flushed_event.set()
+        self.db.db_flushed_event.clear()
 
     async def _maybe_flush(self) -> None:
         # If caught up, flush everything as client queries are
@@ -514,8 +515,6 @@ class BlockProcessor:
         self.height = height
         self.headers += headers
         self.tip = self.coin.header_hash_rev(headers[-1])
-        self.tip_advanced_event.set()
-        self.tip_advanced_event.clear()
         self.logger.debug(f"new height: {self.height}")
 
     def advance_txs_process_outputs(

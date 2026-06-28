@@ -38,7 +38,7 @@ from aiorpcx.jsonrpc import SingleRequest
 import electrumx
 import electrumx.lib.util as util
 from electrumx.lib.lrucache import LRUCache
-from electrumx.lib.util import OldTaskGroup, is_hex_str
+from electrumx.lib.util import OldTaskGroup, is_hex_str, get_running_loop
 from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
                                 hex_str_to_hash, sha256, double_sha256)
 from electrumx.lib.merkle import MerkleCache
@@ -2436,6 +2436,7 @@ class LocalRPC(SessionBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.sv_seen = True
+        assert get_running_loop() is not None, "must be running on asyncio thread"
         self.sv_negotiated.set()
         self.client_longname = 'RPC'
         self.connection.max_response_size = 0

@@ -28,13 +28,14 @@
 
 
 from array import array
+import asyncio
 import inspect
 from ipaddress import ip_address
 import logging
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
-from typing import Any
+from typing import Any, Optional
 
 import aiorpcx
 
@@ -437,3 +438,11 @@ _aiorpcx_orig_unset_task_deadline = aiorpcx.curio._unset_task_deadline
 aiorpcx.curio._set_new_deadline = _aiorpcx_monkeypatched_set_new_deadline
 aiorpcx.curio._set_task_deadline = _aiorpcx_monkeypatched_set_task_deadline
 aiorpcx.curio._unset_task_deadline = _aiorpcx_monkeypatched_unset_task_deadline
+
+
+def get_running_loop() -> Optional[asyncio.AbstractEventLoop]:
+    """Returns the asyncio event loop that is *running in this thread*, if any."""
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None

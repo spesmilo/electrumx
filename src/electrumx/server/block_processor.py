@@ -26,7 +26,7 @@ from electrumx.lib.script import is_unspendable_legacy, is_unspendable_genesis
 from electrumx.lib.util import (
     chunks, class_logger, OldTaskGroup,
 )
-from electrumx.lib.tx import Tx
+from electrumx.lib.tx import Tx, TxOutpoint
 from electrumx.server.db import FlushData, COMP_TXID_LEN, DB
 from electrumx.server.db_util import (
     pack_txnum, unpack_txnum, TXNUM_LEN,
@@ -205,7 +205,7 @@ class BlockProcessor:
         # Meta
         self.next_cache_check = 0
         self.touched_hashxs = set()     # type: Set[bytes]
-        self.touched_outpoints = set()  # type: Set[Tuple[bytes, int]]
+        self.touched_outpoints = set()  # type: Set[TxOutpoint]
         self.reorg_count = 0
         self.height = -1
         self.tip = None  # type: Optional[bytes]  # block_hash_rev

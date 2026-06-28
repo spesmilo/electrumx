@@ -13,6 +13,7 @@ from aiorpcx import _version as aiorpcx_version
 import electrumx
 from electrumx.lib.server_base import ServerBase
 from electrumx.lib.util import version_string, OldTaskGroup
+from electrumx.lib.tx import TxOutpoint
 from electrumx.server.db import DB
 from electrumx.server.mempool import MemPool, MemPoolAPI
 from electrumx.server.session import SessionManager
@@ -34,8 +35,8 @@ class Notifications:
     def __init__(self):
         self._touched_hashxs_mp = {}  # type: Dict[int, Set[bytes]]
         self._touched_hashxs_bp = {}  # type: Dict[int, Set[bytes]]
-        self._touched_outpoints_mp = {}  # type: Dict[int, Set[Tuple[bytes, int]]]
-        self._touched_outpoints_bp = {}  # type: Dict[int, Set[Tuple[bytes, int]]]
+        self._touched_outpoints_mp = {}  # type: Dict[int, Set[TxOutpoint]]
+        self._touched_outpoints_bp = {}  # type: Dict[int, Set[TxOutpoint]]
         self._highest_block = -1
 
     async def _maybe_notify(self):
@@ -75,7 +76,7 @@ class Notifications:
             self,
             *,
             touched_hashxs: Set[bytes],
-            touched_outpoints: Set[Tuple[bytes, int]],
+            touched_outpoints: Set[TxOutpoint],
             height: int,
     ):
         pass
@@ -93,7 +94,7 @@ class Notifications:
             self,
             *,
             touched_hashxs: Set[bytes],
-            touched_outpoints: Set[Tuple[bytes, int]],
+            touched_outpoints: Set[TxOutpoint],
             height: int,
     ):
         self._touched_hashxs_mp[height] = touched_hashxs
@@ -104,7 +105,7 @@ class Notifications:
             self,
             *,
             touched_hashxs: Set[bytes],
-            touched_outpoints: Set[Tuple[bytes, int]],
+            touched_outpoints: Set[TxOutpoint],
             height: int,
     ):
         self._touched_hashxs_bp[height] = touched_hashxs

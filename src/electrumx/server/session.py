@@ -43,7 +43,7 @@ from electrumx.lib.hash import (HASHX_LEN, Base58Error, hash_to_hex_str,
                                 hex_str_to_hash, sha256, double_sha256)
 from electrumx.lib.merkle import MerkleCache
 from electrumx.lib.text import sessions_lines
-from electrumx.lib.tx import TXOSpendStatus
+from electrumx.lib.tx import TXOSpendStatus, TxOutpoint
 from electrumx.server.daemon import DaemonError
 from electrumx.server.transport import PaddedRSTransport
 
@@ -287,7 +287,7 @@ class SessionManager:
             tuple[int, str | None],
             tuple[bytes | None, float | None, asyncio.Lock]
         ] = LRUCache(maxsize=1000)
-        self.oc_txo_status_cache = LRUCache(maxsize=1000)  # type: LRUCache[tuple[bytes, int], TXOSpendStatus]
+        self.oc_txo_status_cache = LRUCache(maxsize=1000)  # type: LRUCache[TxOutpoint, TXOSpendStatus]
         self.notified_height = None  # type: int | None
         self.notified_tip = None  # type: bytes | None  # block_hash_rev
         self.notified_height_changed = asyncio.Event()
@@ -1061,7 +1061,7 @@ class SessionManager:
             self,
             *,
             touched_hashxs: Set[bytes],
-            touched_outpoints: Set[Tuple[bytes, int]],
+            touched_outpoints: Set[TxOutpoint],
             height: int,
     ) -> None:
         '''Notify sessions about height changes and touched addresses.'''
@@ -1245,7 +1245,7 @@ class SessionBase(RPCSessionWithTaskGroup):
             self,
             *,
             touched_hashxs: Set[bytes],
-            touched_outpoints: Set[Tuple[bytes, int]],
+            touched_outpoints: Set[TxOutpoint],
             height_changed: bool,
     ) -> None:
         pass
@@ -1349,9 +1349,9 @@ class ElectrumX(SessionBase):
         self.subscribe_headers = False
         self.connection.max_response_size = self.env.max_send
         self.hashX_subs = {}  # type: Dict[bytes, str]  # hashX -> scripthash
-        self.txoutpoint_subs = set()  # type: Set[Tuple[bytes, int]]  # (txid_rev, txout_idx)
+        self.txoutpoint_subs = set()  # type: Set[TxOutpoint]  # (txid_rev, txout_idx)
         self.mempool_hashX_statuses = {}  # type: Dict[bytes, str]
-        self.mempool_txoutpoint_statuses = {}  # type: Dict[Tuple[bytes, int], TXOSpendStatus]
+        self.mempool_txoutpoint_statuses = {}  # type: Dict[TxOutpoint, TXOSpendStatus]
         self.set_request_handlers(self.PROTOCOL_MIN)
         self.is_peer = False
         self.cost = 5.0   # Connection cost
@@ -1422,7 +1422,7 @@ class ElectrumX(SessionBase):
             self,
             *,
             touched_hashxs: Set[bytes],
-            touched_outpoints: Set[Tuple[bytes, int]],
+            touched_outpoints: Set[TxOutpoint],
             height_changed: bool,
     ):
         """Send notifications.
@@ -1454,7 +1454,7 @@ class ElectrumX(SessionBase):
             self,
             *,
             touched_hashxs: Set[bytes],
-            touched_outpoints: Set[Tuple[bytes, int]],
+            touched_outpoints: Set[TxOutpoint],
             height_changed: bool,
     ) -> None:
         '''Notify the client about changes to touched addresses (from mempool
@@ -1503,7 +1503,7 @@ class ElectrumX(SessionBase):
         touched_outpoints = touched_outpoints.intersection(self.txoutpoint_subs)
         if touched_outpoints or (height_changed and self.mempool_txoutpoint_statuses):
             method = 'blockchain.outpoint.subscribe'
-            txo_to_status = {}  # type: dict[tuple[bytes, int], TXOSpendStatus]
+            txo_to_status = {}  # type: dict[TxOutpoint, TXOSpendStatus]
             for prevout in touched_outpoints:
                 txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)  # can raise RPCError
 

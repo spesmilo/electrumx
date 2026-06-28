@@ -316,9 +316,6 @@ class DB:
             self.logger.info(f'sync time: {formatted_time(self.wall_time)}  '
                              f'ETA: {formatted_time(eta)}')
 
-        self.db_flushed_event.set()
-        self.db_flushed_event.clear()
-
     def _flush_fs(self, flush_data: FlushData) -> None:
         '''Write headers, tx counts and block tx hashes to the filesystem.
 

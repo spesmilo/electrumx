@@ -236,6 +236,8 @@ class DB:
     async def _prep_bhash_to_bheight_map(self) -> None:
         if self.bhash_to_bheight is not None:
             return
+        self.logger.info('preparing bhash->bheight map...')
+        t0 = time.monotonic()
         self.bhash_to_bheight = {}
         count = self.db_height + 1
         block_hashes = await self.fs_block_hashes_rev(0, count)
@@ -246,6 +248,7 @@ class DB:
         for bheight, bhash in enumerate(block_hashes):
             self.bhash_to_bheight[bhash] = bheight
         assert len(self.bhash_to_bheight) == self.db_height + 1
+        self.logger.info(f'bhash->bheight map populated in {time.monotonic() - t0:.1f}s')
 
     def get_blockheight_from_blockhash(self, block_hash_hum: str) -> Optional[int]:
         bhash_rev = hex_str_to_hash(block_hash_hum)
@@ -554,14 +557,18 @@ class DB:
         if headers_count != count:
             raise self.DBError(f'only got {headers_count:,d} headers starting '
                                f'at {height:,d}, not {count:,d}')
-        offset = 0
-        headers = []
-        for n in range(count):
-            hlen = self.header_len(height + n)
-            headers.append(headers_concat[offset:offset + hlen])
-            offset += hlen
 
-        return [self.coin.header_hash_rev(header) for header in headers]
+        def hash_headers():
+            offset = 0
+            headers = []
+            for n in range(count):
+                hlen = self.header_len(height + n)
+                headers.append(headers_concat[offset:offset + hlen])
+                offset += hlen
+            return [self.coin.header_hash_rev(header) for header in headers]
+
+        bhashes = (await run_in_thread(hash_headers)) if count > 100 else hash_headers()
+        return bhashes
 
     async def limited_history(self, hashX: bytes, *, limit: int = 1000) -> Sequence[tuple[bytes, int]]:
         '''Return an unpruned, sorted list of (txid_rev, height) tuples of

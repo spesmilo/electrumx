@@ -146,14 +146,9 @@ class RocksDB(Storage):
                                       target_file_size_base=33554432,
                                       max_open_files=mof)
         self.db = self.module.DB(name, options)
+        self.close = self.db.close
         self.get = self.db.get
         self.put = self.db.put
-
-    def close(self):
-        # PyRocksDB doesn't provide a close method; hopefully this is enough
-        self.db = self.get = self.put = None
-        import gc
-        gc.collect()
 
     def write_batch(self):
         return RocksDBWriteBatch(self.db)

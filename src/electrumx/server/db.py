@@ -171,27 +171,31 @@ class DB:
         assert self.utxo_db is None
 
         # First UTXO DB
-        self.utxo_db = self.db_class('utxo', for_sync)
-        if self.utxo_db.is_new:
-            self.logger.info('created new database')
-            self.logger.info('creating metadata directory')
-            os.mkdir('meta')
-            with util.open_file('COIN', create=True) as f:
-                f.write(f'ElectrumX databases and metadata for '
-                        f'{self.coin.NAME} {self.coin.NET}'.encode())
-            if not self.coin.STATIC_BLOCK_HEADERS:
-                self.headers_offsets_file.write(0, b'\0\0\0\0\0\0\0\0')
-        else:
-            self.logger.info(f'opened UTXO DB (for sync: {for_sync})')
-        self.read_utxo_state()
+        def open_utxo_db():
+            self.utxo_db = self.db_class('utxo', for_sync)
+            if self.utxo_db.is_new:
+                self.logger.info('created new database')
+                self.logger.info('creating metadata directory')
+                os.mkdir('meta')
+                with util.open_file('COIN', create=True) as f:
+                    f.write(f'ElectrumX databases and metadata for '
+                            f'{self.coin.NAME} {self.coin.NET}'.encode())
+                if not self.coin.STATIC_BLOCK_HEADERS:
+                    self.headers_offsets_file.write(0, b'\0\0\0\0\0\0\0\0')
+            else:
+                self.logger.info(f'opened UTXO DB (for sync: {for_sync})')
+            self.read_utxo_state()
+        await run_in_thread(open_utxo_db)
 
         # Then history DB
-        self.history.open_db(
-            db_class=self.db_class,
-            for_sync=for_sync,
-            utxo_db_tx_count=self.db_tx_count,
-        )
-        self.clear_excess_undo_info()
+        def open_hist_db():
+            self.history.open_db(
+                db_class=self.db_class,
+                for_sync=for_sync,
+                utxo_db_tx_count=self.db_tx_count,
+            )
+            self.clear_excess_undo_info()
+        await run_in_thread(open_hist_db)
 
         # Now prepare in-memory structures.
         # - Read TX counts (requires meta directory)
@@ -236,6 +240,8 @@ class DB:
     async def _prep_bhash_to_bheight_map(self) -> None:
         if self.bhash_to_bheight is not None:
             return
+        self.logger.info('preparing bhash->bheight map...')
+        t0 = time.monotonic()
         self.bhash_to_bheight = {}
         count = self.db_height + 1
         block_hashes = await self.fs_block_hashes_rev(0, count)
@@ -246,6 +252,7 @@ class DB:
         for bheight, bhash in enumerate(block_hashes):
             self.bhash_to_bheight[bhash] = bheight
         assert len(self.bhash_to_bheight) == self.db_height + 1
+        self.logger.info(f'bhash->bheight map populated in {time.monotonic() - t0:.1f}s')
 
     def get_blockheight_from_blockhash(self, block_hash_hum: str) -> Optional[int]:
         bhash_rev = hex_str_to_hash(block_hash_hum)
@@ -554,14 +561,18 @@ class DB:
         if headers_count != count:
             raise self.DBError(f'only got {headers_count:,d} headers starting '
                                f'at {height:,d}, not {count:,d}')
-        offset = 0
-        headers = []
-        for n in range(count):
-            hlen = self.header_len(height + n)
-            headers.append(headers_concat[offset:offset + hlen])
-            offset += hlen
 
-        return [self.coin.header_hash_rev(header) for header in headers]
+        def hash_headers():
+            offset = 0
+            headers = []
+            for n in range(count):
+                hlen = self.header_len(height + n)
+                headers.append(headers_concat[offset:offset + hlen])
+                offset += hlen
+            return [self.coin.header_hash_rev(header) for header in headers]
+
+        bhashes = (await run_in_thread(hash_headers)) if count > 100 else hash_headers()
+        return bhashes
 
     async def limited_history(self, hashX: bytes, *, limit: int = 1000) -> Sequence[tuple[bytes, int]]:
         '''Return an unpruned, sorted list of (txid_rev, height) tuples of

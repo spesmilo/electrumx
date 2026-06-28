@@ -66,8 +66,7 @@ coin_classes_tested = set()
 BLOCKS_DIR = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 'blocks')
 
-# Find out which db engines to test
-# Those that are not installed will be skipped
+# Find testcases
 blocks = []
 
 for name in os.listdir(BLOCKS_DIR):

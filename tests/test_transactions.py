@@ -18,8 +18,7 @@ from electrumx.lib.script import OpCodes, Script
 TRANSACTION_DIR = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 'transactions')
 
-# Find out which db engines to test
-# Those that are not installed will be skipped
+# Find testcases
 transactions_bitcoin = []
 transactions_alts = []
 

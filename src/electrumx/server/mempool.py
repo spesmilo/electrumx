@@ -318,16 +318,25 @@ class MemPool:
         # call transfers ownership
         touched_hashxs = set()
         touched_outpoints = set()
+        prev_mempool_height = -1
         while True:
             height = self.api.cached_height()
+            nb = height != prev_mempool_height  # "is new block"
+
+            t0 = time.monotonic()
             txids_hum = await self.api.mempool_txids_hum()
+            if nb: self.logger.debug(f'getrawmempool RPC took {time.monotonic() - t0:.3f}s.')
             if height != await self.api.height():  # if height changed *again*, re-start
                 continue
+
+            t0 = time.monotonic()
             txids_rev = await run_in_thread(lambda: {hex_str_to_hash(hh) for hh in txids_hum})
+            if nb: self.logger.debug(f'convert_txids took {time.monotonic() - t0:.3f}s.')
             if self.api.db_height() < height:
                 # DB not yet caught up. give it some time...
                 async with ignore_after(self.refresh_secs):
                     await self.api.db_height_changed()
+
             try:
                 async with self.lock:
                     await self._process_mempool(
@@ -348,6 +357,7 @@ class MemPool:
                     touched_outpoints=touched_outpoints,
                     height=height,
                 )
+                prev_mempool_height = height
                 touched_hashxs = set()
                 touched_outpoints = set()
             # poll bitcoind's whole mempool every few seconds; or instantly after the DB height changes
@@ -395,9 +405,14 @@ class MemPool:
                     touched_outpoints.add((txid_rev, out_idx))
             return len(disappeared_hashes)
 
-        await run_in_thread(handle_disappeared_txs)
+        t0 = time.monotonic()
+        num_disappeared = await run_in_thread(handle_disappeared_txs)
+        time_elapsed = time.monotonic() - t0
+        if time_elapsed > 1.0 or num_disappeared > 1000:
+            self.logger.debug(f'_process_mempool() removing txs took {time_elapsed:.2f}s. {num_disappeared=}')
 
         # 2. Process new transactions
+        t0 = time.monotonic()
         new_hashes = await run_in_thread(lambda: list(all_txids_rev.difference(txs)))
         if new_hashes:
             # 2.1. fetch raw txs from bitcoin daemon
@@ -417,6 +432,9 @@ class MemPool:
                 partial_tx_map, partial_utxo_map = task.result()
                 tx_map.update(partial_tx_map)
                 utxo_map.update(partial_utxo_map)
+            time_elapsed = time.monotonic() - t0
+            if time_elapsed > 1.0 or len(new_hashes) > 1000:
+                self.logger.debug(f'_process_mempool() fetching txs took {time_elapsed:.2f}s. {len(new_hashes)=}')
 
             # 2.2. accept txs into our mempool
             def accept_txs_loop() -> None:
@@ -442,7 +460,11 @@ class MemPool:
                 if tx_map:
                     self.logger.error(f'{len(tx_map)} txs dropped')
 
+            t0 = time.monotonic()
             await run_in_thread(accept_txs_loop)
+            time_elapsed = time.monotonic() - t0
+            if time_elapsed > 1.0 or len(new_hashes) > 1000:
+                self.logger.debug(f'_process_mempool() accepting txs took {time_elapsed:.2f}s. {len(new_hashes)=}')
 
     async def _fetch_raw_txs_and_utxos(
             self,

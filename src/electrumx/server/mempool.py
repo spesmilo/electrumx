@@ -22,7 +22,7 @@ from aiorpcx import run_in_thread, sleep, ignore_after
 
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
 from electrumx.lib.tx import SkipTxDeserialize
-from electrumx.lib.util import class_logger, chunks, OldTaskGroup
+from electrumx.lib.util import class_logger, chunks, OldTaskGroup, LogTimeTaken
 from electrumx.lib.tx import TXOSpendStatus, TxOutpoint
 from electrumx.server.db import UTXO
 
@@ -321,22 +321,17 @@ class MemPool:
         prev_mempool_height = -1
         while True:
             height = self.api.cached_height()
-            nb = height != prev_mempool_height  # "is new block"
-
-            t0 = time.monotonic()
-            txids_hum = await self.api.mempool_txids_hum()
-            if nb: self.logger.debug(f'getrawmempool RPC took {time.monotonic() - t0:.3f}s.')
+            is_new_block = height != prev_mempool_height
+            with LogTimeTaken(self.logger, "getrawmempool RPC", enabled=is_new_block):
+                txids_hum = await self.api.mempool_txids_hum()
             if height != await self.api.height():  # if height changed *again*, re-start
                 continue
-
-            t0 = time.monotonic()
-            txids_rev = await run_in_thread(lambda: {hex_str_to_hash(hh) for hh in txids_hum})
-            if nb: self.logger.debug(f'convert_txids took {time.monotonic() - t0:.3f}s.')
+            with LogTimeTaken(self.logger, "convert_txids", enabled=is_new_block):
+                txids_rev = await run_in_thread(lambda: {hex_str_to_hash(hh) for hh in txids_hum})
             if self.api.db_height() < height:
                 # DB not yet caught up. give it some time...
                 async with ignore_after(self.refresh_secs):
                     await self.api.db_height_changed()
-
             try:
                 async with self.lock:
                     await self._process_mempool(
@@ -344,6 +339,7 @@ class MemPool:
                         touched_hashxs=touched_hashxs,
                         touched_outpoints=touched_outpoints,
                         mempool_height=height,
+                        debug_logs=is_new_block,
                     )
             except DBSyncError:
                 # The UTXO DB is not at the same height as the
@@ -373,6 +369,7 @@ class MemPool:
             touched_hashxs: Set[bytes],  # set of hashXs
             touched_outpoints: Set[TxOutpoint],  # set of outpoints
             mempool_height: int,
+            debug_logs: bool = False,
     ) -> None:
         # Re-sync with the new set of hashes
         txs = self.txs
@@ -405,11 +402,8 @@ class MemPool:
                     touched_outpoints.add((txid_rev, out_idx))
             return len(disappeared_hashes)
 
-        t0 = time.monotonic()
-        num_disappeared = await run_in_thread(handle_disappeared_txs)
-        time_elapsed = time.monotonic() - t0
-        if time_elapsed > 1.0 or num_disappeared > 1000:
-            self.logger.debug(f'_process_mempool() removing txs took {time_elapsed:.2f}s. {num_disappeared=}')
+        with LogTimeTaken(self.logger, "_process_mempool() removing txs", enabled=debug_logs):
+            await run_in_thread(handle_disappeared_txs)
 
         # 2. Process new transactions
         t0 = time.monotonic()
@@ -432,9 +426,8 @@ class MemPool:
                 partial_tx_map, partial_utxo_map = task.result()
                 tx_map.update(partial_tx_map)
                 utxo_map.update(partial_utxo_map)
-            time_elapsed = time.monotonic() - t0
-            if time_elapsed > 1.0 or len(new_hashes) > 1000:
-                self.logger.debug(f'_process_mempool() fetching txs took {time_elapsed:.2f}s. {len(new_hashes)=}')
+            if debug_logs:
+                self.logger.debug(f'_process_mempool() fetching txs took {time.monotonic() - t0:.3f}s. {len(new_hashes)=}')
 
             # 2.2. accept txs into our mempool
             def accept_txs_loop() -> None:
@@ -460,11 +453,8 @@ class MemPool:
                 if tx_map:
                     self.logger.error(f'{len(tx_map)} txs dropped')
 
-            t0 = time.monotonic()
-            await run_in_thread(accept_txs_loop)
-            time_elapsed = time.monotonic() - t0
-            if time_elapsed > 1.0 or len(new_hashes) > 1000:
-                self.logger.debug(f'_process_mempool() accepting txs took {time_elapsed:.2f}s. {len(new_hashes)=}')
+            with LogTimeTaken(self.logger, f"_process_mempool() accepting txs ({len(new_hashes)=})", enabled=debug_logs):
+                await run_in_thread(accept_txs_loop)
 
     async def _fetch_raw_txs_and_utxos(
             self,

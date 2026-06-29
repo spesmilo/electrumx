@@ -307,7 +307,7 @@ class SessionManager:
 
     def _ssl_context(self) -> ssl.SSLContext:
         if self._sslc is None:
-            self._sslc = ssl.SSLContext(ssl.PROTOCOL_TLS)
+            self._sslc = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             self._sslc.load_cert_chain(self.env.ssl_certfile, keyfile=self.env.ssl_keyfile)
         return self._sslc
 

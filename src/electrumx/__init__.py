@@ -1,3 +1,6 @@
+PYTHON_MIN_VERSION = (3, 10)
+
+
 from electrumx.server.controller import Controller
 from electrumx.server.env import Env
 

@@ -640,22 +640,29 @@ class DB:
 
     def clear_excess_undo_info(self) -> None:
         '''Clear excess undo info.  Only most recent N are kept.'''
+        # delete aged undo_infos from utxo db
+        # FIXME shouldn't we incrementally delete old undo_infos as we advance the tip?
+        #       Currently we only do this cleanup on startup, so long-running servers
+        #       can get their db bloated.
         prefix = b'U'
         min_height = self.min_undo_height(self.db_height)
         keys = []
-        for key, _hist in self.utxo_db.iterator(prefix=prefix):
+        excess_uhist_size = 0
+        for key, uhist in self.utxo_db.iterator(prefix=prefix):
             height = unpack_block_height(key[-BHEIGHT_LEN:])
             if height >= min_height:
                 break
             keys.append(key)
+            excess_uhist_size += len(uhist)
 
         if keys:
             with self.utxo_db.write_batch() as batch:
                 for key in keys:
                     batch.delete(key)
-            self.logger.info(f'deleted {len(keys):,d} stale undo entries')
+            self.logger.info(f'deleted {len(keys):,d} stale undo entries. total size: {excess_uhist_size:,d} bytes')
 
         # delete old block files
+        # note: this is just a fallback cleanup path - normally already deleted by write_raw_block()
         prefix = self.raw_block_prefix()
         paths = [path for path in glob(f'{prefix}[0-9]*')
                  if len(path) > len(prefix)

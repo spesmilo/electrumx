@@ -14,7 +14,7 @@ import logging
 import sys
 
 import electrumx
-from electrumx import Controller, Env
+from electrumx import Controller, Env, PYTHON_MIN_VERSION
 from electrumx.lib.util import CompactFormatter, make_logger
 
 
@@ -29,8 +29,9 @@ def main():
         f'ElectrumX server starting. '
         f'({electrumx.BRANDING}. version={electrumx.__version__})')
     try:
-        if sys.version_info < (3, 10):
-            raise RuntimeError('ElectrumX requires Python 3.10 or greater')
+        if sys.version_info < PYTHON_MIN_VERSION:
+            mvs = '.'.join(str(part) for part in PYTHON_MIN_VERSION)
+            raise RuntimeError(f'ElectrumX requires Python {mvs} or greater')
         env = Env()
         logger.info(f'logging level: {env.log_level}')
         logger.setLevel(env.log_level)

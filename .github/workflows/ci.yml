@@ -77,7 +77,10 @@ jobs:
         run: pip install pycodestyle
 
       - name: Run pycodestyle
-        run: pycodestyle --max-line-length=140 src
+        run: |
+          pycodestyle \
+            --max-line-length=140 \
+            src
 
   build_docs:
     # note: this build task is not related to read-the-docs; it is only here to sanity-check the docs can be built.

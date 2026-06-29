@@ -76,6 +76,10 @@ class MemPoolAPI(ABC):
         '''
 
     @abstractmethod
+    async def daemon_height_changed(self) -> None:
+        '''Wait until bitcoind's height changes.'''
+
+    @abstractmethod
     def db_height(self) -> int:
         '''Return the height flushed to the on-disk DB.'''
 
@@ -320,6 +324,10 @@ class MemPool:
             if height != await self.api.height():  # if height changed *again*, re-start
                 continue
             txids_rev = await run_in_thread(lambda: {hex_str_to_hash(hh) for hh in txids_hum})
+            if self.api.db_height() < height:
+                # DB not yet caught up. give it some time...
+                async with ignore_after(self.refresh_secs):
+                    await self.api.db_height_changed()
             try:
                 async with self.lock:
                     await self._process_mempool(
@@ -344,7 +352,9 @@ class MemPool:
                 touched_outpoints = set()
             # poll bitcoind's whole mempool every few seconds; or instantly after the DB height changes
             async with ignore_after(self.refresh_secs):
-                await self.api.db_height_changed()
+                async with OldTaskGroup(wait=any) as group:
+                    await group.spawn(self.api.db_height_changed())
+                    await group.spawn(self.api.daemon_height_changed())
 
     async def _process_mempool(
             self,

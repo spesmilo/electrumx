@@ -151,6 +151,7 @@ class Controller(ServerBase):
             notifications.db_height = get_db_height
             notifications.db_height_changed = db.db_flushed_event.wait
             notifications.cached_height = daemon.cached_height
+            notifications.daemon_height_changed = daemon.height_changed.wait
             notifications.mempool_txids_hum = daemon.mempool_txids_hum
             notifications.raw_transactions = daemon.getrawtransactions
             notifications.lookup_utxos = db.lookup_utxos

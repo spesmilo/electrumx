@@ -56,6 +56,19 @@ def test_batch_exception(db):
     assert db.get(b"a") == b"1"
 
 
+def test_batch_delete(db):
+    db.put(b"a1", b"")
+    db.put(b"a2", b"")
+    db.put(b"a4", b"")
+    db.put(b"a5", b"")
+    assert list(db.iterator()) == [(b"a1", b""), (b"a2", b""), (b"a4", b""), (b"a5", b"")]
+    with db.write_batch() as b:
+        b.delete(b"a2")
+        b.delete(b"a3")
+        b.delete(b"a4")
+    assert list(db.iterator()) == [(b"a1", b""), (b"a5", b"")]
+
+
 def test_iterator(db):
     """
     The iterator should contain all key/value pairs starting with prefix

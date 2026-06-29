@@ -398,10 +398,18 @@ class DB:
             batch_put(b'u' + hashX + suffix, value_sats)
         flush_data.adds.clear()
 
-        # New undo information
+        # Add new undo information
         self.flush_undo_infos(batch_put, flush_data.undo_infos)
         flush_data.undo_infos.clear()
+        # Delete old undo information
+        if not self.utxo_db.for_sync:  # undo infos were only added if we are nearly caught up anyway
+            old_min_height = max(0, self.min_undo_height(self.db_height))
+            new_min_height = max(0, self.min_undo_height(flush_data.height))
+            for h in range(old_min_height, new_min_height):
+                key = self.undo_key(h)
+                batch_delete(key)
 
+        # Log stats
         if self.utxo_db.for_sync:
             block_count = flush_data.height - self.db_height
             tx_count = flush_data.tx_count - self.db_tx_count
@@ -632,21 +640,23 @@ class DB:
         with util.open_truncate(self.raw_block_path(height)) as f:
             f.write(block)
         # Delete old blocks to prevent them accumulating
-        try:
-            del_height = self.min_undo_height(height) - 1
-            os.remove(self.raw_block_path(del_height))
-        except FileNotFoundError:
-            pass
+        del_height = self.min_undo_height(height) - 1
+        if del_height >= 0:
+            try:
+                os.remove(self.raw_block_path(del_height))
+            except FileNotFoundError:
+                pass
 
     def clear_excess_undo_info(self) -> None:
         '''Clear excess undo info.  Only most recent N are kept.'''
-        prefix = b'U'
+        # delete aged undo_infos from utxo db
+        # note: this is just a fallback cleanup path - normally already deleted by _flush_utxo_db()
         min_height = self.min_undo_height(self.db_height)
         keys = []
-        for key, _hist in self.utxo_db.iterator(prefix=prefix):
+        for key, uhist in self.utxo_db.iterator(prefix=b'U'):
             height = unpack_block_height(key[-BHEIGHT_LEN:])
             if height >= min_height:
-                break
+                break  # can break as block_height is encoded as big endian
             keys.append(key)
 
         if keys:
@@ -656,6 +666,7 @@ class DB:
             self.logger.info(f'deleted {len(keys):,d} stale undo entries')
 
         # delete old block files
+        # note: this is just a fallback cleanup path - normally already deleted by write_raw_block()
         prefix = self.raw_block_prefix()
         paths = [path for path in glob(f'{prefix}[0-9]*')
                  if len(path) > len(prefix)

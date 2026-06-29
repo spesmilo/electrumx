@@ -9,12 +9,16 @@
 
 import os
 from functools import partial
-from typing import Type, Sequence
+from typing import Type, Sequence, TYPE_CHECKING
 
 import electrumx.lib.util as util
 
+if TYPE_CHECKING:
+    from rocksdb import DB as rocksdb_db
+    from plyvel import DB as plyvel_db
 
-def db_class(name) -> Type['Storage']:
+
+def db_class(name: str) -> Type['Storage']:
     '''Returns a DB engine class.'''
     for db_class in util.subclasses(Storage):
         if db_class.__name__.lower() == name.lower():
@@ -30,28 +34,28 @@ def list_db_engine_choices() -> Sequence[str]:
 class Storage:
     '''Abstract base class of the DB backend abstraction.'''
 
-    def __init__(self, name, for_sync):
+    def __init__(self, name: str, for_sync: bool):
         self.is_new = not os.path.exists(name)
         self.for_sync = for_sync or self.is_new
         self.open(name, create=self.is_new)
 
     @classmethod
-    def import_module(cls):
+    def import_module(cls) -> None:
         '''Import the DB engine module.'''
         raise NotImplementedError
 
-    def open(self, name, create):
+    def open(self, name: str, create: bool):
         '''Open an existing database or create a new one.'''
         raise NotImplementedError
 
-    def close(self):
+    def close(self) -> None:
         '''Close an existing database.'''
         raise NotImplementedError
 
-    def get(self, key):
+    def get(self, key: bytes) -> bytes:
         raise NotImplementedError
 
-    def put(self, key, value):
+    def put(self, key: bytes, value: bytes) -> None:
         raise NotImplementedError
 
     def write_batch(self):
@@ -62,7 +66,7 @@ class Storage:
         '''
         raise NotImplementedError
 
-    def iterator(self, prefix=b'', reverse=False):
+    def iterator(self, prefix: bytes = b'', reverse: bool = False):
         '''Return an iterator that yields (key, value) pairs from the
         database sorted by key.
 
@@ -82,6 +86,8 @@ class Storage:
 
 class LevelDB(Storage):
     '''LevelDB database engine.'''
+
+    db: 'plyvel_db'
 
     @classmethod
     def import_module(cls):
@@ -110,7 +116,7 @@ class LevelDB(Storage):
 class LevelDBIterator:
     '''An iterator for LevelDB.'''
 
-    def __init__(self, *, db, prefix, reverse):
+    def __init__(self, *, db: 'plyvel_db', prefix: bytes, reverse: bool):
         self.prefix = prefix
         self.iterator = db.iterator(prefix=prefix, reverse=reverse)
 
@@ -129,6 +135,8 @@ class LevelDBIterator:
 
 class RocksDB(Storage):
     '''RocksDB database engine.'''
+
+    db: 'rocksdb_db'
 
     @classmethod
     def import_module(cls):
@@ -160,7 +168,7 @@ class RocksDB(Storage):
 class RocksDBWriteBatch:
     '''A write batch for RocksDB.'''
 
-    def __init__(self, db):
+    def __init__(self, db: 'rocksdb_db'):
         self.batch = RocksDB.module.WriteBatch()
         self.db = db
 
@@ -175,7 +183,7 @@ class RocksDBWriteBatch:
 class RocksDBIterator:
     '''An iterator for RocksDB.'''
 
-    def __init__(self, *, db, prefix, reverse):
+    def __init__(self, *, db: 'rocksdb_db', prefix: bytes, reverse: bool):
         self.prefix = prefix
         self._is_reverse = reverse
         if reverse:

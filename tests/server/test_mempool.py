@@ -267,11 +267,13 @@ def in_caplog(caplog, message):
 @pytest.mark.asyncio
 async def test_keep_synchronized(caplog):
     api = API()
-    mempool = MemPool(coin, api)
+    mempool = MemPool(coin, api, refresh_secs=0.01)
     event = Event()
     with caplog.at_level(logging.INFO):
         async with OldTaskGroup() as group:
             await group.spawn(mempool.keep_synchronized, event)
+            # do two iterations of _refresh_hashes, then cancel:
+            await event.wait()
             await event.wait()
             await group.cancel_remaining()
 

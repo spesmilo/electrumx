@@ -317,9 +317,9 @@ class MemPool:
         while True:
             height = self.api.cached_height()
             txids_hum = await self.api.mempool_txids_hum()
-            if height != await self.api.height():
+            if height != await self.api.height():  # if height changed *again*, re-start
                 continue
-            txids_rev = {hex_str_to_hash(hh) for hh in txids_hum}
+            txids_rev = await run_in_thread(lambda: {hex_str_to_hash(hh) for hh in txids_hum})
             try:
                 async with self.lock:
                     await self._process_mempool(
@@ -364,25 +364,31 @@ class MemPool:
 
         # 1. Handle txs that have disappeared (evicted, just got mined, etc)
         # TODO split disappeared txs workload into a threadpool, chunks of ~200 txs
-        for txid_rev in (set(txs) - all_txids_rev):
-            tx = txs.pop(txid_rev)
-            # hashXs
-            tx_hashXs = {hashX for hashX, value in tx.in_pairs}
-            tx_hashXs.update(hashX for hashX, value in tx.out_pairs)
-            for hashX in tx_hashXs:
-                hashXs[hashX].remove(txid_rev)
-                if not hashXs[hashX]:
-                    del hashXs[hashX]
-            touched_hashxs |= tx_hashXs
-            # outpoints
-            for prevout in tx.prevouts:
-                del txo_to_spender[prevout]
-                touched_outpoints.add(prevout)
-            for out_idx, out_pair in enumerate(tx.out_pairs):
-                touched_outpoints.add((txid_rev, out_idx))
+        def handle_disappeared_txs() -> int:
+            nonlocal touched_hashxs
+            disappeared_hashes = set(txs) - all_txids_rev
+            for txid_rev in disappeared_hashes:
+                tx = txs.pop(txid_rev)
+                # hashXs
+                tx_hashXs = {hashX for hashX, value in tx.in_pairs}
+                tx_hashXs.update(hashX for hashX, value in tx.out_pairs)
+                for hashX in tx_hashXs:
+                    hashXs[hashX].remove(txid_rev)
+                    if not hashXs[hashX]:
+                        del hashXs[hashX]
+                touched_hashxs |= tx_hashXs
+                # outpoints
+                for prevout in tx.prevouts:
+                    del txo_to_spender[prevout]
+                    touched_outpoints.add(prevout)
+                for out_idx, out_pair in enumerate(tx.out_pairs):
+                    touched_outpoints.add((txid_rev, out_idx))
+            return len(disappeared_hashes)
+
+        await run_in_thread(handle_disappeared_txs)
 
         # 2. Process new transactions
-        new_hashes = list(all_txids_rev.difference(txs))
+        new_hashes = await run_in_thread(lambda: list(all_txids_rev.difference(txs)))
         if new_hashes:
             # 2.1. fetch raw txs from bitcoin daemon
             group = OldTaskGroup()

@@ -1,4 +1,4 @@
-PYTHON_MIN_VERSION = (3, 10)
+PYTHON_MIN_VERSION = (3, 10)  # noqa: E402
 
 
 from electrumx.server.controller import Controller

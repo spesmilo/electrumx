@@ -11,7 +11,6 @@ import itertools
 import time
 from abc import ABC, abstractmethod
 import asyncio
-from asyncio import Lock
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict, Optional, Set, Iterable
@@ -22,7 +21,7 @@ from aiorpcx import run_in_thread, sleep, ignore_after
 
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
 from electrumx.lib.tx import SkipTxDeserialize
-from electrumx.lib.util import class_logger, chunks, OldTaskGroup
+from electrumx.lib.util import class_logger, chunks, OldTaskGroup, LogTimeTaken
 from electrumx.lib.tx import TXOSpendStatus, TxOutpoint
 from electrumx.server.db import UTXO
 
@@ -155,7 +154,7 @@ class MemPool:
         self.refresh_secs = refresh_secs
         self.log_status_secs = log_status_secs
         # Prevents mempool refreshes during fee histogram calculation
-        self.lock = Lock()
+        self.lock = asyncio.Lock()
 
     async def _logging(self, synchronized_event):
         '''Print regular logs of mempool stats.'''
@@ -184,6 +183,7 @@ class MemPool:
 
     def _update_histogram(self, bin_size):
         # Build a histogram by fee rate
+        t0 = time.monotonic()
         histogram = defaultdict(int)
         for tx in self.txs.values():
             fee_rate = tx.fee / tx.size
@@ -195,7 +195,7 @@ class MemPool:
             histogram[fee_rate] += tx.size
 
         compact = self._compress_histogram(histogram, bin_size=bin_size)
-        self.logger.info(f'compact fee histogram: {compact}')
+        self.logger.info(f'compact fee histogram: {compact}. took {time.monotonic() - t0:.3f}s.')
         self.cached_compact_histogram = compact
 
     @classmethod
@@ -318,12 +318,16 @@ class MemPool:
         # call transfers ownership
         touched_hashxs = set()
         touched_outpoints = set()
+        prev_mempool_height = -1
         while True:
             height = self.api.cached_height()
-            txids_hum = await self.api.mempool_txids_hum()
+            is_new_block = height != prev_mempool_height
+            with LogTimeTaken(self.logger, "getrawmempool RPC", enabled=is_new_block):
+                txids_hum = await self.api.mempool_txids_hum()
             if height != await self.api.height():  # if height changed *again*, re-start
                 continue
-            txids_rev = await run_in_thread(lambda: {hex_str_to_hash(hh) for hh in txids_hum})
+            with LogTimeTaken(self.logger, "convert_txids", enabled=is_new_block):
+                txids_rev = await run_in_thread(lambda: {hex_str_to_hash(hh) for hh in txids_hum})
             if self.api.db_height() < height:
                 # DB not yet caught up. give it some time...
                 async with ignore_after(self.refresh_secs):
@@ -335,6 +339,7 @@ class MemPool:
                         touched_hashxs=touched_hashxs,
                         touched_outpoints=touched_outpoints,
                         mempool_height=height,
+                        debug_logs=is_new_block,
                     )
             except DBSyncError:
                 # The UTXO DB is not at the same height as the
@@ -348,6 +353,7 @@ class MemPool:
                     touched_outpoints=touched_outpoints,
                     height=height,
                 )
+                prev_mempool_height = height
                 touched_hashxs = set()
                 touched_outpoints = set()
             # poll bitcoind's whole mempool every few seconds; or instantly after the DB height changes
@@ -363,6 +369,7 @@ class MemPool:
             touched_hashxs: Set[bytes],  # set of hashXs
             touched_outpoints: Set[TxOutpoint],  # set of outpoints
             mempool_height: int,
+            debug_logs: bool = False,
     ) -> None:
         # Re-sync with the new set of hashes
         txs = self.txs
@@ -395,9 +402,11 @@ class MemPool:
                     touched_outpoints.add((txid_rev, out_idx))
             return len(disappeared_hashes)
 
-        await run_in_thread(handle_disappeared_txs)
+        with LogTimeTaken(self.logger, "_process_mempool() removing txs", enabled=debug_logs):
+            await run_in_thread(handle_disappeared_txs)
 
         # 2. Process new transactions
+        t0 = time.monotonic()
         new_hashes = await run_in_thread(lambda: list(all_txids_rev.difference(txs)))
         if new_hashes:
             # 2.1. fetch raw txs from bitcoin daemon
@@ -417,6 +426,8 @@ class MemPool:
                 partial_tx_map, partial_utxo_map = task.result()
                 tx_map.update(partial_tx_map)
                 utxo_map.update(partial_utxo_map)
+            if debug_logs:
+                self.logger.debug(f'_process_mempool() fetching txs took {time.monotonic() - t0:.3f}s. {len(new_hashes)=}')
 
             # 2.2. accept txs into our mempool
             def accept_txs_loop() -> None:
@@ -442,7 +453,8 @@ class MemPool:
                 if tx_map:
                     self.logger.error(f'{len(tx_map)} txs dropped')
 
-            await run_in_thread(accept_txs_loop)
+            with LogTimeTaken(self.logger, f"_process_mempool() accepting txs ({len(new_hashes)=})", enabled=debug_logs):
+                await run_in_thread(accept_txs_loop)
 
     async def _fetch_raw_txs_and_utxos(
             self,

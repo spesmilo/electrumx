@@ -35,6 +35,7 @@ import logging
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
+import time
 from typing import Any, Optional
 
 import aiorpcx
@@ -446,3 +447,22 @@ def get_running_loop() -> Optional[asyncio.AbstractEventLoop]:
         return asyncio.get_running_loop()
     except RuntimeError:
         return None
+
+
+class LogTimeTaken:
+    """A simple context manager that logs how much time passed between enter and exit."""
+
+    def __init__(self, logger: logging.Logger, base_str: str, *, enabled: bool = True):
+        self.logger = logger
+        self.base_str = base_str
+        self.enabled = enabled
+        self.start_time = 0
+
+    def __enter__(self):
+        self.start_time = time.monotonic()
+        return None
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        time_elapsed = time.monotonic() - self.start_time
+        if self.enabled:
+            self.logger.debug(f'{self.base_str} took {time_elapsed:.3f}s.')

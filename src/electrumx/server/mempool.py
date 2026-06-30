@@ -381,9 +381,8 @@ class MemPool:
 
         # 1. Handle txs that have disappeared (evicted, just got mined, etc)
         # TODO split disappeared txs workload into a threadpool, chunks of ~200 txs
-        def handle_disappeared_txs() -> int:
+        def handle_disappeared_txs() -> None:
             nonlocal touched_hashxs
-            disappeared_hashes = set(txs) - all_txids_rev
             for txid_rev in disappeared_hashes:
                 tx = txs.pop(txid_rev)
                 # hashXs
@@ -400,10 +399,10 @@ class MemPool:
                     touched_outpoints.add(prevout)
                 for out_idx, out_pair in enumerate(tx.out_pairs):
                     touched_outpoints.add((txid_rev, out_idx))
-            return len(disappeared_hashes)
 
         with LogTimeTaken(self.logger, "_process_mempool() removing txs", enabled=debug_logs):
-            await run_in_thread(handle_disappeared_txs)
+            disappeared_hashes = await run_in_thread(lambda: set(txs) - all_txids_rev)
+            handle_disappeared_txs()
 
         # 2. Process new transactions
         t0 = time.monotonic()
@@ -454,7 +453,7 @@ class MemPool:
                     self.logger.error(f'{len(tx_map)} txs dropped')
 
             with LogTimeTaken(self.logger, f"_process_mempool() accepting txs ({len(new_hashes)=})", enabled=debug_logs):
-                await run_in_thread(accept_txs_loop)
+                accept_txs_loop()
 
     async def _fetch_raw_txs_and_utxos(
             self,

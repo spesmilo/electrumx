@@ -11,7 +11,6 @@ import itertools
 import time
 from abc import ABC, abstractmethod
 import asyncio
-from asyncio import Lock
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Sequence, Tuple, TYPE_CHECKING, Type, Dict, Optional, Set, Iterable
@@ -155,7 +154,7 @@ class MemPool:
         self.refresh_secs = refresh_secs
         self.log_status_secs = log_status_secs
         # Prevents mempool refreshes during fee histogram calculation
-        self.lock = Lock()
+        self.lock = asyncio.Lock()
 
     async def _logging(self, synchronized_event):
         '''Print regular logs of mempool stats.'''
@@ -184,6 +183,7 @@ class MemPool:
 
     def _update_histogram(self, bin_size):
         # Build a histogram by fee rate
+        t0 = time.monotonic()
         histogram = defaultdict(int)
         for tx in self.txs.values():
             fee_rate = tx.fee / tx.size
@@ -195,7 +195,7 @@ class MemPool:
             histogram[fee_rate] += tx.size
 
         compact = self._compress_histogram(histogram, bin_size=bin_size)
-        self.logger.info(f'compact fee histogram: {compact}')
+        self.logger.info(f'compact fee histogram: {compact}. took {time.monotonic() - t0:.3f}s.')
         self.cached_compact_histogram = compact
 
     @classmethod

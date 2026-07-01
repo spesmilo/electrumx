@@ -892,7 +892,7 @@ class SessionManager:
 
     def get_block_ref_for_chaintip(self) -> BlockRef:
         """Returns a BlockRef for the current chaintip of the DB.
-        Raises ChainSyncError if the DB height is not up-to-date with the daemon height.
+        Raises ChainSyncError if the mempool is not up-to-date with the DB.
         """
         # daemon_height = self.daemon.cached_height()
         bp_height = self.bp.height
@@ -909,9 +909,9 @@ class SessionManager:
         #       the few that also query bitcoind need to implement their own logic to make sure
         #       the state they present is consistent with e-x's current db state.
         if not (bp_height == db_height == notif_height):
-            raise ChainSyncError(message="DB is lagging behind daemon")
+            raise ChainSyncError(message="DB/mempool still catching up with each other")
         if not (bp_tip == db_tip == notif_tip):
-            raise ChainSyncError(message="DB is lagging behind daemon")
+            raise ChainSyncError(message="DB/mempool still catching up with each other")
         assert db_height >= 0
         assert db_tip is not None
         return BlockRef(
@@ -1505,12 +1505,14 @@ class ElectrumX(SessionBase):
             method = 'blockchain.outpoint.subscribe'
             txo_to_status = {}  # type: dict[TxOutpoint, TXOSpendStatus]
             for prevout in touched_outpoints:
+                # TODO taskgroup?
                 txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)  # can raise RPCError
 
             # Check mempool TXOs - the status is a function of the confirmed state of
             # other transactions. (this is to detect if height changed from -1 to 0)
             mempool_txoutpoint_statuses = self.mempool_txoutpoint_statuses.copy()
             for prevout, old_status in mempool_txoutpoint_statuses.items():
+                # TODO taskgroup?
                 status = await self.txoutpoint_status_for_notif(*prevout)  # can raise RPCError
                 if status != old_status:
                     txo_to_status[prevout] = status

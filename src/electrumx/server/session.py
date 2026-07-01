@@ -219,11 +219,6 @@ class BlockRef:
     height: int
     hash_rev: bytes
 
-    def to_protocol_json(self) -> tuple[int, str]:
-        hash_hum = hash_to_hex_str(self.hash_rev)
-        compressed_hash_hum = hash_hum.lstrip("0")
-        return self.height, compressed_hash_hum
-
 
 @dataclass(slots=True)
 class SessionGroup:
@@ -892,7 +887,7 @@ class SessionManager:
 
     def get_block_ref_for_chaintip(self) -> BlockRef:
         """Returns a BlockRef for the current chaintip of the DB.
-        Raises ChainSyncError if the DB height is not up-to-date with the daemon height.
+        Raises ChainSyncError if the mempool is not up-to-date with the DB.
         """
         # daemon_height = self.daemon.cached_height()
         bp_height = self.bp.height
@@ -909,9 +904,9 @@ class SessionManager:
         #       the few that also query bitcoind need to implement their own logic to make sure
         #       the state they present is consistent with e-x's current db state.
         if not (bp_height == db_height == notif_height):
-            raise ChainSyncError(message="DB is lagging behind daemon")
+            raise ChainSyncError(message="DB/mempool still catching up with each other")
         if not (bp_tip == db_tip == notif_tip):
-            raise ChainSyncError(message="DB is lagging behind daemon")
+            raise ChainSyncError(message="DB/mempool still catching up with each other")
         assert db_height >= 0
         assert db_tip is not None
         return BlockRef(
@@ -1035,7 +1030,7 @@ class SessionManager:
         History is a sorted list of (txid_rev, height) tuples, or an RPCError.'''
         # History DoS limit.  Each element of history is about 99 bytes when encoded
         # as JSON.
-        max_byte_size_of_history_list = self.env.max_send - 100  # deduct a bit for overhead ("chaintip" in proto 1.7, etc)
+        max_byte_size_of_history_list = self.env.max_send - 100  # deduct a bit for overhead
         limit = max_byte_size_of_history_list // 99
         assert limit > 0
         cost = 0.1
@@ -1505,12 +1500,14 @@ class ElectrumX(SessionBase):
             method = 'blockchain.outpoint.subscribe'
             txo_to_status = {}  # type: dict[TxOutpoint, TXOSpendStatus]
             for prevout in touched_outpoints:
+                # TODO taskgroup?
                 txo_to_status[prevout] = await self.txoutpoint_status_for_notif(*prevout)  # can raise RPCError
 
             # Check mempool TXOs - the status is a function of the confirmed state of
             # other transactions. (this is to detect if height changed from -1 to 0)
             mempool_txoutpoint_statuses = self.mempool_txoutpoint_statuses.copy()
             for prevout, old_status in mempool_txoutpoint_statuses.items():
+                # TODO taskgroup?
                 status = await self.txoutpoint_status_for_notif(*prevout)  # can raise RPCError
                 if status != old_status:
                     txo_to_status[prevout] = status
@@ -1781,10 +1778,14 @@ class ElectrumX(SessionBase):
                 for txid_rev, height in history]
         unconf = await self.unconfirmed_history(hashX)
         # note: the same tx could appear both in conf and unconf, if it was *just* mined.
-        #       For protocol 1.7, this race is eliminated due to @retry_on_chain_sync_error(check_chaintip=True),
-        #       which ensures (self.notified_height == db.db_height).
-        #       Even for older protocol, _history_cache makes this race extremely unlikely: it could only happen
+        #       - more complicated example: tx1 could have been just mined, while
+        #         our not-caught-up-mempool still contains a conflicting tx2.
+        #         we should avoid sending an inconsistent response...
+        #       _history_cache makes this race unlikely: it could only happen
         #       if we *also* get a cache-miss (but the cache is only cleared when notified_height is updated).
+        #       Conceptually the same issue affects other methods too, e.g. get_balance:
+        #       in general the DB and the mempool might be out-of-sync with each other.
+        #       This issue is eliminated if the caller is wrapped in @retry_on_chain_sync_error(check_chaintip=True).
         return conf + unconf
 
     @retry_on_chain_sync_error(check_chaintip=True)
@@ -1824,7 +1825,6 @@ class ElectrumX(SessionBase):
         scripthash = spk_to_scripthash(spk)
         hashX = scripthash_to_hashX(scripthash)
         d = await self.get_balance(hashX)
-        d["chaintip"] = self.session_mgr.get_block_ref_for_chaintip().to_protocol_json()
         return d
 
     @retry_on_chain_sync_error(check_chaintip=True)
@@ -1833,7 +1833,6 @@ class ElectrumX(SessionBase):
         hashX = scripthash_to_hashX(scripthash)
         d = dict()
         d["history"] = await self.confirmed_and_unconfirmed_history(hashX)
-        d["chaintip"] = self.session_mgr.get_block_ref_for_chaintip().to_protocol_json()
         return d
 
     @retry_on_chain_sync_error(check_chaintip=True)
@@ -1842,7 +1841,6 @@ class ElectrumX(SessionBase):
         hashX = scripthash_to_hashX(scripthash)
         d = dict()
         d["history"] = await self.unconfirmed_history(hashX)
-        d["chaintip"] = self.session_mgr.get_block_ref_for_chaintip().to_protocol_json()
         return d
 
     @retry_on_chain_sync_error(check_chaintip=True)
@@ -1851,7 +1849,6 @@ class ElectrumX(SessionBase):
         hashX = scripthash_to_hashX(scripthash)
         d = dict()
         d["utxos"] = await self.hashX_listunspent(hashX)
-        d["chaintip"] = self.session_mgr.get_block_ref_for_chaintip().to_protocol_json()
         return d
 
     @retry_on_chain_sync_error(check_chaintip=True)
@@ -1879,7 +1876,6 @@ class ElectrumX(SessionBase):
         if max(spend_status.funder_height or 0, spend_status.spender_height or 0) > db_chaintip.height:
             raise ChainSyncError(message="DB is lagging behind daemon")
         d = self._convert_txospendstatus_to_protocol_dict(spend_status)
-        d["chaintip"] = db_chaintip.to_protocol_json()
         return d
 
     @retry_on_chain_sync_error(check_chaintip=True)
@@ -1901,7 +1897,6 @@ class ElectrumX(SessionBase):
         # sub to outpoint
         self.txoutpoint_subs.add((txid_rev, txout_idx))
         d = self._convert_txospendstatus_to_protocol_dict(spend_status)
-        d["chaintip"] = db_chaintip.to_protocol_json()
         return d
 
     async def phandle_txoutpoint_unsubscribe(self, tx_hash: str | Any, txout_idx: int | Any) -> bool:

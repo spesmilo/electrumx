@@ -3842,7 +3842,7 @@ class Kylacoin(Coin):
     ]
 
     @classmethod
-    def header_hash(cls, header):
+    def header_hash_rev(cls, header):
         '''Given a header return hash'''
         return double_sha3_256(header)
 
@@ -3877,7 +3877,7 @@ class Lyncoin(AuxPowMixin, Coin):
     ]
 
     @classmethod
-    def header_hash(cls, header):
+    def header_hash_rev(cls, header):
         '''Given a header return hash'''
         version = int.from_bytes(header[:4], 'little')
         if version & 0x8000:

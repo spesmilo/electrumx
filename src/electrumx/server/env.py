@@ -10,9 +10,11 @@
 
 import re
 from ipaddress import IPv4Address, IPv6Address
-from typing import Type
+from typing import Type, Sequence
 
 from aiorpcx import Service, ServicePart
+
+import electrumx
 from electrumx.lib.coins import Coin
 from electrumx.lib.env_base import EnvBase
 
@@ -44,12 +46,13 @@ class Env(EnvBase):
         # Core items
 
         self.db_dir = self.required('DB_DIRECTORY')
+        self.db_engine = self.db_engine_enum()
         self.daemon_url = self.required('DAEMON_URL')
         if coin is not None:
             assert issubclass(coin, Coin)
             self.coin = coin
         else:
-            coin_name = self.required('COIN').strip()
+            coin_name = self.default('COIN', 'Bitcoin').strip()
             network = self.default('NET', 'mainnet').strip()
             self.coin = Coin.lookup_coin_class(coin_name, network)
 
@@ -62,8 +65,6 @@ class Env(EnvBase):
         self.tor_proxy_port = self.integer('TOR_PROXY_PORT', None)
 
         # Misc
-
-        self.db_engine = self.default('DB_ENGINE', 'leveldb')
         self.banner_file = self.default('BANNER_FILE', None)
         self.tor_banner_file = self.default('TOR_BANNER_FILE',
                                             self.banner_file)
@@ -72,7 +73,6 @@ class Env(EnvBase):
         self.log_level = self.default('LOG_LEVEL', 'info').upper()
         self.donation_address = self.default('DONATION_ADDRESS', '')
         self.drop_client = self.custom("DROP_CLIENT", None, re.compile)
-        self.drop_client_unknown = self.boolean('DROP_CLIENT_UNKNOWN', False)
         self.blacklist_url = self.default('BLACKLIST_URL', self.coin.BLACKLIST_URL)
         self.cache_MB = self.integer('CACHE_MB', 1200)
         self.reorg_limit = self.integer('REORG_LIMIT', self.coin.REORG_LIMIT)
@@ -83,6 +83,7 @@ class Env(EnvBase):
 
         self.max_send = self.integer('MAX_SEND', self.coin.DEFAULT_MAX_SEND)
         self.max_recv = self.integer('MAX_RECV', self.coin.DEFAULT_MAX_RECV)
+        self._try_raising_rlimit_nofile()  # do this before setting max_sessions
         self.max_sessions = self.sane_max_sessions()
         self.cost_soft_limit = self.integer('COST_SOFT_LIMIT', 1000)
         self.cost_hard_limit = self.integer('COST_HARD_LIMIT', 10000)
@@ -103,9 +104,28 @@ class Env(EnvBase):
             self.ssl_keyfile = self.required('SSL_KEYFILE')
         self.report_services = self.services_to_report()
 
+    def _try_raising_rlimit_nofile(self) -> None:
+        """Try raising the max num open file soft limit to the hard limit."""
+        try:
+            import resource
+        except ImportError:
+            return  # No resource module on Windows
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft >= hard:
+            return
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+        except (ValueError, OSError):
+            self.logger.warning(
+                f"error raising RLIMIT_NOFILE (ulimit -n) soft limit. Stuck with {soft}. "
+                f"You must ensure that electrumx has a large open file limit. See HOWTO in docs.")
+        else:
+            self.logger.info(
+                f"successfully raised RLIMIT_NOFILE (ulimit -n) soft limit from {soft} to {hard}")
+
     def sane_max_sessions(self):
         '''Return the maximum number of sessions to permit.  Normally this
-        is MAX_SESSIONS.  However, to prevent open file exhaustion, ajdust
+        is MAX_SESSIONS.  However, to prevent open file exhaustion, adjust
         downwards if running with a small open file rlimit.'''
         env_value = self.integer('MAX_SESSIONS', 1000)
         # No resource module on Windows
@@ -135,7 +155,7 @@ class Env(EnvBase):
                              "bumping COST_HARD_LIMIT by 1.")
             self.cost_hard_limit = self.cost_soft_limit + 1
 
-    def _parse_services(self, services_str, default_func):
+    def _parse_services(self, services_str, default_func) -> Sequence[Service]:
         result = []
         for service_str in services_str.split(','):
             if not service_str:
@@ -158,7 +178,7 @@ class Env(EnvBase):
 
         return result
 
-    def services_to_run(self):
+    def services_to_run(self) -> Sequence[Service]:
         def default_part(protocol, part):
             return default_services.get(protocol, {}).get(part)
 
@@ -198,3 +218,28 @@ class Env(EnvBase):
             return self.PD_SELF
         else:
             return self.PD_ON
+
+    def db_engine_enum(self) -> str:
+        from electrumx.server.storage import list_db_engine_choices
+        choices = list_db_engine_choices()
+        db_eng = self.default('DB_ENGINE', None)
+
+        if db_eng is None:
+            raise self.Error(
+                f"required envvar DB_ENGINE not set.\n"
+                f"Choose one from: {choices}.\n"
+                f"The corresponding dependencies also need to be installed. See pip extras.\n"
+                f"In ElectrumX 1.x versions, the default was leveldb.\n"
+                f"Warning: It is not possible to switch back and forth, "
+                f"the on-disk DB formats are not compatible with each other: when switching, "
+                f"you have to resync from genesis.\n"
+                f"LevelDB was written with HDDs in mind. RocksDB is more modern and performs better (on an SSD)."
+            )
+
+        db_eng = db_eng.lower()
+        if db_eng in choices:
+            return db_eng
+        else:
+            raise self.Error(
+                f"bad value for envvar DB_ENGINE: {db_eng!r}. Choose one from: {choices}."
+            )

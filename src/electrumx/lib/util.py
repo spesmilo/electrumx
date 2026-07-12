@@ -35,22 +35,24 @@ import logging
 import sys
 from collections.abc import Container, Mapping
 from struct import Struct
-from typing import Set
+import time
+from typing import Any, Optional
 
 import aiorpcx
 
 
-# Use system-compiled JSON lib if available, fallback to stdlib
+# Use orjson (faster 3rd party library) if available, fallback to stdlib
 try:
-    import rapidjson as json
-except ImportError:
-    try:
-        import ujson as json
-    except ImportError:
-        import json
+    import orjson
+    json_deserialize = orjson.loads
 
-json_deserialize = json.loads
-json_serialize = json.dumps
+    def json_serialize(obj: Any) -> str:
+        return orjson.dumps(obj).decode()  # orjson.dumps() returns bytes
+except ImportError:
+    import json
+    json_deserialize = json.loads
+    json_serialize = json.dumps
+
 
 # Logging utilities
 
@@ -81,20 +83,6 @@ def make_logger(name, *, handler, level):
 def class_logger(path, classname):
     '''Return a hierarchical logger for a class.'''
     return logging.getLogger(path).getChild(classname)
-
-
-# Method decorator.  To be used for calculations that will always
-# deliver the same result.  The method cannot take any arguments
-# and should be accessed as an attribute.
-class cachedproperty:
-    def __init__(self, f):
-        self.f = f
-
-    def __get__(self, obj, type):
-        obj = obj or type
-        value = self.f(obj)
-        setattr(obj, self.f.__name__, value)
-        return value
 
 
 def formatted_time(t, sep=' '):
@@ -313,6 +301,21 @@ def protocol_version(client_req, min_tuple, max_tuple):
     return result, client_min
 
 
+def is_hex_str(text: Any, *, allow_odd_len: bool = False) -> bool:
+    if not isinstance(text, str):
+        return False
+    if allow_odd_len and len(text) % 2 == 1:
+        return is_hex_str("0" + text, allow_odd_len=False)
+    try:
+        b = bytes.fromhex(text)
+    except Exception:
+        return False
+    # forbid whitespaces in text:
+    if len(text) != 2 * len(b):
+        return False
+    return True
+
+
 struct_le_i = Struct('<i')
 struct_le_q = Struct('<q')
 struct_le_H = Struct('<H')
@@ -320,6 +323,7 @@ struct_le_I = Struct('<I')
 struct_le_Q = Struct('<Q')
 struct_be_H = Struct('>H')
 struct_be_I = Struct('>I')
+struct_be_Q = Struct('>Q')
 structB = Struct('B')
 
 unpack_le_int32_from = struct_le_i.unpack_from
@@ -333,6 +337,7 @@ unpack_be_uint32_from = struct_be_I.unpack_from
 unpack_le_uint32 = struct_le_I.unpack
 unpack_le_uint64 = struct_le_Q.unpack
 unpack_be_uint32 = struct_be_I.unpack
+unpack_be_uint64 = struct_be_Q.unpack
 
 pack_le_int32 = struct_le_i.pack
 pack_le_int64 = struct_le_q.pack
@@ -341,6 +346,7 @@ pack_le_uint32 = struct_le_I.pack
 pack_le_uint64 = struct_le_Q.pack
 pack_be_uint16 = struct_be_H.pack
 pack_be_uint32 = struct_be_I.pack
+pack_be_uint64 = struct_be_Q.pack
 pack_byte = structB.pack
 
 hex_to_bytes = bytes.fromhex
@@ -433,3 +439,30 @@ _aiorpcx_orig_unset_task_deadline = aiorpcx.curio._unset_task_deadline
 aiorpcx.curio._set_new_deadline = _aiorpcx_monkeypatched_set_new_deadline
 aiorpcx.curio._set_task_deadline = _aiorpcx_monkeypatched_set_task_deadline
 aiorpcx.curio._unset_task_deadline = _aiorpcx_monkeypatched_unset_task_deadline
+
+
+def get_running_loop() -> Optional[asyncio.AbstractEventLoop]:
+    """Returns the asyncio event loop that is *running in this thread*, if any."""
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
+class LogTimeTaken:
+    """A simple context manager that logs how much time passed between enter and exit."""
+
+    def __init__(self, logger: logging.Logger, base_str: str, *, enabled: bool = True):
+        self.logger = logger
+        self.base_str = base_str
+        self.enabled = enabled
+        self.start_time = 0
+
+    def __enter__(self):
+        self.start_time = time.monotonic()
+        return None
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        time_elapsed = time.monotonic() - self.start_time
+        if self.enabled:
+            self.logger.debug(f'{self.base_str} took {time_elapsed:.3f}s.')

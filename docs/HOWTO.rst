@@ -62,19 +62,28 @@ Database Engine
 ===============
 
 You can choose from LevelDB and RocksDB to store transaction
-information on disk.  The time taken and DB size is not significantly
-different.  We tried to support LMDB, but its history write performance
+information on disk.  On an SSD, RocksDB performs better than LevelDB.
+We tried to support LMDB, but its history write performance
 was much worse.
 
 You will need to install one of:
 
 + `plyvel <https://plyvel.readthedocs.io/en/latest/installation.html>`_ for LevelDB.
 
-  Included as part of a regular pip installation of ElectrumX.
-+ `python-rocksdb <https://pypi.python.org/pypi/python-rocksdb>`_ for RocksDB
+  ``apt install libleveldb-dev build-essential``
 
-  ``pip3 install python-rocksdb`` or use the rocksdb extra install option to ElectrumX.
-+ `pyrocksdb <http://pyrocksdb.readthedocs.io/en/v0.4/installation.html>`_ for an unmaintained version that doesn't work with recent releases of RocksDB
+  ``pip3 install plyvel`` , or use the ``[leveldb]`` extra install option to ElectrumX.
+
++ `rocksdb-ng <https://pypi.org/project/rocksdb-ng>`_ for RocksDB
+
+  (Should work with RocksDB versions 8-10)
+
+  ``apt install librocksdb-dev build-essential pkg-config``
+
+  ``pip3 install rocksdb-ng`` , or use the ``[rocksdb]`` extra install option to ElectrumX.
+
++ `python-rocksdb <https://pypi.python.org/pypi/python-rocksdb>`_ for an unmaintained version
+  that doesn't work with recent releases of RocksDB (only <7.0)
 
 Running
 =======
@@ -92,9 +101,9 @@ You can install with::
 
 There are many extra Python dependencies available to fit the needs of your
 system or coins. For example, to install the RocksDB dependencies and a faster
-JSON parsing library::
+JSON (de)serialization library::
 
-    pip3 install ".[rocksdb,ujson]"
+    pip3 install ".[rocksdb,orjson]"
 
 see pyproject.toml's ``project.optional-dependencies`` for a complete list.
 
@@ -118,7 +127,12 @@ live on an SSD::
 Process limits
 --------------
 
-You must ensure the ElectrumX process has a large open file limit.
+The ElectrumX process needs a large open file limit. On Linux systems,
+the default (:command:`ulimit -n`) (soft) open file limit is usually 1,024.
+ElectrumX tries to raise this automatically during startup to the hard limit,
+which is usually 100,000+. If that fails (which would get logged),
+you might have to manually increase the limit.
+
 During sync it should not need more than about 1,024 open files.  When
 serving it will use approximately 256 for LevelDB plus the number of
 incoming connections.  It is not unusual to have 1,000 to 2,000

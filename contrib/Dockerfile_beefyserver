@@ -1,0 +1,82 @@
+# ElectrumX for Bitcoin, with RocksDB
+# This Dockerfile is intended for modern multi-core servers with at least 16 GB of RAM.
+# We compile our own free-threaded Python, with --disable-gil (which is experimental!), which makes
+# ElectrumX able to truly utilise multiple CPU cores and makes processing blocks significantly faster.
+#
+# Build: docker build -f Dockerfile_beefyserver --pull -t electrumx .
+# Run:   docker run -d --net=host -v ~/electrumx-db:/var/lib/electrumx -e DAEMON_URL="http://youruser:yourpass@localhost:8332" -e REPORT_SERVICES=tcp://example.com:50001 electrumx
+# Stop:  docker stop CONTAINER_ID
+
+FROM debian:trixie
+
+ENV LC_ALL=C.UTF-8 LANG=C.UTF-8
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /usr/src/app
+
+# Install libs needed to build CPython
+RUN apt-get update \
+    && apt-get -y install \
+        git \
+        wget \
+        make \
+        autotools-dev \
+        autoconf \
+        libtool \
+        xz-utils \
+        libssl-dev \
+        libssl3 \
+        openssl \
+        zlib1g-dev \
+        libffi-dev \
+        libncurses5-dev \
+        libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install libs needed to build RocksDB
+RUN apt-get update \
+    && apt-get -y --no-install-recommends install \
+        build-essential \
+        git \
+        librocksdb-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# build CPython (free-threaded, with --disable-gil)
+ARG PYTHON_VERSION="v3.14.6"
+RUN cd /opt && \
+    git clone https://github.com/python/cpython && \
+    cd cpython/ && \
+    git checkout "${PYTHON_VERSION}" && \
+    ./configure \
+        --prefix="/usr" \
+        --enable-ipv6 \
+        --enable-shared \
+        --disable-gil \
+        -q && \
+    make -s "-j$(nproc)" && \
+    make install
+
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# Install ElectrumX
+ARG ELECTRUMX_VERSION=2.0.0
+#ARG ELECTRUMX_VERSION=b8f6e227f251fe5cba96b940ffaa094439636417
+RUN python3 -m pip install \
+    "e_x[rocksdb] @ git+https://github.com/spesmilo/electrumx.git@${ELECTRUMX_VERSION}"
+
+
+ENV SERVICES="tcp://:50001"
+ENV COIN=Bitcoin
+ENV DB_DIRECTORY=/var/lib/electrumx
+ENV DAEMON_URL="http://username:password@hostname:port/"
+ENV ALLOW_ROOT=true
+ENV DB_ENGINE=rocksdb
+ENV CACHE_MB=2000
+
+
+VOLUME /var/lib/electrumx
+
+RUN mkdir -p "$DB_DIRECTORY"
+
+CMD ["electrumx_server"]

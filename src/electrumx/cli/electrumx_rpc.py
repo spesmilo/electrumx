@@ -53,6 +53,14 @@ other_commands = {
             'help': 'see documentation of DAEMON_URL envvar',
         },
     ),
+    'inspect_session': (
+        'inspect a given currently connected client session',
+        [], {
+            'type': int,
+            'dest': 'session_id',
+            'help': 'e.g. 1234 (see output of "sessions" command)',
+        },
+    ),
     'query': (
         'query the UTXO and history databases',
         ['-l', '--limit'], {

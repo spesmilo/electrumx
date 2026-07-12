@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from aiorpcx import spawn
 
+from electrumx import PYTHON_MIN_VERSION
 from electrumx.lib.util import class_logger
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ class ServerBase:
 
     Derived classes are expected to:
 
-    - set PYTHON_MIN_VERSION and SUPPRESS_MESSAGE_REGEX as appropriate
+    - set SUPPRESS_MESSAGE_REGEX as appropriate
     - implement the serve() coroutine, called from the run() method.
       Upon return the event loop runs until the shutdown signal is received.
     '''
@@ -39,7 +40,6 @@ class ServerBase:
                                         'SSL error in data received|'
                                         'socket.send() raised exception')
     SUPPRESS_TASK_REGEX = re.compile('accept_connection2')
-    PYTHON_MIN_VERSION = (3, 7)
 
     def __init__(self, env: 'Env'):
         '''Save the environment, perform basic sanity checks, and set the
@@ -56,8 +56,8 @@ class ServerBase:
         self.start_time = 0
 
         # Sanity checks
-        if sys.version_info < self.PYTHON_MIN_VERSION:
-            mvs = '.'.join(str(part) for part in self.PYTHON_MIN_VERSION)
+        if sys.version_info < PYTHON_MIN_VERSION:
+            mvs = '.'.join(str(part) for part in PYTHON_MIN_VERSION)
             raise RuntimeError(f'Python version >= {mvs} is required')
 
         if platform.system() == 'Windows':

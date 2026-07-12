@@ -19,16 +19,22 @@ Required
 
 These environment variables are always required:
 
-.. envvar:: COIN
-
-  Must be a :attr:`NAME` from one of the :class:`Coin` classes in
-  `lib/coins.py`_. For example, ``Bitcoin``.
-
 .. envvar:: DB_DIRECTORY
 
   The path to the database directory.  Relative paths should be
   relative to the parent process working directory.  This is the
   directory of the `run` script if you use it.
+
+.. envvar:: DB_ENGINE
+
+  Database engine for the UTXO and history database.
+  Choose one of ``leveldb`` or ``rocksdb``.
+  You will need to install the appropriate python package for your engine.
+  In ElectrumX 1.x versions, the default was leveldb.
+  Warning: It is not possible to switch back and forth,
+  the on-disk DB formats are not compatible with each other: you have to resync from genesis.
+  LevelDB was written with HDDs in mind. RocksDB is more modern
+  and on an SSD takes around ~25% less time than LevelDB to sync from genesis.
 
 .. envvar:: DAEMON_URL
 
@@ -157,9 +163,9 @@ Here are some examples of valid services::
 
   Here is an example value of the :envvar:`REPORT_SERVICES` environment variable::
 
-    tcp://sv.usebsv.com:50001,ssl://sv.usebsv.com:50002,wss://sv.usebsv.com:50004
+    tcp://example.com:50001,ssl://example.com:50002,wss://example.com:50004
 
-  This advertizes **tcp**, **ssl**, **wss** services at :const:`sv.usebsv.com` on ports
+  This advertizes **tcp**, **ssl**, **wss** services at :const:`example.com` on ports
   50001, 50002 and 50004 respectively.
 
 .. note:: Certificate Authority-signed certificates don't work over Tor, so you should
@@ -183,6 +189,16 @@ Miscellaneous
 
 These environment variables are optional:
 
+.. envvar:: COIN
+
+  Must be a :attr:`NAME` from one of the :class:`Coin` classes in
+  `lib/coins.py`_.  Defaults to ``Bitcoin``.
+
+.. envvar:: NET
+
+  Must be a :attr:`NET` from one of the :class:`Coin` classes in
+  `lib/coins.py`_.  Defaults to ``mainnet``.
+
 .. envvar:: LOG_FORMAT
 
   The Python logging `format string
@@ -198,18 +214,6 @@ These environment variables are optional:
 
   Set this environment variable to anything non-empty to allow running
   ElectrumX as root.
-
-.. envvar:: NET
-
-  Must be a :envvar:`NET` from one of the **Coin** classes in
-  `lib/coins.py`_.  Defaults to ``mainnet``.
-
-.. envvar:: DB_ENGINE
-
-  Database engine for the UTXO and history database.  The default is
-  ``leveldb``.  The other alternative is ``rocksdb``.  You will need
-  to install the appropriate python package for your engine.  The
-  value is not case sensitive.
 
 .. envvar:: DONATION_ADDRESS
 
@@ -280,14 +284,6 @@ These environment variables are optional:
   Set a regular expression to disconnect any client based on their
   version string. For example to drop versions from 1.0 to 1.2 use
   the regex ``1\.[0-2]\.\d+``.
-
-.. envvar:: DROP_CLIENT_UNKNOWN
-
-  Set to anything non-empty to deny serving clients which do not
-  identify themselves first by issuing the server.version method
-  call with a non-empty client identifier. The connection is dropped 
-  on first actual method call. This might help to filter out simple 
-  robots. This behavior is off by default.
 
 
 Resource Usage Limits

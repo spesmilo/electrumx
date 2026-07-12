@@ -8,8 +8,7 @@ Language: Python (>= 3.10)
 ```
 
 [![Latest PyPI package](https://badge.fury.io/py/e_x.svg)](https://pypi.org/project/e-x/)
-[![Build Status](https://api.cirrus-ci.com/github/spesmilo/electrumx.svg?branch=master)](https://cirrus-ci.com/github/spesmilo/electrumx)
-[![Test coverage statistics](https://coveralls.io/repos/github/spesmilo/electrumx/badge.svg?branch=master)](https://coveralls.io/github/spesmilo/electrumx)
+[![Build Status](https://github.com/spesmilo/electrumx/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/spesmilo/electrumx/actions/workflows/ci.yml)
 
 This project is a fork of [kyuupichan/electrumx](https://github.com/kyuupichan/electrumx).
 The original author dropped support for Bitcoin, which we intend to keep.
@@ -26,8 +25,7 @@ See [readthedocs](https://electrumx-spesmilo.readthedocs.io).
 
 ### Releases
 
-ElectrumX is generally mature software and usually running git HEAD in production is fine.
-Alternatively, conservative people can run from the latest tag, for which there are also releases on PyPI:
+Running from the latest git tag is always a safe bet, for which there are also releases on PyPI:
 ```
 $ pip install e-x
 ```

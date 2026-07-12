@@ -1,0 +1,49 @@
+{
+  "txid": "80b19848aed792565ab7c5a79b7c2a00fbf985741579396ebe0ab6098e607311",
+  "hash": "57b232b146182d500e959e35f82a30e4cc0bb45a0bfb9ac92379c57fbe7c5bb2",
+  "version": 2,
+  "size": 222,
+  "vsize": 141,
+  "weight": 561,
+  "locktime": 2473,
+  "vin": [
+    {
+      "txid": "770f2d4371b3fabb902dd9a103e2dd005fcd3971181078fca4a2a1d6ff127b30",
+      "vout": 1,
+      "scriptSig": {
+        "asm": "",
+        "hex": ""
+      },
+      "txinwitness": [
+        "30440220704943bb017a4aec888859b667658ab85bc306625b049cc9f5ef1f832115024d022042d950df482107838db62378ad2db8c13b9b75508eff3bfd8198ecd1dc77621501",
+        "03834e1e34194508e3fc7db19d3c6964149efd58f8c67548cc765c3284cad24d67"
+      ],
+      "sequence": 4294967293
+    }
+  ],
+  "vout": [
+    {
+      "value": 0.30000000,
+      "n": 0,
+      "scriptPubKey": {
+        "asm": "0 9f9aa3795e57c535d2f7b160ff023804c60fca6e",
+        "desc": "addr(bcrt1qn7d2x7272lznt5hhk9s07q3cqnrqljnwladrd3)#r898r4mt",
+        "hex": "00149f9aa3795e57c535d2f7b160ff023804c60fca6e",
+        "address": "bcrt1qn7d2x7272lznt5hhk9s07q3cqnrqljnwladrd3",
+        "type": "witness_v0_keyhash"
+      }
+    },
+    {
+      "value": 0.79999200,
+      "n": 1,
+      "scriptPubKey": {
+        "asm": "0 4343eef6273442ab066a852a7d6ecc61950b2e7b",
+        "desc": "addr(bcrt1qgdp7aa38x3p2kpn2s5486mkvvx2sktnmylscfs)#ttznrgxp",
+        "hex": "00144343eef6273442ab066a852a7d6ecc61950b2e7b",
+        "address": "bcrt1qgdp7aa38x3p2kpn2s5486mkvvx2sktnmylscfs",
+        "type": "witness_v0_keyhash"
+      }
+    }
+  ],
+  "hex": "02000000000101307b12ffd6a1a2a4fc7810187139cd5f00dde203a1d92d90bbfab371432d0f770100000000fdffffff0280c3c901000000001600149f9aa3795e57c535d2f7b160ff023804c60fca6ee0b0c404000000001600144343eef6273442ab066a852a7d6ecc61950b2e7b024730440220704943bb017a4aec888859b667658ab85bc306625b049cc9f5ef1f832115024d022042d950df482107838db62378ad2db8c13b9b75508eff3bfd8198ecd1dc776215012103834e1e34194508e3fc7db19d3c6964149efd58f8c67548cc765c3284cad24d67a9090000"
+}

@@ -9,12 +9,16 @@
 
 import os
 from functools import partial
-from typing import Type
+from typing import Type, Sequence, TYPE_CHECKING
 
 import electrumx.lib.util as util
 
+if TYPE_CHECKING:
+    from rocksdb import DB as rocksdb_db
+    from plyvel import DB as plyvel_db
 
-def db_class(name) -> Type['Storage']:
+
+def db_class(name: str) -> Type['Storage']:
     '''Returns a DB engine class.'''
     for db_class in util.subclasses(Storage):
         if db_class.__name__.lower() == name.lower():
@@ -23,31 +27,35 @@ def db_class(name) -> Type['Storage']:
     raise RuntimeError(f'unrecognised DB engine "{name}"')
 
 
+def list_db_engine_choices() -> Sequence[str]:
+    return [db_class.__name__.lower() for db_class in util.subclasses(Storage)]
+
+
 class Storage:
     '''Abstract base class of the DB backend abstraction.'''
 
-    def __init__(self, name, for_sync):
+    def __init__(self, name: str, for_sync: bool):
         self.is_new = not os.path.exists(name)
         self.for_sync = for_sync or self.is_new
         self.open(name, create=self.is_new)
 
     @classmethod
-    def import_module(cls):
+    def import_module(cls) -> None:
         '''Import the DB engine module.'''
         raise NotImplementedError
 
-    def open(self, name, create):
+    def open(self, name: str, create: bool):
         '''Open an existing database or create a new one.'''
         raise NotImplementedError
 
-    def close(self):
+    def close(self) -> None:
         '''Close an existing database.'''
         raise NotImplementedError
 
-    def get(self, key):
+    def get(self, key: bytes) -> bytes:
         raise NotImplementedError
 
-    def put(self, key, value):
+    def put(self, key: bytes, value: bytes) -> None:
         raise NotImplementedError
 
     def write_batch(self):
@@ -58,13 +66,20 @@ class Storage:
         '''
         raise NotImplementedError
 
-    def iterator(self, prefix=b'', reverse=False):
+    def iterator(self, prefix: bytes = b'', reverse: bool = False):
         '''Return an iterator that yields (key, value) pairs from the
         database sorted by key.
 
         If `prefix` is set, only keys starting with `prefix` will be
         included.  If `reverse` is True the items are returned in
         reverse order.
+
+        The iterator supports .seek(key), which moves it just left of `key`.
+        - if forward-iterating
+            - if `key` is present, it will be the next item
+            - if `key` is not present, the next item will be the smallest still greater than `key`
+        - if reverse-iterating
+            - the next item will be the largest still smaller than `key`
         '''
         raise NotImplementedError
 
@@ -72,9 +87,15 @@ class Storage:
 class LevelDB(Storage):
     '''LevelDB database engine.'''
 
+    db: 'plyvel_db'
+
     @classmethod
     def import_module(cls):
-        import plyvel
+        try:
+            import plyvel
+        except ImportError as e:
+            raise Exception(f"{e}. For the leveldb DB-backend, you should install ElectrumX with the [leveldb] pip extra.") from e
+
         cls.module = plyvel
 
     def open(self, name, create):
@@ -85,17 +106,44 @@ class LevelDB(Storage):
         self.close = self.db.close
         self.get = self.db.get
         self.put = self.db.put
-        self.iterator = self.db.iterator
         self.write_batch = partial(self.db.write_batch, transaction=True,
                                    sync=True)
+
+    def iterator(self, prefix=b'', reverse=False):
+        return LevelDBIterator(db=self.db, prefix=prefix, reverse=reverse)
+
+
+class LevelDBIterator:
+    '''An iterator for LevelDB.'''
+
+    def __init__(self, *, db: 'plyvel_db', prefix: bytes, reverse: bool):
+        self.prefix = prefix
+        self.iterator = db.iterator(prefix=prefix, reverse=reverse)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        k, v = next(self.iterator)
+        if not k.startswith(self.prefix):
+            raise StopIteration
+        return k, v
+
+    def seek(self, key: bytes) -> None:
+        self.iterator.seek(key)
 
 
 class RocksDB(Storage):
     '''RocksDB database engine.'''
 
+    db: 'rocksdb_db'
+
     @classmethod
     def import_module(cls):
-        import rocksdb
+        try:
+            import rocksdb
+        except ImportError as e:
+            raise Exception(f"{e}. For the rocksdb DB-backend, you should install ElectrumX with the [rocksdb] pip extra.") from e
         cls.module = rocksdb
 
     def open(self, name, create):
@@ -106,26 +154,21 @@ class RocksDB(Storage):
                                       target_file_size_base=33554432,
                                       max_open_files=mof)
         self.db = self.module.DB(name, options)
+        self.close = self.db.close
         self.get = self.db.get
         self.put = self.db.put
-
-    def close(self):
-        # PyRocksDB doesn't provide a close method; hopefully this is enough
-        self.db = self.get = self.put = None
-        import gc
-        gc.collect()
 
     def write_batch(self):
         return RocksDBWriteBatch(self.db)
 
     def iterator(self, prefix=b'', reverse=False):
-        return RocksDBIterator(self.db, prefix, reverse)
+        return RocksDBIterator(db=self.db, prefix=prefix, reverse=reverse)
 
 
 class RocksDBWriteBatch:
     '''A write batch for RocksDB.'''
 
-    def __init__(self, db):
+    def __init__(self, db: 'rocksdb_db'):
         self.batch = RocksDB.module.WriteBatch()
         self.db = db
 
@@ -140,8 +183,9 @@ class RocksDBWriteBatch:
 class RocksDBIterator:
     '''An iterator for RocksDB.'''
 
-    def __init__(self, db, prefix, reverse):
+    def __init__(self, *, db: 'rocksdb_db', prefix: bytes, reverse: bool):
         self.prefix = prefix
+        self._is_reverse = reverse
         if reverse:
             self.iterator = reversed(db.iteritems())
             nxt_prefix = util.increment_byte_string(prefix)
@@ -165,3 +209,11 @@ class RocksDBIterator:
         if not k.startswith(self.prefix):
             raise StopIteration
         return k, v
+
+    def seek(self, key: bytes) -> None:
+        self.iterator.seek(key)
+        if self._is_reverse:
+            try:
+                next(self)
+            except StopIteration:
+                self.iterator.seek_to_last()

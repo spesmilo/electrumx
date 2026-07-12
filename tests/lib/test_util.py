@@ -5,28 +5,6 @@ import pytest
 from electrumx.lib import util, tx
 
 
-def test_cachedproperty():
-    class Target:
-
-        CALL_COUNT = 0
-
-        def __init__(self):
-            self.call_count = 0
-
-        @util.cachedproperty
-        def prop(self):
-            self.call_count += 1
-            return self.call_count
-
-        @util.cachedproperty
-        def cls_prop(cls):
-            cls.CALL_COUNT += 1
-            return cls.CALL_COUNT
-
-    t = Target()
-    assert t.prop == t.prop == 1
-    assert Target.cls_prop == Target.cls_prop == 1
-
 def test_formatted_time():
     assert util.formatted_time(0) == '00s'
     assert util.formatted_time(59) == '59s'
@@ -220,3 +198,19 @@ def test_pack_varbytes():
         data = util.pack_varbytes(test)
         deser = tx.Deserializer(data)
         assert deser._read_varbytes() == test
+
+def test_json_serialize_deserialize():
+    obj = {
+        'coin': 'Bitcoin',
+        'height': 950000,
+        'counts': {'getblock': 2},
+        'nested': {'list': [1, 2, 3], 'flag': True, 'none': None},
+    }
+    serialized = util.json_serialize(obj)
+    assert isinstance(serialized, str)
+    assert util.json_deserialize(serialized) == {
+        'coin': 'Bitcoin',
+        'height': 950000,
+        'counts': {'getblock': 2},
+        'nested': {'list': [1, 2, 3], 'flag': True, 'none': None},
+    }

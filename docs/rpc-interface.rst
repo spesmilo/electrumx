@@ -98,6 +98,7 @@ A typical result is as follows (with annotated comments)::
           "getinfo": 3,
           "groups": 1,
           "mempool.get_fee_histogram": 3194,
+          "mempool.get_info": 121,
           "server.add_peer": 9,
           "server.banner": 740,
           "server.donation_address": 754,

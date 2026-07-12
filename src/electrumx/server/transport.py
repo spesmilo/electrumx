@@ -24,6 +24,9 @@ class PaddedRSTransport(RSTransport):
 
     MIN_PACKET_SIZE = 1024
     WAIT_FOR_BUFFER_GROWTH_SECONDS = 1.0
+    # amount of (unpadded) bytes sent instantly before beginning with polling.
+    # This makes the initial handshake where a few small messages are exchanged faster.
+    WARMUP_BUDGET_SIZE = 1024
 
     session: Optional['RPCSessionWithTaskGroup']
 
@@ -57,6 +60,7 @@ class PaddedRSTransport(RSTransport):
             self._force_send
             or len(buf) >= self.MIN_PACKET_SIZE
             or self._last_send + self.WAIT_FOR_BUFFER_GROWTH_SECONDS < time.monotonic()
+            or self.session.send_size < self.WARMUP_BUDGET_SIZE
         ):
             return
         assert buf[-2:] in (b"}\n", b"]\n"), f"unexpected json-rpc terminator: {buf[-2:]=!r}"
@@ -109,3 +113,10 @@ class PaddedRSTransport(RSTransport):
         super().connection_made(transport)
         coro = self.session.taskgroup.spawn(self._poll_sbuffer())
         self._sbuffer_task = self.loop.create_task(coro)
+
+    async def close(self, *args, **kwargs):
+        '''Close the connection and return when closed.'''
+        # Flush buffer before disconnecting. This makes ReplyAndDisconnect work:
+        self._force_send = True
+        self._maybe_consume_sbuffer()
+        await super().close(*args, **kwargs)

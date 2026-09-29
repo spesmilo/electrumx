@@ -451,6 +451,15 @@ class DashDaemon(Daemon):
         return await self._send_single('protx', params)
 
 
+class ZcashZebraDaemon(Daemon):
+    '''Zcash daemon with a fallback for Zebra's unavailable fee estimation.'''
+
+    async def estimatefee(self, block_count, estimate_mode=None):
+        # Zebra does not expose a fee-estimation RPC.  Electrum's defined
+        # sentinel for an unavailable estimate is -1.
+        return -1
+
+
 class FakeEstimateFeeDaemon(Daemon):
     '''Daemon that simulates estimatefee and relayfee RPC calls. Coin that
     wants to use this daemon must define ESTIMATE_FEE & RELAY_FEE'''

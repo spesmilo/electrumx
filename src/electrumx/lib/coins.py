@@ -52,7 +52,8 @@ from electrumx.server.mempool import MemPool
 from electrumx.server.mempool_zcash import ZcashMemPool
 from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX,
-                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX)
+                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX,
+                                      ZcashElectrumX)
 
 
 @dataclass(slots=True)
@@ -1400,6 +1401,8 @@ class Zcash(EquihashMixin, Coin):
     GENESIS_HASH = ('00040fe8ec8471911baa1db1266ea15d'
                     'd06b4a8a5c453883c000b031973dce08')
     DESERIALIZER = lib_tx.DeserializerZcash
+    DAEMON = daemon.ZcashZebraDaemon
+    SESSIONCLS = ZcashElectrumX
     MEMPOOL = ZcashMemPool
     TX_COUNT = 329196
     TX_COUNT_HEIGHT = 68379

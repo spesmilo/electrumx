@@ -2,12 +2,14 @@ import aiohttp
 import asyncio
 import json
 import logging
+from unittest.mock import Mock
 
 import pytest
 
 from aiorpcx import JSONRPCv1, JSONRPCv2, JSONRPCLoose, RPCError, ignore_after, Request
-from electrumx.lib.coins import BitcoinCash, CoinError, Bitzeny, Dash
-from electrumx.server.daemon import Daemon, DaemonError, FakeEstimateFeeDaemon
+from electrumx.lib.coins import Bitcoin, BitcoinCash, CoinError, Bitzeny, Dash, Komodo, Zcash, ZcashTestnet
+from electrumx.server.daemon import Daemon, DaemonError, FakeEstimateFeeDaemon, ZcashZebraDaemon
+from electrumx.server.session import ElectrumX, ZcashElectrumX
 
 
 coin = BitcoinCash
@@ -556,6 +558,79 @@ async def test_jsonrpc_v2_requests_and_responses(daemon):
     assert await daemon.getrawtransactions(['tx0', 'missing']) == [b'\x00', None]
     with pytest.raises(DaemonError, match='Not found'):
         await daemon.raw_blocks(['missing'])
+
+
+@pytest.mark.asyncio
+async def test_zebra_daemon_request_compatibility():
+    daemon = ZcashZebraDaemon(Zcash, urls[0])
+    assert daemon._single_payload('getrawmempool', None)['params'] == ()
+
+    daemon.session = ClientSessionJSONWithCharset(('getblockcount', [], 1))
+    assert await daemon.height() == 1
+
+    hashes = ['block0', 'block1']
+    daemon.session = ClientSessionNumericVerbosity(
+        ('getblock', [[block_hash, 0] for block_hash in hashes], ['00', 'ff']))
+    assert await daemon.raw_blocks(hashes) == [b'\x00', b'\xff']
+
+    daemon.session = ClientSessionSingleBatchResponse(('getblock', [['block0', 0]], ['00']))
+    assert await daemon.raw_blocks(['block0']) == [b'\x00']
+
+    daemon.session = ClientSessionNumericVerbosity(('getblock', ['block0', 1], {'hash': 'block0'}))
+    assert await daemon.deserialised_block('block0') == {'hash': 'block0'}
+
+    # No RPC call should be made for an unavailable fee estimate.
+    daemon.session = Mock()
+    assert await daemon.estimatefee(1) == -1
+    daemon.session.post.assert_not_called()
+
+
+@pytest.mark.parametrize('coin', [Zcash, ZcashTestnet])
+def test_zcash_daemon_and_session_selection(coin):
+    assert coin.DAEMON is ZcashZebraDaemon
+    assert coin.SESSIONCLS is ZcashElectrumX
+    assert coin.SESSIONCLS.PROTOCOL_MAX == (1, 4, 3)
+
+
+@pytest.mark.parametrize('coin', [Bitcoin, Komodo])
+def test_zcash_rpc_limits_do_not_apply_to_other_coins(coin):
+    assert coin.DAEMON is Daemon
+    assert coin.SESSIONCLS is ElectrumX
+    assert coin.SESSIONCLS.PROTOCOL_MAX == (1, 7, 0)
+
+
+@pytest.fixture
+def zcash_session():
+    session = object.__new__(ZcashElectrumX)
+    session.bump_cost = Mock()
+    session.set_request_handlers((1, 4, 3))
+    return session
+
+
+def test_zcash_session_request_handlers(zcash_session):
+    handlers = zcash_session.request_handlers
+    assert 'mempool.get_info' not in handlers
+    assert 'blockchain.transaction.broadcast_package' not in handlers
+    assert 'blockchain.transaction.testmempoolaccept' not in handlers
+    assert 'blockchain.scriptpubkey.get_history' not in handlers
+    assert 'blockchain.scripthash.get_history' in handlers
+    assert 'blockchain.relayfee' in handlers
+    assert handlers['blockchain.estimatefee'] == zcash_session.phandle_estimatefee
+
+
+@pytest.mark.asyncio
+async def test_zcash_session_fee_estimate_unavailable(zcash_session):
+    assert await zcash_session.request_handlers['blockchain.estimatefee'](1) == -1
+    zcash_session.bump_cost.assert_called_once_with(0.1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('number,mode', [(-1, None), (None, None), ('invalid', None),
+                                        (1, 'economical'), (1, 'conservative')])
+async def test_zcash_session_rejects_invalid_estimatefee_arguments(zcash_session, number, mode):
+    with pytest.raises(RPCError):
+        await zcash_session.phandle_estimatefee(number, mode)
+    zcash_session.bump_cost.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -1,10 +1,69 @@
 """Zcash transaction decoding and wire-format validation."""
 
+import json
 from hashlib import blake2b
+from pathlib import Path
 
 import pytest
 
-from electrumx.lib.tx import DeserializerZcash, ZcashDeserializeError
+from electrumx.lib.hash import hash_to_hex_str
+from electrumx.lib.tx import DeserializerZcash, TxZcash, ZcashDeserializeError
+
+
+FIXTURES = sorted((Path(__file__).parents[1] / 'transactions').glob('zcash_*.json'))
+
+
+@pytest.mark.parametrize('fixture_path', FIXTURES, ids=lambda path: path.stem)
+def test_zcash_v5_transaction(fixture_path):
+    fixture = json.loads(fixture_path.read_text())
+    raw_tx = bytes.fromhex(fixture['hex'])
+    deserializer = DeserializerZcash(raw_tx)
+    tx = deserializer.read_tx()
+
+    assert isinstance(tx, TxZcash)
+    assert deserializer.cursor == len(raw_tx)
+    assert hash_to_hex_str(tx.txid_rev) == fixture['txid']
+    assert tx.wtxid_rev == tx.txid_rev
+    with pytest.raises(ValueError, match='serializing'):
+        tx.serialize()
+    assert tx.version == fixture['version']
+    assert tx.version_group_id == fixture['version_group_id']
+    assert tx.consensus_branch_id == fixture['consensus_branch_id']
+    assert tx.locktime == fixture['locktime']
+    assert tx.expiry_height == fixture['expiry_height']
+    assert tx.fee_adjustment == fixture['fee_adjustment_zat']
+
+    assert len(tx.inputs) == len(fixture['inputs'])
+    for expected, actual in zip(fixture['inputs'], tx.inputs):
+        assert actual.sequence == expected['sequence']
+        if expected['coinbase'] is not None:
+            assert actual.is_generation()
+            assert actual.script.hex() == expected['coinbase']
+        else:
+            assert hash_to_hex_str(actual.prev_txid_rev) == expected['txid']
+            assert actual.prev_idx == expected['vout']
+            assert actual.script.hex() == expected['script']
+
+    assert [(output.value, output.pk_script.hex()) for output in tx.outputs] == [
+        (output['value_zat'], output['pk_script']) for output in fixture['outputs']
+    ]
+    _, size = DeserializerZcash(raw_tx).read_tx_and_vsize()
+    assert size == len(raw_tx)
+
+    offset_reader = DeserializerZcash(b'\x00' + raw_tx, start=1)
+    assert offset_reader.read_tx() == tx
+    assert offset_reader.cursor == len(raw_tx) + 1
+
+
+@pytest.mark.parametrize('fixture_path', FIXTURES, ids=lambda path: path.stem)
+def test_zcash_v5_rejects_invalid_encoding(fixture_path):
+    raw = bytes.fromhex(json.loads(fixture_path.read_text())['hex'])
+    with pytest.raises(ZcashDeserializeError, match='unknown Zcash transaction format'):
+        DeserializerZcash(raw[:4] + bytes(4) + raw[8:]).read_tx()
+    with pytest.raises(ZcashDeserializeError, match='non-canonical CompactSize'):
+        DeserializerZcash(raw[:20] + b'\xfd\x01\x00' + raw[21:]).read_tx()
+    with pytest.raises(ZcashDeserializeError, match='truncated'):
+        DeserializerZcash(raw[:-1]).read_tx()
 
 
 def test_zcash_checked_read_boundaries():

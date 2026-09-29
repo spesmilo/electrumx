@@ -1412,7 +1412,21 @@ class ZcashDeserializeError(ValueError):
     '''Raised when a Zcash transaction has an invalid wire encoding.'''
 
 
+@dataclass(kw_only=True, slots=True)
+class TxZcash(Tx):
+    '''Transparent projection and public metadata for a Zcash v5 transaction.'''
+    version_group_id: int
+    consensus_branch_id: int
+    expiry_height: int
+    fee_adjustment: int
+
+    def serialize(self):
+        raise ValueError('serializing a Zcash transparent projection is unsupported')
+
+
 class DeserializerZcash(DeserializerEquihash):
+    _V5_VERSION_GROUP_ID = 0x26A7270A
+
     @staticmethod
     def _hash(personalization, data=b''):
         return blake2b(data, digest_size=32, person=personalization).digest()
@@ -1572,16 +1586,52 @@ class DeserializerZcash(DeserializerEquihash):
         data += anchor
         return self._hash(top_person, data), value_balance
 
+    def _read_v5(self, header):
+        version_group_id = int.from_bytes(self._zcash_read(4), 'little')
+        if version_group_id != self._V5_VERSION_GROUP_ID:
+            raise ZcashDeserializeError('unknown Zcash transaction format')
+        branch_id_bytes = self._zcash_read(4)
+        consensus_branch_id = int.from_bytes(branch_id_bytes, 'little')
+        locktime = int.from_bytes(self._zcash_read(4), 'little')
+        expiry_height = int.from_bytes(self._zcash_read(4), 'little')
+        header_digest = self._hash(b'ZTxIdHeadersHash',
+                                   header + version_group_id.to_bytes(4, 'little') +
+                                   branch_id_bytes + locktime.to_bytes(4, 'little') +
+                                   expiry_height.to_bytes(4, 'little'))
+        inputs, outputs, _scripts, transparent_digest = self._zcash_transparent()
+        sapling_digest, sapling_balance = self._zcash_sapling()
+        orchard_digest, orchard_balance = self._zcash_action_bundle()
+        digests = header_digest + transparent_digest + sapling_digest + orchard_digest
+        root_person = b'ZcashTxHash_' + branch_id_bytes
+        txid = self._hash(root_person, digests)
+        return TxZcash(
+            version=5,
+            inputs=inputs,
+            outputs=outputs,
+            locktime=locktime,
+            txid_rev=txid,
+            wtxid_rev=txid,
+            version_group_id=version_group_id,
+            consensus_branch_id=consensus_branch_id,
+            expiry_height=expiry_height,
+            fee_adjustment=sapling_balance + orchard_balance,
+        )
+
     def read_tx(self):
         orig_start = self.cursor
         start = self.cursor
-        header = self._read_le_uint32()
+        header = int.from_bytes(self._zcash_read(4), 'little')
         overwintered = ((header >> 31) == 1)
         if overwintered:
             version = header & 0x7fffffff
-            self.cursor += 4  # versionGroupId
+            self._zcash_read(4)  # versionGroupId
         else:
             version = header
+
+        if version == 5:
+            self.cursor = orig_start
+            header_bytes = self._zcash_read(4)
+            return self._read_v5(header_bytes)
 
         is_overwinter_v3 = version == 3
         is_sapling_v4 = version == 4

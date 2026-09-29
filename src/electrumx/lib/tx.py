@@ -1408,7 +1408,31 @@ class DeserializerPrimecoin(Deserializer):
         return self._read_nbytes(header_end - start)
 
 
+class ZcashDeserializeError(ValueError):
+    '''Raised when a Zcash transaction has an invalid wire encoding.'''
+
+
 class DeserializerZcash(DeserializerEquihash):
+    def _zcash_read(self, size):
+        if size < 0 or self.cursor + size > self._binary_length:
+            raise ZcashDeserializeError('truncated Zcash transaction')
+        return self._read_nbytes(size)
+
+    def _zcash_varint(self):
+        first = self._zcash_read(1)[0]
+        if first < 253:
+            return first
+        size, minimum = ((2, 253) if first == 253 else
+                         (4, 0x10000) if first == 254 else
+                         (8, 0x100000000))
+        value = int.from_bytes(self._zcash_read(size), 'little')
+        if value < minimum:
+            raise ZcashDeserializeError('non-canonical CompactSize')
+        return value
+
+    def _zcash_varbytes(self):
+        return self._zcash_read(self._zcash_varint())
+
     def read_tx(self):
         orig_start = self.cursor
         start = self.cursor

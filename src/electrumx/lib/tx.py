@@ -1414,7 +1414,7 @@ class ZcashDeserializeError(ValueError):
 
 @dataclass(kw_only=True, slots=True)
 class TxZcash(Tx):
-    '''Transparent projection and public metadata for a Zcash v5 transaction.'''
+    '''Transparent projection and public metadata for a Zcash v5 or v6 transaction.'''
     version_group_id: int
     consensus_branch_id: int
     expiry_height: int
@@ -1426,6 +1426,7 @@ class TxZcash(Tx):
 
 class DeserializerZcash(DeserializerEquihash):
     _V5_VERSION_GROUP_ID = 0x26A7270A
+    _V6_VERSION_GROUP_ID = 0xD884B698
 
     @staticmethod
     def _hash(personalization, data=b''):
@@ -1497,7 +1498,7 @@ class DeserializerZcash(DeserializerEquihash):
             transparent_digest = self._hash(b'ZTxIdTranspaHash')
         return inputs, outputs, scripts, transparent_digest
 
-    def _zcash_sapling(self):
+    def _zcash_sapling(self, version):
         spend_count = self._zcash_varint()
         if spend_count > (self._binary_length - self.cursor) // 96:
             raise ZcashDeserializeError('too many Sapling spends')
@@ -1518,11 +1519,13 @@ class DeserializerZcash(DeserializerEquihash):
         self._zcash_read(64)
 
         if spends:
+            noncompact_person = (b'ZTxIdSSpendNHash' if version == 5
+                                 else b'ZTxIdSSpendNH_v6')
             compact = self._hash(b'ZTxIdSSpendCHash',
                                  b''.join(spend[32:64] for spend in spends))
             noncompact = self._hash(
-                b'ZTxIdSSpendNHash',
-                b''.join(spend[:32] + anchor + spend[64:]
+                noncompact_person,
+                b''.join(spend[:32] + (anchor if version == 5 else b'') + spend[64:]
                          for spend in spends),
             )
             spend_digest = self._hash(b'ZTxIdSSpendsHash', compact + noncompact)
@@ -1548,21 +1551,32 @@ class DeserializerZcash(DeserializerEquihash):
         return self._hash(b'ZTxIdSaplingHash',
                           spend_digest + output_digest + value_balance_bytes), value_balance
 
-    def _zcash_action_bundle(self):
+    def _zcash_action_bundle(self, version, ironwood=False):
         action_count = self._zcash_varint()
         if action_count > (self._binary_length - self.cursor) // 820:
             raise ZcashDeserializeError('too many Orchard-protocol actions')
-        top_person = b'ZTxIdOrchardHash'
-        compact_person = b'ZTxIdOrcActCHash'
-        memo_person = b'ZTxIdOrcActMHash'
-        noncompact_person = b'ZTxIdOrcActNHash'
+        if ironwood:
+            top_person = b'ZTxIdIronwd_H_v6'
+            compact_person = b'ZTxIdIrnActCH_v6'
+            memo_person = b'ZTxIdIrnActMH_v6'
+            noncompact_person = b'ZTxIdIrnActNH_v6'
+        elif version == 5:
+            top_person = b'ZTxIdOrchardHash'
+            compact_person = b'ZTxIdOrcActCHash'
+            memo_person = b'ZTxIdOrcActMHash'
+            noncompact_person = b'ZTxIdOrcActNHash'
+        else:
+            top_person = b'ZTxIdOrchardH_v6'
+            compact_person = b'ZTxIdOrcActCHash'
+            memo_person = b'ZTxIdOrcActMHash'
+            noncompact_person = b'ZTxIdOrcActNHash'
 
         if not action_count:
             return self._hash(top_person), 0
         actions = [self._zcash_read(820) for _ in range(action_count)]
         flags_and_balance = self._zcash_read(9)
         flags = flags_and_balance[0]
-        if flags & 0xfc:
+        if flags & 0xf8 or (not ironwood and flags & 0x04):
             raise ZcashDeserializeError('invalid Orchard-protocol flags')
         value_balance = int.from_bytes(flags_and_balance[1:], 'little', signed=True)
         anchor = self._zcash_read(32)
@@ -1583,29 +1597,41 @@ class DeserializerZcash(DeserializerEquihash):
             b''.join(action[:32] + action[64:96] + action[724:] for action in actions),
         )
         data = compact + memos + noncompact + flags_and_balance
-        data += anchor
+        if version == 5:
+            data += anchor
         return self._hash(top_person, data), value_balance
 
-    def _read_v5(self, header):
+    def _read_v5_or_v6(self, version, header):
         version_group_id = int.from_bytes(self._zcash_read(4), 'little')
-        if version_group_id != self._V5_VERSION_GROUP_ID:
+        expected_group_id = (self._V5_VERSION_GROUP_ID if version == 5
+                             else self._V6_VERSION_GROUP_ID)
+        if version_group_id != expected_group_id:
             raise ZcashDeserializeError('unknown Zcash transaction format')
         branch_id_bytes = self._zcash_read(4)
         consensus_branch_id = int.from_bytes(branch_id_bytes, 'little')
         locktime = int.from_bytes(self._zcash_read(4), 'little')
         expiry_height = int.from_bytes(self._zcash_read(4), 'little')
+        # This is the NU6.3 v6 layout.  ZIP-233, which Zebra does not currently
+        # enable, inserts an 8-byte zip233Amount here.  Its value must be committed
+        # to header_digest and subtracted from fee_adjustment.  Do not silently parse
+        # ZIP-233 transactions using this layout; add an activation-aware branch when
+        # that consensus change is deployed.
         header_digest = self._hash(b'ZTxIdHeadersHash',
                                    header + version_group_id.to_bytes(4, 'little') +
                                    branch_id_bytes + locktime.to_bytes(4, 'little') +
                                    expiry_height.to_bytes(4, 'little'))
         inputs, outputs, _scripts, transparent_digest = self._zcash_transparent()
-        sapling_digest, sapling_balance = self._zcash_sapling()
-        orchard_digest, orchard_balance = self._zcash_action_bundle()
+        sapling_digest, sapling_balance = self._zcash_sapling(version)
+        orchard_digest, orchard_balance = self._zcash_action_bundle(version)
         digests = header_digest + transparent_digest + sapling_digest + orchard_digest
+        ironwood_balance = 0
+        if version == 6:
+            ironwood_digest, ironwood_balance = self._zcash_action_bundle(version, ironwood=True)
+            digests += ironwood_digest
         root_person = b'ZcashTxHash_' + branch_id_bytes
         txid = self._hash(root_person, digests)
         return TxZcash(
-            version=5,
+            version=version,
             inputs=inputs,
             outputs=outputs,
             locktime=locktime,
@@ -1614,7 +1640,7 @@ class DeserializerZcash(DeserializerEquihash):
             version_group_id=version_group_id,
             consensus_branch_id=consensus_branch_id,
             expiry_height=expiry_height,
-            fee_adjustment=sapling_balance + orchard_balance,
+            fee_adjustment=sapling_balance + orchard_balance + ironwood_balance,
         )
 
     def read_tx(self):
@@ -1628,10 +1654,10 @@ class DeserializerZcash(DeserializerEquihash):
         else:
             version = header
 
-        if version == 5:
+        if version in (5, 6):
             self.cursor = orig_start
             header_bytes = self._zcash_read(4)
-            return self._read_v5(header_bytes)
+            return self._read_v5_or_v6(version, header_bytes)
 
         is_overwinter_v3 = version == 3
         is_sapling_v4 = version == 4

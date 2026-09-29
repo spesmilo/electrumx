@@ -19,7 +19,7 @@ BLOCK_FIXTURES = [
 
 
 @pytest.mark.parametrize('fixture_path', FIXTURES, ids=lambda path: path.stem)
-def test_zcash_v5_transaction(fixture_path):
+def test_zcash_v5_v6_transaction(fixture_path):
     fixture = json.loads(fixture_path.read_text())
     raw_tx = bytes.fromhex(fixture['hex'])
     deserializer = DeserializerZcash(raw_tx)
@@ -61,7 +61,7 @@ def test_zcash_v5_transaction(fixture_path):
 
 
 @pytest.mark.parametrize('fixture_path', FIXTURES, ids=lambda path: path.stem)
-def test_zcash_v5_rejects_invalid_encoding(fixture_path):
+def test_zcash_v5_v6_rejects_invalid_encoding(fixture_path):
     raw = bytes.fromhex(json.loads(fixture_path.read_text())['hex'])
     with pytest.raises(ZcashDeserializeError, match='unknown Zcash transaction format'):
         DeserializerZcash(raw[:4] + bytes(4) + raw[8:]).read_tx()
@@ -88,7 +88,7 @@ def test_zcash_block_consumption_and_merkle_root(fixture_path):
     assert hashes[0] == hex_str_to_hash(fixture['merkle_root'])
 
 
-@pytest.mark.parametrize('name', ('zcash_mainnet_f9369e',))
+@pytest.mark.parametrize('name', ('zcash_mainnet_f9369e', 'zcash_mainnet_f15bfc'))
 def test_zcash_effecting_and_authorizing_bytes_have_expected_txid_behavior(name):
     fixture_path = next(path for path in FIXTURES if path.stem == name)
     fixture = json.loads(fixture_path.read_text())
@@ -283,7 +283,7 @@ def zip244_hash(person, data=b''):
 def test_zcash_v5_sapling_digest_and_balance(spends, outputs, balance):
     raw = sapling_v5_wire(spends, outputs, balance)
     reader = DeserializerZcash(raw + b'next')
-    digest, value_balance = reader._zcash_sapling()
+    digest, value_balance = reader._zcash_sapling(5)
     assert value_balance == (balance if spends or outputs else 0)
     assert reader.cursor == len(raw)
     assert reader._zcash_read(4) == b'next'
@@ -315,8 +315,8 @@ def test_zcash_v5_sapling_digest_commits_to_fields(offset):
     raw = sapling_v5_wire()
     changed = bytearray(raw)
     changed[offset] ^= 1
-    original = DeserializerZcash(raw)._zcash_sapling()[0]
-    assert DeserializerZcash(bytes(changed))._zcash_sapling()[0] != original
+    original = DeserializerZcash(raw)._zcash_sapling(5)[0]
+    assert DeserializerZcash(bytes(changed))._zcash_sapling(5)[0] != original
 
 
 @pytest.mark.parametrize('offset', [894, 1086, 1150, 1342],
@@ -325,15 +325,15 @@ def test_zcash_v5_sapling_digest_excludes_authorizing_data(offset):
     raw = sapling_v5_wire()
     changed = bytearray(raw)
     changed[offset] ^= 1
-    assert (DeserializerZcash(raw)._zcash_sapling() ==
-            DeserializerZcash(bytes(changed))._zcash_sapling())
+    assert (DeserializerZcash(raw)._zcash_sapling(5) ==
+            DeserializerZcash(bytes(changed))._zcash_sapling(5))
 
 
 @pytest.mark.parametrize('size', [0, 1, 96, 97, 98, 853, 854, 861, 862, 893, 894,
                                 1085, 1086, 1149, 1150, 1341, 1342, 1405])
 def test_zcash_rejects_truncated_v5_sapling_bundle(size):
     with pytest.raises(ZcashDeserializeError):
-        DeserializerZcash(sapling_v5_wire()[:size])._zcash_sapling()
+        DeserializerZcash(sapling_v5_wire()[:size])._zcash_sapling(5)
 
 
 @pytest.mark.parametrize('raw,message', [
@@ -342,7 +342,7 @@ def test_zcash_rejects_truncated_v5_sapling_bundle(size):
 ])
 def test_zcash_rejects_excessive_sapling_counts(raw, message):
     with pytest.raises(ZcashDeserializeError, match=message):
-        DeserializerZcash(raw)._zcash_sapling()
+        DeserializerZcash(raw)._zcash_sapling(5)
 
 
 ORCHARD_ACTION = (b'C' * 32 + b'N' * 32 + b'R' * 32 + b'M' * 32 + b'E' * 32 +
@@ -363,7 +363,7 @@ def orchard_v5_wire(actions=1, flags=3, balance=12345, proof=b'prf'):
 def test_zcash_v5_orchard_digest_and_balance(actions, flags, balance):
     raw = orchard_v5_wire(actions, flags, balance)
     reader = DeserializerZcash(raw + b'next')
-    digest, value_balance = reader._zcash_action_bundle()
+    digest, value_balance = reader._zcash_action_bundle(5)
     assert value_balance == (balance if actions else 0)
     assert reader.cursor == len(raw)
     assert reader._zcash_read(4) == b'next'
@@ -388,8 +388,8 @@ def test_zcash_v5_orchard_digest_commits_to_fields(offset):
     raw = orchard_v5_wire()
     changed = bytearray(raw)
     changed[offset] ^= 1
-    assert (DeserializerZcash(raw)._zcash_action_bundle()[0] !=
-            DeserializerZcash(bytes(changed))._zcash_action_bundle()[0])
+    assert (DeserializerZcash(raw)._zcash_action_bundle(5)[0] !=
+            DeserializerZcash(bytes(changed))._zcash_action_bundle(5)[0])
 
 
 @pytest.mark.parametrize('offset', [863, 866, 930], ids=['proof', 'spend_auth_sig', 'binding_sig'])
@@ -397,34 +397,61 @@ def test_zcash_v5_orchard_digest_excludes_authorizing_data(offset):
     raw = orchard_v5_wire()
     changed = bytearray(raw)
     changed[offset] ^= 1
-    assert (DeserializerZcash(raw)._zcash_action_bundle() ==
-            DeserializerZcash(bytes(changed))._zcash_action_bundle())
+    assert (DeserializerZcash(raw)._zcash_action_bundle(5) ==
+            DeserializerZcash(bytes(changed))._zcash_action_bundle(5))
 
 
 def test_zcash_v5_orchard_digest_excludes_proof_length():
-    assert (DeserializerZcash(orchard_v5_wire())._zcash_action_bundle() ==
-            DeserializerZcash(orchard_v5_wire(proof=b'longer proof'))._zcash_action_bundle())
+    assert (DeserializerZcash(orchard_v5_wire())._zcash_action_bundle(5) ==
+            DeserializerZcash(orchard_v5_wire(proof=b'longer proof'))._zcash_action_bundle(5))
 
 
 @pytest.mark.parametrize('flags', [4, 8, 16, 32, 64, 128, 255])
 def test_zcash_rejects_invalid_v5_orchard_flags(flags):
     with pytest.raises(ZcashDeserializeError, match='invalid Orchard-protocol flags'):
-        DeserializerZcash(orchard_v5_wire(flags=flags))._zcash_action_bundle()
+        DeserializerZcash(orchard_v5_wire(flags=flags))._zcash_action_bundle(5)
 
 
 @pytest.mark.parametrize('size', [0, 1, 820, 821, 829, 830, 861, 862, 863, 865, 866, 929, 930, 993])
 def test_zcash_rejects_truncated_v5_orchard_bundle(size):
     with pytest.raises(ZcashDeserializeError):
-        DeserializerZcash(orchard_v5_wire()[:size])._zcash_action_bundle()
+        DeserializerZcash(orchard_v5_wire()[:size])._zcash_action_bundle(5)
 
 
 def test_zcash_rejects_excessive_orchard_actions():
     with pytest.raises(ZcashDeserializeError, match='too many Orchard-protocol actions'):
-        DeserializerZcash(b'\x02' + ORCHARD_ACTION)._zcash_action_bundle()
+        DeserializerZcash(b'\x02' + ORCHARD_ACTION)._zcash_action_bundle(5)
 
 
 def test_zcash_rejects_noncanonical_orchard_proof_length():
     raw = orchard_v5_wire()
     changed = raw[:862] + b'\xfd\x03\x00' + raw[863:]
     with pytest.raises(ZcashDeserializeError, match='non-canonical CompactSize'):
-        DeserializerZcash(changed)._zcash_action_bundle()
+        DeserializerZcash(changed)._zcash_action_bundle(5)
+
+
+@pytest.mark.parametrize('bundle', ['sapling', 'orchard', 'ironwood'])
+def test_zcash_v6_digest_excludes_anchor(bundle):
+    raw = sapling_v5_wire() if bundle == 'sapling' else orchard_v5_wire()
+    changed = bytearray(raw)
+    changed[862 if bundle == 'sapling' else 830] ^= 1
+
+    def read(data):
+        reader = DeserializerZcash(data)
+        if bundle == 'sapling':
+            return reader._zcash_sapling(6)
+        return reader._zcash_action_bundle(6, ironwood=bundle == 'ironwood')
+
+    assert read(raw) == read(bytes(changed))
+
+
+@pytest.mark.parametrize('flags', [4, 7, 8, 255])
+def test_zcash_v6_ironwood_flag_rules(flags):
+    raw = orchard_v5_wire(flags=flags)
+    with pytest.raises(ZcashDeserializeError, match='invalid Orchard-protocol flags'):
+        DeserializerZcash(raw)._zcash_action_bundle(6)
+    if flags < 8:
+        assert DeserializerZcash(raw)._zcash_action_bundle(6, ironwood=True)[1] == 12345
+    else:
+        with pytest.raises(ZcashDeserializeError, match='invalid Orchard-protocol flags'):
+            DeserializerZcash(raw)._zcash_action_bundle(6, ironwood=True)

@@ -1534,6 +1534,44 @@ class DeserializerZcash(DeserializerEquihash):
         return self._hash(b'ZTxIdSaplingHash',
                           spend_digest + output_digest + value_balance_bytes), value_balance
 
+    def _zcash_action_bundle(self):
+        action_count = self._zcash_varint()
+        if action_count > (self._binary_length - self.cursor) // 820:
+            raise ZcashDeserializeError('too many Orchard-protocol actions')
+        top_person = b'ZTxIdOrchardHash'
+        compact_person = b'ZTxIdOrcActCHash'
+        memo_person = b'ZTxIdOrcActMHash'
+        noncompact_person = b'ZTxIdOrcActNHash'
+
+        if not action_count:
+            return self._hash(top_person), 0
+        actions = [self._zcash_read(820) for _ in range(action_count)]
+        flags_and_balance = self._zcash_read(9)
+        flags = flags_and_balance[0]
+        if flags & 0xfc:
+            raise ZcashDeserializeError('invalid Orchard-protocol flags')
+        value_balance = int.from_bytes(flags_and_balance[1:], 'little', signed=True)
+        anchor = self._zcash_read(32)
+        self._zcash_varbytes()
+        self._zcash_read(64 * action_count)
+        self._zcash_read(64)
+
+        compact = self._hash(
+            compact_person,
+            b''.join(action[32:64] + action[96:212] for action in actions),
+        )
+        memos = self._hash(
+            memo_person,
+            b''.join(action[212:724] for action in actions),
+        )
+        noncompact = self._hash(
+            noncompact_person,
+            b''.join(action[:32] + action[64:96] + action[724:] for action in actions),
+        )
+        data = compact + memos + noncompact + flags_and_balance
+        data += anchor
+        return self._hash(top_person, data), value_balance
+
     def read_tx(self):
         orig_start = self.cursor
         start = self.cursor

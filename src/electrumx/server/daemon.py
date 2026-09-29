@@ -160,6 +160,13 @@ class Daemon:
                 kind = resp.headers.get('Content-Type', None)
                 if kind and kind.split(';', 1)[0].strip().lower() == 'application/json':
                     result = await resp.json(loads=json_deserialize)
+                    parsed_data = json_deserialize(data)
+                    # Some daemons, unlike Bitcoin Core, return an object for
+                    # a one-request batch.
+                    # Never accept this shape for a larger batch.
+                    if (isinstance(parsed_data, list) and len(parsed_data) == 1
+                            and isinstance(result, dict)):
+                        result = [result]
                     responses = result if isinstance(result, list) else [result]
                     for response in responses:
                         # Existing processors expect both legacy envelope keys;

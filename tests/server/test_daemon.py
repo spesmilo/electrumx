@@ -145,6 +145,20 @@ class ClientSessionReorderedBatch(ClientSessionGood):
         return response
 
 
+class ClientSessionSingleBatchResponse(ClientSessionGood):
+    '''Return only the first batch response as an object, not an array.'''
+
+    protocol = JSONRPCv1
+    id_offset = 0
+
+    def post(self, url, data=""):
+        response = super().post(url, data)
+        if isinstance(response.msg_id, list):
+            response = JSONResponse(response.result[0], response.msg_id[0] + self.id_offset)
+        response.protocol = self.protocol
+        return response
+
+
 class ClientSessionBadAuth:
 
     def post(self, url, data=""):
@@ -479,6 +493,49 @@ async def test_batch_processor_rejects_non_array_response(daemon, monkeypatch, c
     monkeypatch.setattr(daemon, '_send_data', send_data)
     with pytest.raises(DaemonError, match='non-batch response to batch request'):
         await daemon.raw_blocks([f'block{index}' for index in range(count)])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', [JSONRPCv1, JSONRPCv2])
+async def test_single_object_batch_response(daemon, protocol):
+    daemon.session = ClientSessionSingleBatchResponse(
+        ('getblock', [['block0', 0]], ['00']))
+    daemon.session.protocol = protocol
+    assert await daemon.raw_blocks(['block0']) == [b'\x00']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', [JSONRPCv1, JSONRPCv2])
+async def test_single_object_batch_response_checks_id(daemon, protocol):
+    daemon.session = ClientSessionSingleBatchResponse(
+        ('getblock', [['block0', 0]], ['00']))
+    daemon.session.protocol = protocol
+    daemon.session.id_offset = 1
+    with pytest.raises(DaemonError, match='batch response IDs do not match request IDs'):
+        await daemon.raw_blocks(['block0'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', [JSONRPCv1, JSONRPCv2])
+async def test_single_object_batch_response_preserves_error(daemon, protocol):
+    error = RPCError(-5, 'Not found')
+    daemon.session = ClientSessionSingleBatchResponse(
+        ('getblock', [['missing', 0]], [error]),
+        ('getrawtransaction', [['missing', 0]], [error]))
+    daemon.session.protocol = protocol
+    with pytest.raises(DaemonError, match='Not found'):
+        await daemon.raw_blocks(['missing'])
+    assert await daemon.getrawtransactions(['missing']) == [None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', [JSONRPCv1, JSONRPCv2])
+async def test_reject_single_object_for_multi_request_batch(daemon, protocol):
+    daemon.session = ClientSessionSingleBatchResponse(
+        ('getblock', [['block0', 0], ['block1', 0]], ['00', 'ff']))
+    daemon.session.protocol = protocol
+    with pytest.raises(DaemonError, match='non-batch response to batch request'):
+        await daemon.raw_blocks(['block0', 'block1'])
 
 
 @pytest.mark.asyncio

@@ -49,6 +49,7 @@ import electrumx.lib.tx_axe as lib_tx_axe
 import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
 from electrumx.server.mempool import MemPool
+from electrumx.server.mempool_zcash import ZcashMemPool
 from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX,
                                       NameIndexElectrumX, NameIndexAuxPoWElectrumX)
@@ -1399,6 +1400,7 @@ class Zcash(EquihashMixin, Coin):
     GENESIS_HASH = ('00040fe8ec8471911baa1db1266ea15d'
                     'd06b4a8a5c453883c000b031973dce08')
     DESERIALIZER = lib_tx.DeserializerZcash
+    MEMPOOL = ZcashMemPool
     TX_COUNT = 329196
     TX_COUNT_HEIGHT = 68379
     TX_PER_BLOCK = 5

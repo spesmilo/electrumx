@@ -48,6 +48,7 @@ import electrumx.lib.tx_dash as lib_tx_dash
 import electrumx.lib.tx_axe as lib_tx_axe
 import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
+from electrumx.server.mempool import MemPool
 from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX,
                                       NameIndexElectrumX, NameIndexAuxPoWElectrumX)
@@ -78,6 +79,7 @@ class Coin:
     DESERIALIZER = lib_tx.Deserializer
     DAEMON = daemon.Daemon
     BLOCK_PROCESSOR = block_proc.BlockProcessor
+    MEMPOOL = MemPool
     P2PKH_VERBYTE = bytes.fromhex("00")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
     ENCODE_CHECK = Base58.encode_check

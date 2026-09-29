@@ -2,8 +2,25 @@
 
 import pytest
 
-from electrumx.lib.coins import NameMixin
+from electrumx.lib.coins import Bitcoin, BitcoinCash, Coin, Komodo, NameMixin
 from electrumx.lib.script import OpCodes, Script
+from electrumx.server.mempool import MemPool
+
+
+@pytest.mark.parametrize('coin', [Coin, Bitcoin, BitcoinCash, Komodo])
+def test_default_mempool_class(coin):
+    assert coin.MEMPOOL is MemPool
+
+
+def test_coin_can_override_mempool_class():
+    class CustomMemPool(MemPool):
+        pass
+
+    class CustomCoin(Coin):
+        MEMPOOL = CustomMemPool
+
+    assert CustomCoin.MEMPOOL is CustomMemPool
+    assert Coin.MEMPOOL is MemPool
 
 
 NAME = "name".encode("ascii")

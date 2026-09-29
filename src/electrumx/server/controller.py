@@ -15,7 +15,7 @@ from electrumx.lib.server_base import ServerBase
 from electrumx.lib.util import version_string, OldTaskGroup
 from electrumx.lib.tx import TxOutpoint
 from electrumx.server.db import DB
-from electrumx.server.mempool import MemPool, MemPoolAPI
+from electrumx.server.mempool import MemPoolAPI
 from electrumx.server.session import SessionManager
 
 
@@ -156,7 +156,7 @@ class Controller(ServerBase):
             notifications.raw_transactions = daemon.getrawtransactions
             notifications.lookup_utxos = db.lookup_utxos
             MemPoolAPI.register(Notifications)
-            mempool = MemPool(
+            mempool = env.coin.MEMPOOL(
                 env.coin, notifications,
                 refresh_secs=env.daemon_poll_interval_mempool_msec/1000,
             )

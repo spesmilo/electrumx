@@ -280,11 +280,12 @@ class Daemon:
 
     async def deserialised_block(self, bhash_hum: str) -> dict:
         '''Return the deserialised block with the given hex hash.'''
-        return await self._send_single('getblock', (bhash_hum, True))
+        return await self._send_single('getblock', (bhash_hum, 1))
 
     async def raw_blocks(self, bhashes_hum: Sequence[str]) -> Sequence[bytes]:
         '''Return the raw binary blocks with the given hex hashes.'''
-        params_iterable = ((h, False) for h in bhashes_hum)
+        # Use numeric verbosity: some daemons reject boolean values.
+        params_iterable = ((h, 0) for h in bhashes_hum)
         blocks = await self._send_vector('getblock', params_iterable)
         # Convert hex string to bytes
         return [hex_to_bytes(block) for block in blocks]

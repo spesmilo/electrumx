@@ -108,6 +108,18 @@ class ClientSessionJSONWithCharset(ClientSessionGood):
         return response
 
 
+class ClientSessionNumericVerbosity(ClientSessionGood):
+    '''Reject boolean verbosity in single and batched getblock requests.'''
+
+    def post(self, url, data=""):
+        payload = json.loads(data)
+        requests = payload if isinstance(payload, list) else [payload]
+        for request in requests:
+            assert request['method'] == 'getblock'
+            assert type(request['params'][1]) is int
+        return super().post(url, data)
+
+
 class ClientSessionBadAuth:
 
     def post(self, url, data=""):
@@ -298,7 +310,7 @@ async def test_mempool_txids_hum(daemon):
 async def test_deserialised_block(daemon):
     block_hash = 'block_hash'
     result = {'some': 'mess'}
-    daemon.session = ClientSessionGood(('getblock', [block_hash, True], result))
+    daemon.session = ClientSessionNumericVerbosity(('getblock', [block_hash, 1], result))
     assert await daemon.deserialised_block(block_hash) == result
 
 
@@ -381,11 +393,11 @@ async def test_block_hex_hashes(daemon):
 async def test_raw_blocks(daemon):
     count = 3
     hex_hashes = [f'hex_hash{n}' for n in range(count)]
-    args_list = [[hex_hash, False] for hex_hash in hex_hashes]
+    args_list = [[hex_hash, 0] for hex_hash in hex_hashes]
     iterable = (hex_hash for hex_hash in hex_hashes)
     blocks = ["00", "019a", "02fe"]
     blocks_raw = [bytes.fromhex(block) for block in blocks]
-    daemon.session = ClientSessionGood(('getblock', args_list, blocks))
+    daemon.session = ClientSessionNumericVerbosity(('getblock', args_list, blocks))
     assert await daemon.raw_blocks(iterable) == blocks_raw
 
 

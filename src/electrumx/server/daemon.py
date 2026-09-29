@@ -158,7 +158,7 @@ class Daemon:
         async with self.workqueue_semaphore:
             async with self.session.post(self.current_url(), data=data) as resp:
                 kind = resp.headers.get('Content-Type', None)
-                if kind == 'application/json':
+                if kind and kind.split(';', 1)[0].strip().lower() == 'application/json':
                     return await resp.json(loads=json_deserialize)
                 text = await resp.text()
                 text = text.strip() or resp.reason

@@ -99,6 +99,15 @@ class ClientSessionGood:
             return JSONResponse(result, request_ids)
 
 
+class ClientSessionJSONWithCharset(ClientSessionGood):
+    '''Return a JSON response with a charset media type parameter.'''
+
+    def post(self, url, data=""):
+        response = super().post(url, data)
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        return response
+
+
 class ClientSessionBadAuth:
 
     def post(self, url, data=""):
@@ -226,6 +235,14 @@ async def test_height(daemon):
     assert daemon.cached_height() is None
     height = 300
     daemon.session = ClientSessionGood(('getblockcount', [], height))
+    assert await daemon.height() == height
+    assert daemon.cached_height() == height
+
+
+@pytest.mark.asyncio
+async def test_height_accepts_json_with_charset(daemon):
+    height = 300
+    daemon.session = ClientSessionJSONWithCharset(('getblockcount', [], height))
     assert await daemon.height() == height
     assert daemon.cached_height() == height
 

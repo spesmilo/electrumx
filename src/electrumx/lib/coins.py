@@ -1410,6 +1410,40 @@ class Zcash(EquihashMixin, Coin):
     RPC_PORT = 8232
     REORG_LIMIT = 800
 
+    @classmethod
+    def max_fetch_blocks(cls, height: int) -> int:
+        # Previous conservative fixed policy, retained for comparison:
+        # return 10
+        #
+        # Zebra rejects JSON-RPC batch responses larger than 50 MiB.  The
+        # raw block is hex-encoded in that response, so the response size is
+        # roughly 2 * raw block bytes.  These values are rounded down from a
+        # full mainnet scan, targeting 35,000,000 bytes including 128 bytes
+        # of JSON overhead per response (well below Zebra's 52,428,800-byte
+        # limit).  The current and future range stays at 8: its future block
+        # sizes cannot be proven from historical measurements.
+        if height < 347_500:       # pre-Overwinter
+            return 8
+        if height < 419_200:       # Overwinter
+            return 10
+        if height < 653_600:       # Sapling
+            return 20
+        if height < 903_000:       # Blossom
+            return 600
+        if height < 1_046_400:     # Heartwood
+            return 200
+        if height < 1_687_104:     # Canopy
+            return 10
+        if height < 2_726_400:     # NU5
+            return 8
+        if height < 3_146_400:     # NU6
+            return 140
+        if height < 3_364_600:     # NU6.1
+            return 100
+        if height < 3_428_143:     # NU6.2
+            return 100
+        return 8                   # NU6.3 and future upgrades
+
 
 class ZcashTestnet(Zcash):
     SHORTNAME = "TAZ"

@@ -66,6 +66,24 @@ def test_zcash_v5_rejects_invalid_encoding(fixture_path):
         DeserializerZcash(raw[:-1]).read_tx()
 
 
+@pytest.mark.parametrize('name', ('zcash_mainnet_f9369e',))
+def test_zcash_effecting_and_authorizing_bytes_have_expected_txid_behavior(name):
+    fixture_path = next(path for path in FIXTURES if path.stem == name)
+    fixture = json.loads(fixture_path.read_text())
+    raw_tx = bytes.fromhex(fixture['hex'])
+
+    # The final binding signature is authorizing data, so it must not affect
+    # ZIP-244's transaction ID.
+    changed_signature = raw_tx[:-1] + bytes((raw_tx[-1] ^ 1,))
+    changed_txid = DeserializerZcash(changed_signature).read_tx().txid_rev
+    assert hash_to_hex_str(changed_txid) == fixture['txid']
+
+    # lockTime is in the effecting header digest and must affect the txid.
+    changed_locktime = raw_tx[:12] + bytes((raw_tx[12] ^ 1,)) + raw_tx[13:]
+    changed_txid = DeserializerZcash(changed_locktime).read_tx().txid_rev
+    assert hash_to_hex_str(changed_txid) != fixture['txid']
+
+
 def test_zcash_checked_read_boundaries():
     reader = DeserializerZcash(b'prefixabc', start=6)
     assert reader._zcash_read(0) == b''

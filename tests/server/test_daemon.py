@@ -5,9 +5,9 @@ import logging
 
 import pytest
 
-from aiorpcx import JSONRPCv1, JSONRPCLoose, RPCError, ignore_after, Request
+from aiorpcx import JSONRPCv1, JSONRPCv2, JSONRPCLoose, RPCError, ignore_after, Request
 from electrumx.lib.coins import BitcoinCash, CoinError, Bitzeny, Dash
-from electrumx.server.daemon import Daemon, FakeEstimateFeeDaemon
+from electrumx.server.daemon import Daemon, DaemonError, FakeEstimateFeeDaemon
 
 
 coin = BitcoinCash
@@ -43,6 +43,7 @@ class ResponseBase:
 
 
 class JSONResponse(ResponseBase):
+    protocol = JSONRPCv1
 
     def __init__(self, result, msg_id, status=200):
         super().__init__({'Content-Type': 'application/json'}, status)
@@ -51,11 +52,11 @@ class JSONResponse(ResponseBase):
 
     async def json(self, loads=json.loads):
         if isinstance(self.msg_id, int):
-            message = JSONRPCv1.response_message(self.result, self.msg_id)
+            message = self.protocol.response_message(self.result, self.msg_id)
         else:
-            parts = [JSONRPCv1.response_message(item, msg_id)
+            parts = [self.protocol.response_message(item, msg_id)
                      for item, msg_id in zip(self.result, self.msg_id)]
-            message = JSONRPCv1.batch_message_from_parts(parts)
+            message = self.protocol.batch_message_from_parts(parts)
         return loads(message.decode())
 
 
@@ -118,6 +119,20 @@ class ClientSessionNumericVerbosity(ClientSessionGood):
             assert request['method'] == 'getblock'
             assert type(request['params'][1]) is int
         return super().post(url, data)
+
+
+class ClientSessionV2(ClientSessionGood):
+    '''Check outgoing JSON-RPC 2.0 requests and return 2.0 envelopes.'''
+
+    def post(self, url, data=""):
+        payload = json.loads(data)
+        requests = payload if isinstance(payload, list) else [payload]
+        for request in requests:
+            assert request['jsonrpc'] == '2.0'
+            assert isinstance(request['params'], list)
+        response = super().post(url, data)
+        response.protocol = JSONRPCv2
+        return response
 
 
 class ClientSessionBadAuth:
@@ -399,6 +414,26 @@ async def test_raw_blocks(daemon):
     blocks_raw = [bytes.fromhex(block) for block in blocks]
     daemon.session = ClientSessionNumericVerbosity(('getblock', args_list, blocks))
     assert await daemon.raw_blocks(iterable) == blocks_raw
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_v2_requests_and_responses(daemon):
+    error = RPCError(-5, 'Not found')
+    daemon.session = ClientSessionV2(
+        ('getblockcount', [], 123),
+        ('getblock', ['block0', 1], {'hash': 'block0'}),
+        ('getblock', [['block0', 0]], ['00']),
+        ('getrawtransaction', ['missing', 0], error),
+        ('getrawtransaction', [['tx0', 0], ['missing', 0]], ['00', error]),
+        ('getblock', [['missing', 0]], [error]))
+    assert await daemon.height() == 123
+    assert await daemon.deserialised_block('block0') == {'hash': 'block0'}
+    assert await daemon.raw_blocks(['block0']) == [b'\x00']
+    with pytest.raises(DaemonError, match='Not found'):
+        await daemon.getrawtransaction('missing')
+    assert await daemon.getrawtransactions(['tx0', 'missing']) == [b'\x00', None]
+    with pytest.raises(DaemonError, match='Not found'):
+        await daemon.raw_blocks(['missing'])
 
 
 @pytest.mark.asyncio

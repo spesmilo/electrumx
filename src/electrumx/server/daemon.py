@@ -159,7 +159,14 @@ class Daemon:
             async with self.session.post(self.current_url(), data=data) as resp:
                 kind = resp.headers.get('Content-Type', None)
                 if kind and kind.split(';', 1)[0].strip().lower() == 'application/json':
-                    return await resp.json(loads=json_deserialize)
+                    result = await resp.json(loads=json_deserialize)
+                    responses = result if isinstance(result, list) else [result]
+                    for response in responses:
+                        # Existing processors expect both legacy envelope keys;
+                        # JSON-RPC 2.0 returns only result or error.
+                        response.setdefault('error', None)
+                        response.setdefault('result', None)
+                    return result
                 text = await resp.text()
                 text = text.strip() or resp.reason
                 raise ServiceRefusedError(text)
@@ -229,10 +236,13 @@ class Daemon:
                 raise DaemonParseError(err)
             raise DaemonError(err)
 
-        payload = {'method': method, 'id': next(self.id_counter)}
-        if params:
-            payload['params'] = params
+        payload = self._single_payload(method, params)
         return await self._send(payload, processor)
+
+    def _single_payload(self, method, params):
+        '''Build a JSON-RPC request for one daemon method.'''
+        return {'jsonrpc': '2.0', 'method': method, 'id': next(self.id_counter),
+                'params': () if params is None else params}
 
     async def _send_vector(self, method, params_iterable, replace_errs=False):
         '''Send several requests of the same method.
@@ -250,11 +260,15 @@ class Daemon:
                 return [item['result'] for item in result]
             raise DaemonError(errs)
 
-        payload = [{'method': method, 'params': p, 'id': next(self.id_counter)}
-                   for p in params_iterable]
+        payload = self._vector_payload(method, params_iterable)
         if payload:
             return await self._send(payload, processor)
         return []
+
+    def _vector_payload(self, method, params_iterable):
+        return [{'jsonrpc': '2.0', 'method': method, 'params': params,
+                 'id': next(self.id_counter)}
+                for params in params_iterable]
 
     async def _is_rpc_available(self, method: str) -> bool:
         '''Return whether given RPC method is available in the daemon.

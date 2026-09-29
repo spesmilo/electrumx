@@ -1483,6 +1483,57 @@ class DeserializerZcash(DeserializerEquihash):
             transparent_digest = self._hash(b'ZTxIdTranspaHash')
         return inputs, outputs, scripts, transparent_digest
 
+    def _zcash_sapling(self):
+        spend_count = self._zcash_varint()
+        if spend_count > (self._binary_length - self.cursor) // 96:
+            raise ZcashDeserializeError('too many Sapling spends')
+        spends = [self._zcash_read(96) for _ in range(spend_count)]
+        output_count = self._zcash_varint()
+        if output_count > (self._binary_length - self.cursor) // 756:
+            raise ZcashDeserializeError('too many Sapling outputs')
+        outputs = [self._zcash_read(756) for _ in range(output_count)]
+        if not (spends or outputs):
+            return self._hash(b'ZTxIdSaplingHash'), 0
+
+        value_balance_bytes = self._zcash_read(8)
+        value_balance = int.from_bytes(value_balance_bytes, 'little', signed=True)
+        anchor = self._zcash_read(32) if spends else b''
+        self._zcash_read(192 * spend_count)
+        self._zcash_read(64 * spend_count)
+        self._zcash_read(192 * output_count)
+        self._zcash_read(64)
+
+        if spends:
+            compact = self._hash(b'ZTxIdSSpendCHash',
+                                 b''.join(spend[32:64] for spend in spends))
+            noncompact = self._hash(
+                b'ZTxIdSSpendNHash',
+                b''.join(spend[:32] + anchor + spend[64:]
+                         for spend in spends),
+            )
+            spend_digest = self._hash(b'ZTxIdSSpendsHash', compact + noncompact)
+        else:
+            spend_digest = self._hash(b'ZTxIdSSpendsHash')
+
+        if outputs:
+            compact = self._hash(
+                b'ZTxIdSOutC__Hash',
+                b''.join(output[32:148] for output in outputs),
+            )
+            memos = self._hash(
+                b'ZTxIdSOutM__Hash',
+                b''.join(output[148:660] for output in outputs),
+            )
+            noncompact = self._hash(
+                b'ZTxIdSOutN__Hash',
+                b''.join(output[:32] + output[660:] for output in outputs),
+            )
+            output_digest = self._hash(b'ZTxIdSOutputHash', compact + memos + noncompact)
+        else:
+            output_digest = self._hash(b'ZTxIdSOutputHash')
+        return self._hash(b'ZTxIdSaplingHash',
+                          spend_digest + output_digest + value_balance_bytes), value_balance
+
     def read_tx(self):
         orig_start = self.cursor
         start = self.cursor

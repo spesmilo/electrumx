@@ -159,3 +159,88 @@ def test_zcash_rejects_truncated_transparent_bundle(size):
 def test_zcash_rejects_excessive_transparent_counts(raw, message):
     with pytest.raises(ZcashDeserializeError, match=message):
         DeserializerZcash(raw)._zcash_transparent()
+
+
+SAPLING_SPEND = b'C' * 32 + b'N' * 32 + b'R' * 32
+SAPLING_OUTPUT = (b'V' * 32 + b'M' * 32 + b'E' * 32 + b'C' * 52 +
+                  b'D' * 512 + b'T' * 16 + b'O' * 80)
+
+
+def sapling_v5_wire(spends=1, outputs=1, balance=12345):
+    raw = bytes([spends]) + SAPLING_SPEND * spends + bytes([outputs]) + SAPLING_OUTPUT * outputs
+    if not (spends or outputs):
+        return raw
+    return (raw + balance.to_bytes(8, 'little', signed=True) +
+            (b'A' * 32 if spends else b'') + b'P' * (192 * spends) +
+            b'S' * (64 * spends) + b'Q' * (192 * outputs) + b'B' * 64)
+
+
+def zip244_hash(person, data=b''):
+    return blake2b(data, digest_size=32, person=person).digest()
+
+
+@pytest.mark.parametrize('spends,outputs', [(0, 0), (1, 0), (0, 1), (1, 1), (2, 2)])
+@pytest.mark.parametrize('balance', [-12345, 0, 12345])
+def test_zcash_v5_sapling_digest_and_balance(spends, outputs, balance):
+    raw = sapling_v5_wire(spends, outputs, balance)
+    reader = DeserializerZcash(raw + b'next')
+    digest, value_balance = reader._zcash_sapling()
+    assert value_balance == (balance if spends or outputs else 0)
+    assert reader.cursor == len(raw)
+    assert reader._zcash_read(4) == b'next'
+
+    # Reference digest assembled from named synthetic fields, not wire slices.
+    spend_data = b''
+    if spends:
+        spend_data = (
+            zip244_hash(b'ZTxIdSSpendCHash', b'N' * (32 * spends)) +
+            zip244_hash(b'ZTxIdSSpendNHash', (b'C' * 32 + b'A' * 32 + b'R' * 32) * spends))
+    output_data = b''
+    if outputs:
+        output_data = (
+            zip244_hash(b'ZTxIdSOutC__Hash', (b'M' * 32 + b'E' * 32 + b'C' * 52) * outputs) +
+            zip244_hash(b'ZTxIdSOutM__Hash', b'D' * (512 * outputs)) +
+            zip244_hash(b'ZTxIdSOutN__Hash', (b'V' * 32 + b'T' * 16 + b'O' * 80) * outputs))
+    data = b''
+    if spends or outputs:
+        data = (zip244_hash(b'ZTxIdSSpendsHash', spend_data) +
+                zip244_hash(b'ZTxIdSOutputHash', output_data) +
+                balance.to_bytes(8, 'little', signed=True))
+    assert digest == zip244_hash(b'ZTxIdSaplingHash', data)
+
+
+@pytest.mark.parametrize('offset', [1, 33, 65, 98, 130, 162, 194, 246, 758, 774, 854, 862],
+                         ids=['spend_cv', 'nullifier', 'rk', 'output_cv', 'cmu', 'epk',
+                              'ciphertext', 'memo', 'tag', 'out_ciphertext', 'balance', 'anchor'])
+def test_zcash_v5_sapling_digest_commits_to_fields(offset):
+    raw = sapling_v5_wire()
+    changed = bytearray(raw)
+    changed[offset] ^= 1
+    original = DeserializerZcash(raw)._zcash_sapling()[0]
+    assert DeserializerZcash(bytes(changed))._zcash_sapling()[0] != original
+
+
+@pytest.mark.parametrize('offset', [894, 1086, 1150, 1342],
+                         ids=['spend_proof', 'spend_auth_sig', 'output_proof', 'binding_sig'])
+def test_zcash_v5_sapling_digest_excludes_authorizing_data(offset):
+    raw = sapling_v5_wire()
+    changed = bytearray(raw)
+    changed[offset] ^= 1
+    assert (DeserializerZcash(raw)._zcash_sapling() ==
+            DeserializerZcash(bytes(changed))._zcash_sapling())
+
+
+@pytest.mark.parametrize('size', [0, 1, 96, 97, 98, 853, 854, 861, 862, 893, 894,
+                                1085, 1086, 1149, 1150, 1341, 1342, 1405])
+def test_zcash_rejects_truncated_v5_sapling_bundle(size):
+    with pytest.raises(ZcashDeserializeError):
+        DeserializerZcash(sapling_v5_wire()[:size])._zcash_sapling()
+
+
+@pytest.mark.parametrize('raw,message', [
+    (b'\x02' + SAPLING_SPEND, 'too many Sapling spends'),
+    (b'\x00\x02' + SAPLING_OUTPUT, 'too many Sapling outputs'),
+])
+def test_zcash_rejects_excessive_sapling_counts(raw, message):
+    with pytest.raises(ZcashDeserializeError, match=message):
+        DeserializerZcash(raw)._zcash_sapling()

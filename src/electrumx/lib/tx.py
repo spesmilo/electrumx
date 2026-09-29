@@ -28,7 +28,7 @@
 '''Transaction-related classes and functions.'''
 
 from dataclasses import dataclass
-from hashlib import blake2s
+from hashlib import blake2b, blake2s
 from typing import Sequence, Optional, Tuple
 
 from electrumx.lib.hash import sha256, double_sha256, hash_to_hex_str
@@ -1413,6 +1413,10 @@ class ZcashDeserializeError(ValueError):
 
 
 class DeserializerZcash(DeserializerEquihash):
+    @staticmethod
+    def _hash(personalization, data=b''):
+        return blake2b(data, digest_size=32, person=personalization).digest()
+
     def _zcash_read(self, size):
         if size < 0 or self.cursor + size > self._binary_length:
             raise ZcashDeserializeError('truncated Zcash transaction')
@@ -1432,6 +1436,52 @@ class DeserializerZcash(DeserializerEquihash):
 
     def _zcash_varbytes(self):
         return self._zcash_read(self._zcash_varint())
+
+    def _zcash_transparent(self):
+        inputs = []
+        prevouts = []
+        sequences = []
+        scripts = []
+        input_count = self._zcash_varint()
+        if input_count > (self._binary_length - self.cursor) // 41:
+            raise ZcashDeserializeError('too many transparent inputs')
+        for _ in range(input_count):
+            prevout = self._zcash_read(36)
+            script_start = self.cursor
+            script = self._zcash_varbytes()
+            scripts.append(self.binary[script_start:self.cursor])
+            sequence = self._zcash_read(4)
+            prevouts.append(prevout)
+            sequences.append(sequence)
+            inputs.append(TxInput(
+                prev_txid_rev=prevout[:32],
+                prev_idx=int.from_bytes(prevout[32:], 'little'),
+                script=script,
+                sequence=int.from_bytes(sequence, 'little'),
+            ))
+
+        outputs = []
+        output_encodings = []
+        output_count = self._zcash_varint()
+        if output_count > (self._binary_length - self.cursor) // 9:
+            raise ZcashDeserializeError('too many transparent outputs')
+        for _ in range(output_count):
+            output_start = self.cursor
+            value = int.from_bytes(self._zcash_read(8), 'little', signed=True)
+            script = self._zcash_varbytes()
+            outputs.append(TxOutput(value=value, pk_script=script))
+            output_encodings.append(self.binary[output_start:self.cursor])
+
+        if inputs or outputs:
+            transparent_digest = self._hash(
+                b'ZTxIdTranspaHash',
+                self._hash(b'ZTxIdPrevoutHash', b''.join(prevouts)) +
+                self._hash(b'ZTxIdSequencHash', b''.join(sequences)) +
+                self._hash(b'ZTxIdOutputsHash', b''.join(output_encodings)),
+            )
+        else:
+            transparent_digest = self._hash(b'ZTxIdTranspaHash')
+        return inputs, outputs, scripts, transparent_digest
 
     def read_tx(self):
         orig_start = self.cursor

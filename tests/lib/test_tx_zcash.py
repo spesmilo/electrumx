@@ -6,11 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from electrumx.lib.hash import hash_to_hex_str
+from electrumx.lib.coins import Zcash
+from electrumx.lib.hash import double_sha256, hash_to_hex_str, hex_str_to_hash
 from electrumx.lib.tx import DeserializerZcash, TxZcash, ZcashDeserializeError
 
 
 FIXTURES = sorted((Path(__file__).parents[1] / 'transactions').glob('zcash_*.json'))
+BLOCK_FIXTURES = [
+    path for path in sorted((Path(__file__).parents[1] / 'blocks').glob('zcash_mainnet_*.json'))
+    if 'merkle_root' in json.loads(path.read_text())
+]
 
 
 @pytest.mark.parametrize('fixture_path', FIXTURES, ids=lambda path: path.stem)
@@ -64,6 +69,23 @@ def test_zcash_v5_rejects_invalid_encoding(fixture_path):
         DeserializerZcash(raw[:20] + b'\xfd\x01\x00' + raw[21:]).read_tx()
     with pytest.raises(ZcashDeserializeError, match='truncated'):
         DeserializerZcash(raw[:-1]).read_tx()
+
+
+@pytest.mark.parametrize('fixture_path', BLOCK_FIXTURES, ids=lambda path: path.stem)
+def test_zcash_block_consumption_and_merkle_root(fixture_path):
+    fixture = json.loads(fixture_path.read_text())
+    raw_block = bytes.fromhex(fixture['block'])
+    header = Zcash.block_header(raw_block, fixture['height'])
+    deserializer = DeserializerZcash(raw_block, start=len(header))
+    transactions = deserializer.read_tx_block()
+
+    assert deserializer.cursor == len(raw_block)
+    hashes = [tx.txid_rev for tx in transactions]
+    while len(hashes) > 1:
+        if len(hashes) & 1:
+            hashes.append(hashes[-1])
+        hashes = [double_sha256(left + right) for left, right in zip(hashes[::2], hashes[1::2])]
+    assert hashes[0] == hex_str_to_hash(fixture['merkle_root'])
 
 
 @pytest.mark.parametrize('name', ('zcash_mainnet_f9369e',))

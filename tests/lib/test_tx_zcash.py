@@ -80,6 +80,8 @@ def test_zcash_block_consumption_and_merkle_root(fixture_path):
     transactions = deserializer.read_tx_block()
 
     assert deserializer.cursor == len(raw_block)
+    if fixture['height'] == 3428144:
+        assert [tx.version for tx in transactions] == [6, 4, 6]
     hashes = [tx.txid_rev for tx in transactions]
     while len(hashes) > 1:
         if len(hashes) & 1:

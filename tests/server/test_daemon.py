@@ -135,6 +135,16 @@ class ClientSessionV2(ClientSessionGood):
         return response
 
 
+class ClientSessionReorderedBatch(ClientSessionGood):
+    '''Return a valid batch response in a different order from its request.'''
+
+    def post(self, url, data=""):
+        response = super().post(url, data)
+        if isinstance(response.msg_id, list):
+            return JSONResponse(response.result[::-1], response.msg_id[::-1])
+        return response
+
+
 class ClientSessionBadAuth:
 
     def post(self, url, data=""):
@@ -414,6 +424,61 @@ async def test_raw_blocks(daemon):
     blocks_raw = [bytes.fromhex(block) for block in blocks]
     daemon.session = ClientSessionNumericVerbosity(('getblock', args_list, blocks))
     assert await daemon.raw_blocks(iterable) == blocks_raw
+
+
+@pytest.mark.asyncio
+async def test_raw_blocks_accept_reordered_batch_response(daemon):
+    hashes = ['block0', 'block1']
+    daemon.session = ClientSessionReorderedBatch(
+        ('getblock', [[block_hash, 0] for block_hash in hashes], ['00', 'ff']))
+    assert await daemon.raw_blocks(hashes) == [b'\x00', b'\xff']
+
+
+@pytest.mark.asyncio
+async def test_reordered_batch_keeps_error_at_request_position(daemon):
+    daemon.session = ClientSessionReorderedBatch(
+        ('getrawtransaction', [['tx0', 0], ['missing', 0]],
+         ['00', RPCError(-5, 'Not found')]))
+    assert await daemon.getrawtransactions(['tx0', 'missing']) == [b'\x00', None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['missing', 'duplicate', 'unexpected', 'extra', 'empty', 'no_id'])
+async def test_reject_mismatched_batch_ids(daemon, monkeypatch, case):
+    async def send_data(data):
+        first, second = [request['id'] for request in json.loads(data)]
+        unexpected = max(first, second) + 1
+        ids = {
+            'missing': [first],
+            'duplicate': [first, first],
+            'unexpected': [first, unexpected],
+            'extra': [first, second, unexpected],
+            'empty': [],
+            'no_id': [None, second],
+        }[case]
+        responses = []
+        for response_id in ids:
+            response = {'result': '00', 'error': None}
+            if response_id is not None:
+                response['id'] = response_id
+            responses.append(response)
+        return responses
+
+    monkeypatch.setattr(daemon, '_send_data', send_data)
+    with pytest.raises(DaemonError, match='batch response IDs do not match request IDs'):
+        await daemon.raw_blocks(['block0', 'block1'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('count', [1, 2])
+async def test_batch_processor_rejects_non_array_response(daemon, monkeypatch, count):
+    async def send_data(data):
+        request = json.loads(data)[0]
+        return {'id': request['id'], 'result': '00', 'error': None}
+
+    monkeypatch.setattr(daemon, '_send_data', send_data)
+    with pytest.raises(DaemonError, match='non-batch response to batch request'):
+        await daemon.raw_blocks([f'block{index}' for index in range(count)])
 
 
 @pytest.mark.asyncio

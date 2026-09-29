@@ -250,7 +250,16 @@ class Daemon:
         The result will be an array of the same length as params_iterable.
         If replace_errs is true, any item with an error is returned as None,
         otherwise an exception is raised.'''
+        payload = self._vector_payload(method, params_iterable)
+
         def processor(result):
+            if not isinstance(result, list):
+                raise DaemonError('non-batch response to batch request')
+            by_id = {item.get('id'): item for item in result}
+            request_ids = [item['id'] for item in payload]
+            if len(by_id) != len(result) or set(by_id) != set(request_ids):
+                raise DaemonError('batch response IDs do not match request IDs')
+            result = [by_id[request_id] for request_id in request_ids]
             errs = [item['error'] for item in result if item['error']]
             if any(err.get('code') == self.RPC_IN_WARMUP for err in errs):
                 raise WarmingUpError
@@ -260,7 +269,6 @@ class Daemon:
                 return [item['result'] for item in result]
             raise DaemonError(errs)
 
-        payload = self._vector_payload(method, params_iterable)
         if payload:
             return await self._send(payload, processor)
         return []

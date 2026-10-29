@@ -68,8 +68,10 @@ class Daemon:
         self.urls = []
         self.set_url(url)
         # Limit concurrent RPC calls to this number.
-        # See DEFAULT_HTTP_WORKQUEUE in bitcoind, which is typically 16
-        self.workqueue_semaphore = asyncio.Semaphore(value=max_workqueue)
+        # See "rpcworkqueue" setting in bitcoind, DEFAULT_HTTP_WORKQUEUE=64
+        # ref https://github.com/bitcoin/bitcoin/blob/6ed5aad06111177c39f9b9f07a52634476380ae1/src/httpserver.h#L40
+        self._num_max_pending_requests = max_workqueue
+        self.workqueue_semaphore = asyncio.Semaphore(value=self._num_max_pending_requests)
         self.init_retry = init_retry
         self.max_retry = max_retry
         self._height = None
@@ -92,7 +94,13 @@ class Daemon:
         self.session = None
 
     def connector(self):
-        return None
+        # Limit concurrent HTTP sessions to the daemon.
+        # See "rpcmaxconnections" setting in bitcoind, DEFAULT_MAX_HTTP_CONNECTIONS=16
+        # ref https://github.com/bitcoin/bitcoin/blob/6ed5aad06111177c39f9b9f07a52634476380ae1/src/httpserver.h#L47
+        # note: self.session is a connection pool, not a single HTTP session. We limit the pool size here.
+        return aiohttp.TCPConnector(
+            limit=self._num_max_pending_requests,
+        )
 
     async def check_daemon_version(self):
         assert self.session is not None and self.coin is not None, f"{self.session=}, {self.coin=}"
@@ -579,7 +587,10 @@ class DecredDaemon(Daemon):
 
     def connector(self):
         # FIXME allow self signed certificates
-        return aiohttp.TCPConnector(verify_ssl=False)
+        return aiohttp.TCPConnector(
+            limit=self._num_max_pending_requests,
+            verify_ssl=False,
+        )
 
 
 class PreLegacyRPCDaemon(LegacyRPCDaemon):

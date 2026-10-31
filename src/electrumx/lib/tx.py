@@ -851,18 +851,73 @@ class DeserializerTrezarcoin(Deserializer):
         return blake2s_hash.digest()
 
 
-class DeserializerBlackcoin(Deserializer):
+class DeserializerBlackcoinSegWit(DeserializerSegWit):
+    '''Deserializer for Blackcoin transactions.
+    * V1 Includes a 4-byte `nTime` field:
+      Returns: TxTime | TxTimeSegWit
+    * V2 Standard Bitcoin format (no `nTime` field):
+      Returns: Tx | TxSegWit
+    '''
     BLACKCOIN_TX_VERSION = 2
 
     def _get_version(self):
+        '''Peek at the transaction version without advancing the cursor.'''
         result, = unpack_le_int32_from(self.binary, self.cursor)
         return result
 
-    def read_tx(self):
+    def _read_tx_parts(self):
         orig_start = self.cursor
-        start = self.cursor
         version = self._get_version()
+
         if version < self.BLACKCOIN_TX_VERSION:
+            # V1: 4-byte nTime shifts SegWit marker to offset 8.
+            if (self.cursor + 9 < self._binary_length and
+                    self.binary[self.cursor + 8] == 0 and
+                    self.binary[self.cursor + 9] != 0):
+                # V1 SegWit: version + time + marker + flag + ...
+                version = self._read_le_int32()
+                time = self._read_le_uint32()
+                start = self.cursor
+                orig_ser = self.binary[orig_start:start]
+
+                marker = self._read_byte()
+                flag = self._read_byte()
+
+                start = self.cursor
+                inputs = self._read_inputs()
+                outputs = self._read_outputs()
+                orig_ser += self.binary[start:self.cursor]
+
+                witness_start = self.cursor
+                witness = self._read_witness(len(inputs))
+                witness_size = self.cursor - witness_start + 2  # +2 for marker/flag
+
+                start = self.cursor
+                locktime = self._read_le_uint32()
+                orig_ser += self.binary[start:self.cursor]
+
+                base_size = self.cursor - orig_start - witness_size
+                weight = 4 * base_size + witness_size
+                vsize = weight // 4 + (weight % 4 > 0)
+
+                txid = self.TX_HASH_FN(orig_ser)
+                wtxid = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
+
+                tx = TxTimeSegWit(
+                    version=version,
+                    time=time,
+                    marker=marker,
+                    flag=flag,
+                    inputs=inputs,
+                    outputs=outputs,
+                    witness=witness,
+                    locktime=locktime,
+                    txid_rev=txid,
+                    wtxid_rev=wtxid,
+                )
+                return tx, vsize
+
+            # V1 legacy: no SegWit.
             tx = TxTime(
                 version=self._read_le_int32(),
                 time=self._read_le_uint32(),
@@ -872,17 +927,14 @@ class DeserializerBlackcoin(Deserializer):
                 txid_rev=None,
                 wtxid_rev=None,
             )
-        else:
-            tx = Tx(
-                version=self._read_le_int32(),
-                inputs=self._read_inputs(),
-                outputs=self._read_outputs(),
-                locktime=self._read_le_uint32(),
-                txid_rev=None,
-                wtxid_rev=None,
-            )
-        tx.txid_rev = tx.wtxid_rev = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
-        return tx
+            tx.txid_rev = tx.wtxid_rev = self.TX_HASH_FN(self.binary[orig_start:self.cursor])
+            return tx, self.cursor - orig_start
+
+        # V2: Standard Bitcoin format (no nTime). Delegate to base class.
+        return super()._read_tx_parts()
+
+    def read_tx(self):
+        return self._read_tx_parts()[0]
 
 
 class DeserializerReddcoin(Deserializer):

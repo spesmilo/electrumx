@@ -1593,15 +1593,14 @@ class Blackcoin(ScryptMixin, Coin):
     P2SH_VERBYTES = (bytes.fromhex("55"),)
     GENESIS_HASH = ('000001faef25dec4fbcf906e6242621d'
                     'f2c183bf232f263d0ba5b101911e4563')
-    DESERIALIZER = lib_tx.DeserializerBlackcoin
-    DAEMON = daemon.FakeEstimateFeeDaemon
+    DESERIALIZER = lib_tx.DeserializerBlackcoinSegWit
+    DAEMON = daemon.BlackcoinDaemon
     TX_COUNT = 10802426
     TX_COUNT_HEIGHT = 3431329
     TX_PER_BLOCK = 3
     RPC_PORT = 15715
     REORG_LIMIT = 500
-    ESTIMATE_FEE = 0.0001
-    RELAY_FEE = 0.0001
+    ESTIMATE_FEE = 0.001
     PEERS = [
         'electrum1.blackcoin.nl t10001 s10002',
         'electrum2.blackcoin.nl t20001 s20002',
@@ -1617,15 +1616,14 @@ class BlackcoinTestnet(Blackcoin):
     P2SH_VERBYTES = (bytes.fromhex("C4"),)
     GENESIS_HASH = ('0000724595fb3b9609d441cbfb957761'
                     '5c292abf07d996d3edabc48de843642d')
-    DESERIALIZER = lib_tx.DeserializerBlackcoin
-    DAEMON = daemon.FakeEstimateFeeDaemon
+    DESERIALIZER = lib_tx.DeserializerBlackcoinSegWit
+    DAEMON = daemon.BlackcoinDaemon
     TX_COUNT = 1401229
     TX_COUNT_HEIGHT = 698611
     TX_PER_BLOCK = 2
     RPC_PORT = 25715
     REORG_LIMIT = 500
     ESTIMATE_FEE = 0.001
-    RELAY_FEE = 0.001
     PEERS = [
         'electrum1.blackcoin.nl t10011 s10012',
         'electrum2.blackcoin.nl t20011 s20012',

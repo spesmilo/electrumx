@@ -48,9 +48,12 @@ import electrumx.lib.tx_dash as lib_tx_dash
 import electrumx.lib.tx_axe as lib_tx_axe
 import electrumx.server.block_processor as block_proc
 import electrumx.server.daemon as daemon
+from electrumx.server.mempool import MemPool
+from electrumx.server.mempool_zcash import ZcashMemPool
 from electrumx.server.session import (ElectrumX, DashElectrumX,
                                       SmartCashElectrumX, AuxPoWElectrumX,
-                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX)
+                                      NameIndexElectrumX, NameIndexAuxPoWElectrumX,
+                                      ZcashElectrumX)
 
 
 @dataclass(slots=True)
@@ -78,6 +81,7 @@ class Coin:
     DESERIALIZER = lib_tx.Deserializer
     DAEMON = daemon.Daemon
     BLOCK_PROCESSOR = block_proc.BlockProcessor
+    MEMPOOL = MemPool
     P2PKH_VERBYTE = bytes.fromhex("00")
     P2SH_VERBYTES = (bytes.fromhex("05"),)
     ENCODE_CHECK = Base58.encode_check
@@ -1397,11 +1401,48 @@ class Zcash(EquihashMixin, Coin):
     GENESIS_HASH = ('00040fe8ec8471911baa1db1266ea15d'
                     'd06b4a8a5c453883c000b031973dce08')
     DESERIALIZER = lib_tx.DeserializerZcash
+    DAEMON = daemon.ZcashZebraDaemon
+    SESSIONCLS = ZcashElectrumX
+    MEMPOOL = ZcashMemPool
     TX_COUNT = 329196
     TX_COUNT_HEIGHT = 68379
     TX_PER_BLOCK = 5
     RPC_PORT = 8232
     REORG_LIMIT = 800
+
+    @classmethod
+    def max_fetch_blocks(cls, height: int) -> int:
+        # Previous conservative fixed policy, retained for comparison:
+        # return 10
+        #
+        # Zebra rejects JSON-RPC batch responses larger than 50 MiB.  The
+        # raw block is hex-encoded in that response, so the response size is
+        # roughly 2 * raw block bytes.  These values are rounded down from a
+        # full mainnet scan, targeting 35,000,000 bytes including 128 bytes
+        # of JSON overhead per response (well below Zebra's 52,428,800-byte
+        # limit).  The current and future range stays at 8: its future block
+        # sizes cannot be proven from historical measurements.
+        if height < 347_500:       # pre-Overwinter
+            return 8
+        if height < 419_200:       # Overwinter
+            return 10
+        if height < 653_600:       # Sapling
+            return 20
+        if height < 903_000:       # Blossom
+            return 600
+        if height < 1_046_400:     # Heartwood
+            return 200
+        if height < 1_687_104:     # Canopy
+            return 10
+        if height < 2_726_400:     # NU5
+            return 8
+        if height < 3_146_400:     # NU6
+            return 140
+        if height < 3_364_600:     # NU6.1
+            return 100
+        if height < 3_428_143:     # NU6.2
+            return 100
+        return 8                   # NU6.3 and future upgrades
 
 
 class ZcashTestnet(Zcash):

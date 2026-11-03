@@ -1,0 +1,141 @@
+name: claude-review
+# shows the reviewed commit on the run page, compare it to the one you checked before starting a manual run
+run-name: "Claude review: PR #${{ github.event.pull_request.number || inputs.pr_number }} @ ${{ github.event.pull_request.head.sha || inputs.head_sha }}"
+
+on:
+  pull_request_target:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: string
+      head_sha:
+        description: 'Full SHA of the PR head commit you checked (exactly this commit gets reviewed)'
+        required: true
+        type: string
+      base_branch:
+        description: 'Target branch of the PR'
+        required: true
+        default: 'master'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # separate groups per trigger, so that pushes to an external PR don't cancel a manual review of it
+  group: claude-review-${{ github.event_name }}-pr-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: "review: Claude Code"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    # Runs with access to the CLAUDE_CODE_OAUTH_TOKEN secret, and Claude may execute the PR's code
+    # (e.g. run the tests to verify a finding), so it only runs automatically for trusted authors:
+    # - PRs opened by maintainers, from a branch of this repo or of their own fork, run via the
+    #   "pull_request_target" trigger.
+    # - Other PRs can be reviewed via the "workflow_dispatch" trigger (web UI, "Actions" tab), after
+    #   checking that the PR doesn't try to run code in this job or to exfiltrate the token: the PR
+    #   gets pip-installed, so watch out for changes to pyproject.toml (dependencies, build backend),
+    #   any Python files that could get run or imported (e.g. tests, conftest.py, a new sitecustomize.py),
+    #   and prompt injection (e.g. in comments, docs, test data). Enter the head commit you checked:
+    #   only that commit gets reviewed, even if the PR is force-pushed in the meantime.
+    # The review script and prompt are loaded from the default branch (or from the branch a manual run
+    # is started from), never from the PR.
+    if: |
+      github.event_name == 'workflow_dispatch' || (
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) &&
+        (github.event.pull_request.head.repo.full_name == github.repository ||
+         github.event.pull_request.head.repo.owner.login == github.event.pull_request.user.login))
+
+    steps:
+      - name: Checkout review script (default branch)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: ci
+          sparse-checkout: contrib/ci
+          persist-credentials: false
+
+      - name: Checkout PR head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: pr
+          ref: ${{ github.event.pull_request.head.sha || inputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Read-only references for Claude, not installed or run: the Electrum client (to check whether
+      # a change breaks wallets) and the source of the protocol spec.
+      - name: Checkout Electrum (reference)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: spesmilo/electrum
+          path: ref/electrum
+          persist-credentials: false
+
+      - name: Checkout Electrum protocol spec (reference)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: spesmilo/electrum-protocol
+          path: ref/electrum-protocol
+          persist-credentials: false
+
+      # For checking changes end to end against a regtest node. Pinned, the hash is from the release's
+      # SHA256SUMS, whose signatures were checked against the builder keys in bitcoin-core/guix.sigs.
+      - name: Install Bitcoin Core
+        env:
+          BITCOIN_VERSION: '32.1'
+          BITCOIN_SHA256: '61545c17c3120fb7412f896d248b11993af04ec8817aad3649c55b2afb044963'
+        run: |
+          f="bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$f" "https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/$f"
+          echo "${BITCOIN_SHA256}  $RUNNER_TEMP/$f" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/bitcoin-${BITCOIN_VERSION}/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bitcoin-${BITCOIN_VERSION}/bin/bitcoind" --version | head -n 1
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: '24'
+
+      # Latest release that is at least 7 days old, so that a compromised or broken release
+      # has some time to get noticed and pulled before it runs here with the token.
+      # --min-release-age needs npm >= 11.10 (Node 24), older npm versions ignore it with a warning.
+      # If the review breaks after a CLI update, check the flags, settings and environment
+      # variables that contrib/ci/claude_review.py passes to `claude`.
+      - name: Install Claude Code CLI
+        run: |
+          npm install -g --min-release-age=7 @anthropic-ai/claude-code
+          claude --version
+
+      # Install the PR's code and test deps, so Claude can run the tests and small scripts to verify findings.
+      # Don't save any caches: this job runs PR code in the cache scope of the default branch,
+      # so it could poison caches that are restored by other workflows and later runs.
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: '3.14'
+
+      - name: Install Python dependencies
+        working-directory: pr
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -yq libleveldb-dev librocksdb-dev
+          pip install pytest pytest-asyncio pycryptodomex
+          pip install -e ".[leveldb,rocksdb]"
+
+      - name: Run Claude Code review
+        working-directory: pr
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || inputs.base_branch }}
+          REFERENCE_DIR: ${{ github.workspace }}/ref
+          # needs to be set in the GitHub repository settings (output of `claude setup-token`)
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        # -I -S: don't let the installed PR run code in this script via site-packages (e.g. sitecustomize.py)
+        run: python3 -I -S "$GITHUB_WORKSPACE/ci/contrib/ci/claude_review.py"

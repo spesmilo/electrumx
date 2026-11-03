@@ -343,7 +343,7 @@ class PeerManager:
                     match.update_features_from_peer(peer)
             # Trim this data structure
             self.recent_peer_adds = {k: v for k, v in self.recent_peer_adds.items()
-                                     if v + PEER_ADD_PAUSE < now}
+                                     if v + PEER_ADD_PAUSE > now}
         else:
             # Forget the peer if long-term unreachable
             if peer.last_good and not peer.bad:

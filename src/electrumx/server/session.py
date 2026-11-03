@@ -1561,7 +1561,7 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.25)
         return await self.subscribe_headers_result()
 
-    async def phandle_add_peer(self, features: dict[str, Any] | Any):
+    async def phandle_add_peer(self, features: dict[str, Any] | Any) -> bool:
         '''Add a peer (but only if the peer resolves to the source).'''
         # basic input validation of 'features'
         assert_dict(features)

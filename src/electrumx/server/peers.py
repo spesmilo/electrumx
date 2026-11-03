@@ -579,7 +579,7 @@ class PeerManager:
             getaddrinfo = asyncio.get_event_loop().getaddrinfo
             try:
                 infos = await getaddrinfo(host, 80, type=socket.SOCK_STREAM)
-            except socket.gaierror:
+            except (socket.gaierror, UnicodeError):
                 permit = False
                 reason = 'address resolution failure'
             else:

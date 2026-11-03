@@ -34,6 +34,9 @@ from aiorpcx import is_valid_hostname
 from electrumx.lib.util import protocol_tuple, version_string
 
 
+MAX_HOST_STR_LEN = 256
+
+
 class Peer:
 
     # Protocol version
@@ -89,7 +92,8 @@ class Peer:
         if len(hosts) > 5:
             return []
         peers = [Peer(host, features, source=source)
-                 for host in hosts if isinstance(host, str)]
+                 for host in hosts
+                 if isinstance(host, str) and len(host) < MAX_HOST_STR_LEN]
         return peers
 
     @classmethod

@@ -82,13 +82,14 @@ class Peer:
         self.other_port_pairs = set()
 
     @classmethod
-    def peers_from_features(cls, features: dict[str, Any] | Any, source):
-        peers = []
-        if isinstance(features, dict):
-            hosts = features.get('hosts')
-            if isinstance(hosts, dict):
-                peers = [Peer(host, features, source=source)
-                         for host in hosts if isinstance(host, str)]
+    def peers_from_features(cls, features: dict[str, Any], source) -> Sequence['Peer']:
+        assert isinstance(features, dict)
+        hosts = features['hosts']
+        assert isinstance(hosts, dict)
+        if len(hosts) > 5:
+            return []
+        peers = [Peer(host, features, source=source)
+                 for host in hosts if isinstance(host, str)]
         return peers
 
     @classmethod

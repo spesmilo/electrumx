@@ -27,6 +27,7 @@
 
 from ipaddress import ip_address, IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from socket import AF_INET, AF_INET6
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from aiorpcx import is_valid_hostname
 from electrumx.lib.util import cachedproperty, protocol_tuple, version_string
@@ -71,13 +72,14 @@ class Peer:
         self.other_port_pairs = set()
 
     @classmethod
-    def peers_from_features(cls, features, source):
-        peers = []
-        if isinstance(features, dict):
-            hosts = features.get('hosts')
-            if isinstance(hosts, dict):
-                peers = [Peer(host, features, source=source)
-                         for host in hosts if isinstance(host, str)]
+    def peers_from_features(cls, features: dict[str, Any], source) -> Sequence['Peer']:
+        assert isinstance(features, dict)
+        hosts = features['hosts']
+        assert isinstance(hosts, dict)
+        if len(hosts) > 5:
+            return []
+        peers = [Peer(host, features, source=source)
+                 for host in hosts if isinstance(host, str)]
         return peers
 
     @classmethod

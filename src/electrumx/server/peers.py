@@ -14,7 +14,7 @@ import ssl
 import time
 from collections import Counter, defaultdict
 from ipaddress import IPv4Address, IPv6Address
-from typing import TYPE_CHECKING, Type, Any, Optional
+from typing import TYPE_CHECKING, Type, Any, Optional, Sequence
 from functools import partial
 
 import aiohttp
@@ -77,27 +77,27 @@ class PeerManager:
 
         # Our reported clearnet and Tor Peers, if any
         sclass = env.coin.SESSIONCLS
-        self.myselves = [Peer(str(service.host), sclass.server_features(env), 'env')
+        self.myselves = [Peer(str(service.host), sclass.server_features(env), source='env')
                          for service in env.report_services]
         self.server_version_args = sclass.server_version_args()
         # Peers have one entry per hostname.  Once connected, the
         # ip_addr property is either None, an onion peer, or the
         # IP address that was connected to.  Adding a peer will evict
         # any other peers with the same host name or IP address.
-        self.peers = set()
+        self.peers = set()  # type: set[Peer]
         self.permit_onion_peer_time = time.time()
         self.proxy = None
         self.group = OldTaskGroup()
-        self.recent_peer_adds = {}
+        self.recent_peer_adds = {}  # type: dict[str, float | int]
         # refreshed
         self.blacklist = set()
 
-    def _my_clearnet_peer(self):
+    def _my_clearnet_peer(self) -> Peer | None:
         '''Returns the clearnet peer representing this server, if any.'''
         clearnet = [peer for peer in self.myselves if not peer.is_tor]
         return clearnet[0] if clearnet else None
 
-    def _set_peer_statuses(self):
+    def _set_peer_statuses(self) -> None:
         '''Set peer statuses.'''
         cutoff = time.time() - STALE_SECS
         for peer in self.peers:
@@ -110,7 +110,7 @@ class PeerManager:
             else:
                 peer.status = PEER_NEVER
 
-    def _features_to_register(self, peer, remote_peers):
+    def _features_to_register(self, peer: Peer, remote_peers: Sequence[Peer]) -> dict[str, Any] | None:
         '''If we should register ourselves to the remote peer, which has
         reported the given list of known peers, return the clearnet
         identity features to register, otherwise None.
@@ -128,14 +128,14 @@ class PeerManager:
                 return None
         return my.features
 
-    def _permit_new_onion_peer(self, now):
+    def _permit_new_onion_peer(self, now: float | int) -> bool:
         '''Accept a new onion peer only once per random time interval.'''
         if now < self.permit_onion_peer_time:
             return False
         self.permit_onion_peer_time = now + random.randrange(0, 1200)
         return True
 
-    async def _import_peers(self):
+    async def _import_peers(self) -> None:
         '''Import hard-coded peers from a file or the coin defaults.'''
         imported_peers = self.myselves.copy()
         # Add the hard-coded ones unless only reporting ourself
@@ -144,7 +144,7 @@ class PeerManager:
                                   for real_name in self.env.coin.PEERS)
         await self._note_peers(imported_peers, limit=None)
 
-    async def _refresh_blacklist(self):
+    async def _refresh_blacklist(self) -> None:
         url = self.env.blacklist_url
         if not url:
             return
@@ -168,13 +168,13 @@ class PeerManager:
                         peer.retry_event.set()
             await sleep(600)
 
-    def _is_blacklisted(self, peer):
+    def _is_blacklisted(self, peer: Peer) -> bool:
         host = peer.host.lower()
         second_level_domain = '*.' + '.'.join(host.split('.')[-2:])
         return any(item in self.blacklist
                    for item in (host, second_level_domain, peer.ip_addr))
 
-    def _get_recent_good_peers(self):
+    def _get_recent_good_peers(self) -> list[Peer]:
         cutoff = time.time() - STALE_SECS
         recent = [peer for peer in self.peers
                   if peer.last_good > cutoff and
@@ -182,7 +182,7 @@ class PeerManager:
         recent = [peer for peer in recent if not self._is_blacklisted(peer)]
         return recent
 
-    async def _detect_proxy(self):
+    async def _detect_proxy(self) -> None:
         '''Detect a proxy if we don't have one and some time has passed since
         the last attempt.
 
@@ -204,7 +204,14 @@ class PeerManager:
             self.logger.info('no proxy detected, will try later')
             await sleep(900)
 
-    async def _note_peers(self, peers, limit=2, check_ports=False, source=None):
+    async def _note_peers(
+            self,
+            peers: Sequence[Peer],
+            *,
+            limit: int | None = 2,
+            check_ports: bool = False,
+            source: str | None = None,
+    ):
         '''Add a limited number of peers that are not already present.'''
         new_peers = []
         match_set = self.peers.copy()
@@ -243,7 +250,7 @@ class PeerManager:
 
         return True
 
-    async def _monitor_peer(self, peer):
+    async def _monitor_peer(self, peer: Peer) -> None:
         # Stop monitoring if we were dropped (a duplicate peer)
         while peer in self.peers:
             if await self._should_drop_peer(peer):
@@ -260,7 +267,7 @@ class PeerManager:
                 await peer.retry_event.wait()
                 peer.retry_event.clear()
 
-    async def _should_drop_peer(self, peer):
+    async def _should_drop_peer(self, peer: Peer) -> bool | None:
         peer.try_count += 1
         is_good = False
         for kind, port, family in peer.connection_tuples():
@@ -298,7 +305,7 @@ class PeerManager:
                         session_factory=session_factory,
                         transport=PaddedRSTransport,
                         **kwargs,
-                ) as session:
+                ) as session:  # type: PeerSession
                     session.sent_request_timeout = 120 if peer.is_tor else 30
                     await self._verify_peer(session, peer)
                 is_good = True
@@ -349,7 +356,7 @@ class PeerManager:
                 return True
         return False
 
-    async def _verify_peer(self, session, peer):
+    async def _verify_peer(self, session: PeerSession, peer: Peer) -> None:
         # store IP address for peer
         if not peer.is_tor:
             address = session.remote_address()
@@ -405,7 +412,7 @@ class PeerManager:
                                        (session, peer))
 
         # Process reported peers if remote peer is good
-        peers = peers_task.result()
+        peers = peers_task.result()  # type: Sequence[Peer]
         await self._note_peers(peers)
 
         features = self._features_to_register(peer, peers)
@@ -417,7 +424,7 @@ class PeerManager:
             except asyncio.CancelledError:
                 raise BadPeerError('terminated before server.add_peer response')
 
-    async def _send_headers_subscribe(self, session):
+    async def _send_headers_subscribe(self, session: PeerSession) -> None:
         message = 'blockchain.headers.subscribe'
         result = await session.send_request(message)
         assert_good(message, result, dict)
@@ -445,7 +452,7 @@ class PeerManager:
             raise BadPeerError(f'our header {ours} and '
                                f'theirs {theirs} differ')
 
-    async def _send_server_features(self, session, peer):
+    async def _send_server_features(self, session: PeerSession, peer: Peer) -> None:
         message = 'server.features'
         features = await session.send_request(message)
         assert_good(message, features, dict)
@@ -459,7 +466,7 @@ class PeerManager:
         else:
             raise BadPeerError(f'not listed in own hosts list {hosts}')
 
-    async def _send_peers_subscribe(self, session, peer):
+    async def _send_peers_subscribe(self, session: PeerSession, peer: Peer) -> Sequence[Peer]:
         message = 'server.peers.subscribe'
         raw_peers = await session.send_request(message)
         assert_good(message, raw_peers, list)
@@ -478,7 +485,7 @@ class PeerManager:
     #
     # External interface
     #
-    async def discover_peers(self):
+    async def discover_peers(self) -> None:
         '''Perform peer maintenance.  This includes
 
           1) Forgetting unreachable peers.
@@ -510,7 +517,7 @@ class PeerManager:
                     "Peer discovery is not working as PeerManager.group died. "
                     "This is not normal. You should inspect the log.")
 
-    def info(self):
+    def info(self) -> dict[str, int]:
         '''The number of peers.'''
         self._set_peer_statuses()
         counter = Counter(peer.status for peer in self.peers)
@@ -577,7 +584,7 @@ class PeerManager:
 
         return permit
 
-    def on_peers_subscribe(self, is_tor):
+    def on_peers_subscribe(self, is_tor: bool):
         '''Returns the server peers as a list of (ip, host, details) tuples.
 
         We return all peers we've connected to in the last day.

@@ -28,7 +28,7 @@
 from functools import cached_property
 from ipaddress import ip_address, IPv4Address, IPv6Address, IPv4Network, IPv6Network
 from socket import AF_INET, AF_INET6
-from typing import Any
+from typing import Any, Sequence, Iterable
 
 from aiorpcx import is_valid_hostname
 from electrumx.lib.util import protocol_tuple, version_string
@@ -46,8 +46,17 @@ class Peer:
     # This should be set by the application
     DEFAULT_PORTS = {}
 
-    def __init__(self, host, features, source='unknown', ip_addr=None,
-                 last_good=0, last_try=0, try_count=0):
+    def __init__(
+            self,
+            host: str,
+            features: dict[str, Any],
+            *,
+            source='unknown',
+            ip_addr=None,
+            last_good=0,
+            last_try=0,
+            try_count=0,
+    ):
         '''Create a peer given a host name (or IP address as a string),
         a dictionary of features, and a record of the source.'''
         assert isinstance(host, str)
@@ -87,7 +96,7 @@ class Peer:
         '''Deserialize from a dictionary.'''
         return cls(**item)
 
-    def matches(self, peers):
+    def matches(self, peers: Iterable['Peer']):
         '''Return peers whose host matches our hostname or IP address.
         Additionally include all peers whose IP address matches our
         hostname if that is an IP address.
@@ -334,4 +343,4 @@ class Peer:
         features.update(ports)
         features['hosts'] = {host: ports}
 
-        return cls(host, features, source)
+        return cls(host, features, source=source)

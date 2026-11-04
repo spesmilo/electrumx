@@ -118,6 +118,18 @@ def assert_hex_str(value: Any | str, *, allow_odd_len: bool = False) -> None:
         raise RPCError(BAD_REQUEST, f'{value} should be a hex string')
 
 
+def assert_dict(d: Any) -> None:
+    if not isinstance(d, dict):
+        raise RPCError(BAD_REQUEST, f'{d!r} should be a dict')
+
+
+def assert_dict_contains_field(d: Any, *, field_name: str) -> Any:
+    assert_dict(d)
+    if field_name not in d:
+        raise RPCError(BAD_REQUEST, f'required field {field_name!r} missing from dict')
+    return d[field_name]
+
+
 def assert_list_or_tuple(value: Any) -> None:
     if not isinstance(value, (list, tuple)):
         raise RPCError(BAD_REQUEST, f'{value} should be a list')
@@ -1549,8 +1561,35 @@ class ElectrumX(SessionBase):
         self.bump_cost(0.25)
         return await self.subscribe_headers_result()
 
-    async def phandle_add_peer(self, features: dict[str, Any] | Any):
+    async def phandle_add_peer(self, features: dict[str, Any] | Any) -> bool:
         '''Add a peer (but only if the peer resolves to the source).'''
+        # basic input validation of 'features'
+        assert_dict(features)
+        if not (len(features) <= 50 and len(repr(features)) <= 8_000):
+            raise RPCError(BAD_REQUEST, f"too large 'features' dict")
+        # - 'genesis_hash'
+        genesis_hash = assert_dict_contains_field(features, field_name="genesis_hash")
+        if not isinstance(genesis_hash, str):
+            raise RPCError(BAD_REQUEST, f"'genesis_hash' must be str")
+        # - 'hosts'
+        hosts = assert_dict_contains_field(features, field_name="hosts")
+        assert_dict(hosts)
+        for host, host_dict in hosts.items():
+            if not isinstance(host, str):
+                raise RPCError(BAD_REQUEST, f"'hosts' dict keys must be str")
+            assert_dict(host_dict)
+        # - 'protocol_max', 'protocol_min'
+        proto_max = assert_dict_contains_field(features, field_name="protocol_max")
+        if not isinstance(proto_max, str):
+            raise RPCError(BAD_REQUEST, f"'protocol_max' must be str")
+        proto_min = assert_dict_contains_field(features, field_name="protocol_min")
+        if not isinstance(proto_min, str):
+            raise RPCError(BAD_REQUEST, f"'protocol_min' must be str")
+        # - 'server_version'
+        server_version = assert_dict_contains_field(features, field_name="server_version")
+        if not isinstance(server_version, str):
+            raise RPCError(BAD_REQUEST, f"'server_version' must be str")
+        # preliminary sanity checks done.
         self.is_peer = True
         self.bump_cost(100.0)
         return await self.peer_mgr.on_add_peer(features, self.remote_address())

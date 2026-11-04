@@ -1,0 +1,30 @@
+{
+  "consensus_branch_id": 933566043,
+  "expiry_height": 3428143,
+  "fee_adjustment_zat": 0,
+  "hex": "0600008098b684d85b16a537000000002f4f3400010000000000000000000000000000000000000000000000000000000000000000ffffffff09032f4f3404f09fa693ffffffff0240597307000000001976a91425db9091e9786867e536f70089a5102523ab1d6a88ac20bcbe000000000017a914c20cd5bdf7964ca61764db66bc2531b1792a084d8700000000",
+  "inputs": [
+    {
+      "coinbase": "032f4f3404f09fa693",
+      "script": "",
+      "sequence": 4294967295,
+      "txid": null,
+      "vout": null
+    }
+  ],
+  "locktime": 0,
+  "outputs": [
+    {
+      "pk_script": "76a91425db9091e9786867e536f70089a5102523ab1d6a88ac",
+      "value_zat": 125000000
+    },
+    {
+      "pk_script": "a914c20cd5bdf7964ca61764db66bc2531b1792a084d87",
+      "value_zat": 12500000
+    }
+  ],
+  "source": "Zebra getrawtransaction(txid, 1)",
+  "txid": "99966bc3306f6c96ffc52293c87b165571b29c28652e639f661c8d9c1df35790",
+  "version": 6,
+  "version_group_id": 3632576152
+}

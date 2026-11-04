@@ -166,8 +166,22 @@ class Daemon:
         async with self.workqueue_semaphore:
             async with self.session.post(self.current_url(), data=data) as resp:
                 kind = resp.headers.get('Content-Type', None)
-                if kind == 'application/json':
-                    return await resp.json(loads=json_deserialize)
+                if kind and kind.split(';', 1)[0].strip().lower() == 'application/json':
+                    result = await resp.json(loads=json_deserialize)
+                    parsed_data = json_deserialize(data)
+                    # Some daemons, unlike Bitcoin Core, return an object for
+                    # a one-request batch.
+                    # Never accept this shape for a larger batch.
+                    if (isinstance(parsed_data, list) and len(parsed_data) == 1
+                            and isinstance(result, dict)):
+                        result = [result]
+                    responses = result if isinstance(result, list) else [result]
+                    for response in responses:
+                        # Existing processors expect both legacy envelope keys;
+                        # JSON-RPC 2.0 returns only result or error.
+                        response.setdefault('error', None)
+                        response.setdefault('result', None)
+                    return result
                 text = await resp.text()
                 text = text.strip() or resp.reason
                 raise ServiceRefusedError(text)
@@ -237,10 +251,13 @@ class Daemon:
                 raise DaemonParseError(err)
             raise DaemonError(err)
 
-        payload = {'method': method, 'id': next(self.id_counter)}
-        if params:
-            payload['params'] = params
+        payload = self._single_payload(method, params)
         return await self._send(payload, processor)
+
+    def _single_payload(self, method, params):
+        '''Build a JSON-RPC request for one daemon method.'''
+        return {'jsonrpc': '2.0', 'method': method, 'id': next(self.id_counter),
+                'params': () if params is None else params}
 
     async def _send_vector(self, method, params_iterable, replace_errs=False):
         '''Send several requests of the same method.
@@ -248,7 +265,16 @@ class Daemon:
         The result will be an array of the same length as params_iterable.
         If replace_errs is true, any item with an error is returned as None,
         otherwise an exception is raised.'''
+        payload = self._vector_payload(method, params_iterable)
+
         def processor(result):
+            if not isinstance(result, list):
+                raise DaemonError('non-batch response to batch request')
+            by_id = {item.get('id'): item for item in result}
+            request_ids = [item['id'] for item in payload]
+            if len(by_id) != len(result) or set(by_id) != set(request_ids):
+                raise DaemonError('batch response IDs do not match request IDs')
+            result = [by_id[request_id] for request_id in request_ids]
             errs = [item['error'] for item in result if item['error']]
             if any(err.get('code') == self.RPC_IN_WARMUP for err in errs):
                 raise WarmingUpError
@@ -258,11 +284,14 @@ class Daemon:
                 return [item['result'] for item in result]
             raise DaemonError(errs)
 
-        payload = [{'method': method, 'params': p, 'id': next(self.id_counter)}
-                   for p in params_iterable]
         if payload:
             return await self._send(payload, processor)
         return []
+
+    def _vector_payload(self, method, params_iterable):
+        return [{'jsonrpc': '2.0', 'method': method, 'params': params,
+                 'id': next(self.id_counter)}
+                for params in params_iterable]
 
     async def _is_rpc_available(self, method: str) -> bool:
         '''Return whether given RPC method is available in the daemon.
@@ -288,11 +317,12 @@ class Daemon:
 
     async def deserialised_block(self, bhash_hum: str) -> dict:
         '''Return the deserialised block with the given hex hash.'''
-        return await self._send_single('getblock', (bhash_hum, True))
+        return await self._send_single('getblock', (bhash_hum, 1))
 
     async def raw_blocks(self, bhashes_hum: Sequence[str]) -> Sequence[bytes]:
         '''Return the raw binary blocks with the given hex hashes.'''
-        params_iterable = ((h, False) for h in bhashes_hum)
+        # Use numeric verbosity: some daemons reject boolean values.
+        params_iterable = ((h, 0) for h in bhashes_hum)
         blocks = await self._send_vector('getblock', params_iterable)
         # Convert hex string to bytes
         return [hex_to_bytes(block) for block in blocks]
@@ -427,6 +457,15 @@ class DashDaemon(Daemon):
     async def protx(self, params):
         '''Set of commands to execute ProTx related actions.'''
         return await self._send_single('protx', params)
+
+
+class ZcashZebraDaemon(Daemon):
+    '''Zcash daemon with a fallback for Zebra's unavailable fee estimation.'''
+
+    async def estimatefee(self, block_count, estimate_mode=None):
+        # Zebra does not expose a fee-estimation RPC.  Electrum's defined
+        # sentinel for an unavailable estimate is -1.
+        return -1
 
 
 class FakeEstimateFeeDaemon(Daemon):

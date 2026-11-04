@@ -295,10 +295,7 @@ class MemPool:
 
             # Save the in_pairs, compute the fee and accept the TX
             tx.in_pairs = tuple(in_pairs)
-            # Avoid negative fees if dealing with generation-like transactions
-            # because some in_parts would be missing
-            tx.fee = max(0, (sum(v for _, v in tx.in_pairs) -
-                             sum(v for _, v in tx.out_pairs)))
+            tx.fee = self._calculate_fee(txid_rev, tx)
             txs[txid_rev] = tx
 
             for hashX, _value in itertools.chain(tx.in_pairs, tx.out_pairs):
@@ -311,6 +308,12 @@ class MemPool:
                 touched_outpoints.add((txid_rev, out_idx))
 
         return deferred, {prevout: utxo_map[prevout] for prevout in unspent}
+
+    def _calculate_fee(self, txid_rev, tx) -> int:
+        # Avoid negative fees for generation-like transactions whose
+        # input values may be missing.
+        return max(0, (sum(v for _, v in tx.in_pairs) -
+                       sum(v for _, v in tx.out_pairs)))
 
     async def _refresh_hashes(self, synchronized_event):
         '''Refresh our view of the daemon's mempool.'''
@@ -455,6 +458,23 @@ class MemPool:
             with LogTimeTaken(self.logger, f"_process_mempool() accepting txs ({len(new_hashes)=})", enabled=debug_logs):
                 accept_txs_loop()
 
+    def _make_mempool_tx(self, tx, tx_size) -> MemPoolTx:
+        to_hashX = self.coin.hashX_from_script
+
+        # Drop generation-like inputs from MemPoolTx.prevouts.
+        txin_pairs = tuple((txin.prev_txid_rev, txin.prev_idx)
+                           for txin in tx.inputs
+                           if not txin.is_generation())
+        txout_pairs = tuple((to_hashX(txout.pk_script), txout.value)
+                           for txout in tx.outputs)
+        return MemPoolTx(
+            prevouts=txin_pairs,
+            in_pairs=None,
+            out_pairs=txout_pairs,
+            fee=0,
+            size=tx_size,
+        )
+
     async def _fetch_raw_txs_and_utxos(
             self,
             *,
@@ -467,7 +487,6 @@ class MemPool:
 
         def deserialize_txs() -> Dict[bytes, MemPoolTx]:
             """This function is pure"""
-            to_hashX = self.coin.hashX_from_script
             deserializer = self.coin.DESERIALIZER
 
             txs = {}  # type: Dict[bytes, MemPoolTx]
@@ -481,20 +500,7 @@ class MemPool:
                 except SkipTxDeserialize as ex:
                     self.logger.debug(f'skipping tx {hash_to_hex_str(txid_rev)}: {ex}')
                     continue
-                # Convert the inputs and outputs into (hashX, value) pairs
-                # Drop generation-like inputs from MemPoolTx.prevouts
-                txin_pairs = tuple((txin.prev_txid_rev, txin.prev_idx)
-                                   for txin in tx.inputs
-                                   if not txin.is_generation())
-                txout_pairs = tuple((to_hashX(txout.pk_script), txout.value)
-                                    for txout in tx.outputs)
-                txs[txid_rev] = MemPoolTx(
-                    prevouts=txin_pairs,
-                    in_pairs=None,
-                    out_pairs=txout_pairs,
-                    fee=0,
-                    size=tx_size,
-                )
+                txs[txid_rev] = self._make_mempool_tx(tx, tx_size)
             return txs
 
         # Thread this potentially slow operation so as not to block

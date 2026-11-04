@@ -2,8 +2,48 @@
 
 import pytest
 
-from electrumx.lib.coins import NameMixin
+from electrumx.lib.coins import Bitcoin, BitcoinCash, Coin, Komodo, NameMixin, Zcash
 from electrumx.lib.script import OpCodes, Script
+from electrumx.server.mempool import MemPool
+
+
+@pytest.mark.parametrize('coin', [Coin, Bitcoin, BitcoinCash, Komodo])
+def test_default_mempool_class(coin):
+    assert coin.MEMPOOL is MemPool
+
+
+def test_coin_can_override_mempool_class():
+    class CustomMemPool(MemPool):
+        pass
+
+    class CustomCoin(Coin):
+        MEMPOOL = CustomMemPool
+
+    assert CustomCoin.MEMPOOL is CustomMemPool
+    assert Coin.MEMPOOL is MemPool
+
+
+@pytest.mark.parametrize('height,before,after', [
+    (347_500, 8, 10),
+    (419_200, 10, 20),
+    (653_600, 20, 600),
+    (903_000, 600, 200),
+    (1_046_400, 200, 10),
+    (1_687_104, 10, 8),
+    (2_726_400, 8, 140),
+    (3_146_400, 140, 100),
+    (3_364_600, 100, 100),
+    (3_428_143, 100, 8),
+])
+def test_zcash_fetch_batch_policy_boundaries(height, before, after):
+    assert Zcash.max_fetch_blocks(height - 1) == before
+    assert Zcash.max_fetch_blocks(height) == after
+    assert Zcash.max_fetch_blocks(height + 1) == after
+
+
+@pytest.mark.parametrize('height', [0, 3_428_143, 10_000_000])
+def test_zcash_fetch_batch_conservative_ranges(height):
+    assert Zcash.max_fetch_blocks(height) == 8
 
 
 NAME = "name".encode("ascii")

@@ -14,7 +14,7 @@ import ssl
 import time
 from collections import Counter, defaultdict
 from ipaddress import IPv4Address, IPv6Address
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Type, Any, Optional, Sequence
 from functools import partial
 
 import aiohttp
@@ -38,6 +38,10 @@ STATUS_DESCS = ('good', 'stale', 'never', 'bad')
 STALE_SECS = 3 * 3600
 WAKEUP_SECS = 300
 PEER_ADD_PAUSE = 600
+
+NUM_PEERS_MAX_TOTAL = 1_000
+NUM_PEERS_SINGLE_RESP_KEEP = 100
+NUM_PEERS_ONION_SOFTCAP = 100
 
 
 class BadPeerError(Exception):
@@ -212,7 +216,7 @@ class PeerManager:
             if not peer.is_public or (peer.is_tor and not self.proxy):
                 continue
 
-            matches = peer.matches(match_set)
+            matches = peer.matches(match_set)  # FIXME slow
             if matches:
                 if check_ports:
                     for match in matches:
@@ -236,6 +240,8 @@ class PeerManager:
             else:
                 use_peers = new_peers
             for peer in use_peers:
+                if len(self.peers) >= NUM_PEERS_MAX_TOTAL:
+                    continue
                 self.logger.info(f'accepted new peer {peer} from {source}')
                 peer.retry_event = Event()
                 self.peers.add(peer)
@@ -333,7 +339,7 @@ class PeerManager:
                     match.update_features_from_peer(peer)
             # Trim this data structure
             self.recent_peer_adds = {k: v for k, v in self.recent_peer_adds.items()
-                                     if v + PEER_ADD_PAUSE < now}
+                                     if v + PEER_ADD_PAUSE > now}
         else:
             # Forget the peer if long-term unreachable
             if peer.last_good and not peer.bad:
@@ -371,8 +377,8 @@ class PeerManager:
                 buckets[other_peer.bucket_for_internal_purposes()].append(other_peer)
         if peer.is_tor:
             # keep number of onion peers below half of all peers,
-            # but up to 100 is OK regardless
-            if len(onion_peers) > len(recent_peers) // 2 >= 100:
+            # but up to "softcap" is OK regardless
+            if len(onion_peers) > len(recent_peers) // 2 >= NUM_PEERS_ONION_SOFTCAP:
                 raise BadPeerError('too many onion peers already')
         else:
             bucket = peer.bucket_for_internal_purposes()
@@ -405,6 +411,7 @@ class PeerManager:
         peers = peers_task.result()
         await self._note_peers(peers)
 
+        # Maybe register ourselves with remote
         features = self._features_to_register(peer, peers)
         if features:
             self.logger.info(f'registering ourself with {peer}')
@@ -461,10 +468,14 @@ class PeerManager:
         raw_peers = await session.send_request(message)
         assert_good(message, raw_peers, list)
 
+        # Only keep a reasonable number of items.
+        # note: this makes detecting whether the remote already knows about us unreliable
+        random.shuffle(raw_peers)
+        raw_peers = raw_peers[:NUM_PEERS_SINGLE_RESP_KEEP]
+
         # Check the peers list we got from a remote peer.
         # Each is expected to be of the form:
         #    [ip_addr, hostname, ['v1.0', 't51001', 's51002']]
-        # Call add_peer if the remote doesn't appear to know about us.
         try:
             real_names = [' '.join([u[1]] + u[2]) for u in raw_peers]
             return [Peer.from_real_name(real_name, str(peer))
@@ -523,7 +534,7 @@ class PeerManager:
         '''Add a peer passed by the admin over LocalRPC.'''
         await self._note_peers([Peer.from_real_name(real_name, 'RPC')], check_ports=True)
 
-    async def on_add_peer(self, features, source_addr):
+    async def on_add_peer(self, features: dict[str, Any], source_addr: Optional[str]) -> bool:
         '''Add a peer (but only if the peer resolves to the source).'''
         if self.env.peer_discovery != self.env.PD_ON:
             return False
@@ -538,6 +549,9 @@ class PeerManager:
 
         # Just look at the first peer, require it
         peer = peers[0]
+        if not peer.is_public:
+            return False
+
         host = peer.host
         now = time.time()
 
@@ -558,7 +572,7 @@ class PeerManager:
             getaddrinfo = asyncio.get_event_loop().getaddrinfo
             try:
                 infos = await getaddrinfo(host, 80, type=socket.SOCK_STREAM)
-            except socket.gaierror:
+            except (socket.gaierror, UnicodeError):
                 permit = False
                 reason = 'address resolution failure'
             else:

@@ -20,7 +20,7 @@ from functools import partial
 import aiohttp
 from aiorpcx import (Event, Notification, RPCSession, SOCKSError,
                      SOCKSProxy, TaskTimeout, connect_rs,
-                     handler_invocation, ignore_after, sleep)
+                     handler_invocation, ignore_after, sleep, NetAddress)
 from aiorpcx.jsonrpc import CodeMessageError
 
 from electrumx.lib.peer import Peer
@@ -544,7 +544,7 @@ class PeerManager:
         '''Add a peer passed by the admin over LocalRPC.'''
         await self._note_peers([Peer.from_real_name(real_name, 'RPC')], check_ports=True)
 
-    async def on_add_peer(self, features: dict[str, Any], source_addr: Optional[str]) -> bool:
+    async def on_add_peer(self, features: dict[str, Any], source_addr: NetAddress | None) -> bool:
         '''Add a peer (but only if the peer resolves to the source).'''
         if self.env.peer_discovery != self.env.PD_ON:
             return False

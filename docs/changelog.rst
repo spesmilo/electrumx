@@ -2,6 +2,23 @@
  ChangeLog
 ===========
 
+Version 2.0.1 (04 Nov 2026)
+=============================
+
+* fix: daemon: limit max concurrent HTTP sessions to 10, for bitcoin core 32 (`spesmilo/electrumx#395`_)
+* fix: peer discovery: misc fixes and hardening (thanks to contributor Toshit!) (`spesmilo/electrumx#402`_)
+
+
+Version 1.20.1 (04 Nov 2026)
+=============================
+
+Backports from 2.0.1 to the "v1.x" branch.
+The "v1.x" branch is only getting bare minimum bug fixes. Please consider upgrading to 2.x.
+
+* fix: daemon: limit max concurrent HTTP sessions to 10, for bitcoin core 32
+* fix: peer discovery: misc fixes and hardening (thanks to contributor Toshit!)
+
+
 Version 2.0.0 (03 July 2026)
 ==============================
 
@@ -407,6 +424,8 @@ This fork maintained by:
 .. _spesmilo/electrumx#352:  https://github.com/spesmilo/electrumx/pull/352
 .. _spesmilo/electrumx#361:  https://github.com/spesmilo/electrumx/pull/361
 .. _spesmilo/electrumx#369:  https://github.com/spesmilo/electrumx/pull/369
+.. _spesmilo/electrumx#395:  https://github.com/spesmilo/electrumx/pull/395
+.. _spesmilo/electrumx#402:  https://github.com/spesmilo/electrumx/pull/402
 
 
 .. _4b3f6510:  https://github.com/spesmilo/electrumx/commit/4b3f6510e94670a013c1abe6247cdd2b0e7e6f8c

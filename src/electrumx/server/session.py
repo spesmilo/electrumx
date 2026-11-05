@@ -1100,7 +1100,11 @@ class SessionManager:
                     raise
 
     def _ip_addr_group_name(self, session) -> Optional[str]:
-        host = session.remote_address().host
+        address = session.remote_address()
+        # The transport may already be closed when the session is registered.
+        if address is None:
+            return 'unknown_addr'
+        host = address.host
         if isinstance(host, (IPv4Address, IPv6Address)):
             if host.is_private:  # exempt private addresses
                 return None

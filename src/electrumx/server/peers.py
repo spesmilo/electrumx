@@ -54,6 +54,23 @@ def assert_good(message, result, instance):
                            f'{type(result).__name__}')
 
 
+async def _send_request(session, message, args):
+    try:
+        return await session.send_request(message, args)
+    except asyncio.CancelledError:
+        # aiorpcX also raises CancelledError for requests on closed sessions.
+        # Do not turn cancellation of this task into an ordinary peer failure.
+        task_cancelling = getattr(asyncio.current_task(), 'cancelling', None)
+        if task_cancelling is None:
+            # Task.cancelling() was added in Python 3.11. On 3.10, use the
+            # session state to distinguish a closed connection from cancellation.
+            if not session.is_closing():
+                raise
+        elif task_cancelling():
+            raise
+        raise BadPeerError(f'terminated before {message} response')
+
+
 class PeerSession(RPCSessionWithTaskGroup):
     '''An outgoing session to a peer.'''
 
@@ -397,10 +414,7 @@ class PeerManager:
 
         # server.version goes first
         message = 'server.version'
-        try:
-            result = await session.send_request(message, self.server_version_args)
-        except asyncio.CancelledError:
-            raise BadPeerError('terminated before server.version response')
+        result = await _send_request(session, message, self.server_version_args)
 
         assert_good(message, result, list)
 
@@ -426,10 +440,7 @@ class PeerManager:
         if features:
             self.logger.info(f'registering ourself with {peer}')
             # We only care to wait for the response
-            try:
-                await session.send_request('server.add_peer', [features])
-            except asyncio.CancelledError:
-                raise BadPeerError('terminated before server.add_peer response')
+            await _send_request(session, 'server.add_peer', [features])
 
     async def _send_headers_subscribe(self, session: PeerSession) -> None:
         message = 'blockchain.headers.subscribe'

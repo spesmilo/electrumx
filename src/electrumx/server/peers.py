@@ -55,20 +55,20 @@ def assert_good(message, result, instance):
 
 
 async def _send_request(session, message, args):
+    '''Caller cancellation propagates; closed-session cancellation raises BadPeerError.'''
+    async def request():
+        try:
+            return await session.send_request(message, args)
+        except asyncio.CancelledError:
+            raise BadPeerError(f'terminated before {message} response') from None
+
+    task = asyncio.create_task(request())
     try:
-        return await session.send_request(message, args)
+        return await asyncio.shield(task)
     except asyncio.CancelledError:
-        # aiorpcX also raises CancelledError for requests on closed sessions.
-        # Do not turn cancellation of this task into an ordinary peer failure.
-        task_cancelling = getattr(asyncio.current_task(), 'cancelling', None)
-        if task_cancelling is None:
-            # Task.cancelling() was added in Python 3.11. On 3.10, use the
-            # session state to distinguish a closed connection from cancellation.
-            if not session.is_closing():
-                raise
-        elif task_cancelling():
-            raise
-        raise BadPeerError(f'terminated before {message} response')
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
 
 
 class PeerSession(RPCSessionWithTaskGroup):

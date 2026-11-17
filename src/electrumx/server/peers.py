@@ -54,6 +54,23 @@ def assert_good(message, result, instance):
                            f'{type(result).__name__}')
 
 
+async def _send_request(session, message, args):
+    '''Caller cancellation propagates; closed-session cancellation raises BadPeerError.'''
+    async def request():
+        try:
+            return await session.send_request(message, args)
+        except asyncio.CancelledError:
+            raise BadPeerError(f'terminated before {message} response') from None
+
+    task = asyncio.create_task(request())
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
+
+
 class PeerSession(RPCSessionWithTaskGroup):
     '''An outgoing session to a peer.'''
 
@@ -387,10 +404,7 @@ class PeerManager:
 
         # server.version goes first
         message = 'server.version'
-        try:
-            result = await session.send_request(message, self.server_version_args)
-        except asyncio.CancelledError:
-            raise BadPeerError('terminated before server.version response')
+        result = await _send_request(session, message, self.server_version_args)
 
         assert_good(message, result, list)
 
@@ -416,10 +430,7 @@ class PeerManager:
         if features:
             self.logger.info(f'registering ourself with {peer}')
             # We only care to wait for the response
-            try:
-                await session.send_request('server.add_peer', [features])
-            except asyncio.CancelledError:
-                raise BadPeerError('terminated before server.add_peer response')
+            await _send_request(session, 'server.add_peer', [features])
 
     async def _send_headers_subscribe(self, session):
         message = 'blockchain.headers.subscribe'

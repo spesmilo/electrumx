@@ -443,6 +443,23 @@ class FakeEstimateFeeDaemon(Daemon):
         return self.coin.RELAY_FEE
 
 
+class BlackcoinDaemon(Daemon):
+    '''Daemon for Blackcoin lacking estimatefee RPCs
+    and 'incrementalrelayfee' in getmempoolinfo.'''
+
+    async def estimatefee(self, block_count, estimate_mode=None):
+        '''Return the fee estimate for the given parameters.'''
+        return self.coin.ESTIMATE_FEE
+
+    async def mempool_info(self) -> dict[str, float]:
+        mempool_info = await self.getmempoolinfo()
+        return {
+            'mempoolminfee': mempool_info['mempoolminfee'],
+            'minrelaytxfee': mempool_info['minrelaytxfee'],
+            'incrementalrelayfee': mempool_info.get('incrementalrelayfee', 0.0),
+        }
+
+
 class LegacyRPCDaemon(Daemon):
     '''Handles connections to a daemon at the given URL.
 

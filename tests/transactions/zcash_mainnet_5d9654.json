@@ -1,0 +1,30 @@
+{
+  "consensus_branch_id": 933566043,
+  "expiry_height": 0,
+  "fee_adjustment_zat": 0,
+  "hex": "050000800a27a7265b16a537000000000000000001b79eda08eabfa47a79bb87bba080378dc6f48a7ac6d99f8b9dbbf13402a15c59010000006b483045022100ecfce5814c2fbbfa534bd28248c474ff4860eb652c23a0f8c50d7f80cf9efd2d02200d88fa4ce3c05deb6cf9c0ad8c1331f012bafc6c8a4210af5c24288a22f878ed012102d81fb14029a65380ef2c00e74425c7a47311608ef1117c8d81e2ec8df1225b75ffffffff0280778e06000000001976a9140233071d783bc2d75549ac4130115c580800c46d88ac78f1fa27000000001976a914063117a36d20247c1741fbd66dddd298009a80d988ac000000",
+  "inputs": [
+    {
+      "coinbase": null,
+      "script": "483045022100ecfce5814c2fbbfa534bd28248c474ff4860eb652c23a0f8c50d7f80cf9efd2d02200d88fa4ce3c05deb6cf9c0ad8c1331f012bafc6c8a4210af5c24288a22f878ed012102d81fb14029a65380ef2c00e74425c7a47311608ef1117c8d81e2ec8df1225b75",
+      "sequence": 4294967295,
+      "txid": "595ca10234f1bb9d8b9fd9c67a8af4c68d3780a0bb87bb797aa4bfea08da9eb7",
+      "vout": 1
+    }
+  ],
+  "locktime": 0,
+  "outputs": [
+    {
+      "pk_script": "76a9140233071d783bc2d75549ac4130115c580800c46d88ac",
+      "value_zat": 110000000
+    },
+    {
+      "pk_script": "76a914063117a36d20247c1741fbd66dddd298009a80d988ac",
+      "value_zat": 670757240
+    }
+  ],
+  "source": "Zebra getrawtransaction(txid, 1)",
+  "txid": "5d9654bea2a061ab8a9f16cd20a4f4cc9b3c676d72e950053e4dfa860210571c",
+  "version": 5,
+  "version_group_id": 648488714
+}

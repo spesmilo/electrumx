@@ -1,0 +1,38 @@
+{
+  "consensus_branch_id": 3268858036,
+  "expiry_height": 1687104,
+  "fee_adjustment_zat": 0,
+  "hex": "050000800a27a726b4d0d6c20000000040be1900010000000000000000000000000000000000000000000000000000000000000000ffffffff050340be1900ffffffff0480b2e60e000000001976a914fb8a6a4c11cb216ce21f9f371dfc9271a469bd6d88ac38c94d010000000017a91469a9f95a98fe581b6eb52841ef4806dc4402eb908740787d010000000017a914931fec54c1fea86e574462cc32013f5400b8912987286bee000000000017a914d45cb1adffb5215a42720532a076f02c7c778c9087000000",
+  "inputs": [
+    {
+      "coinbase": "0340be1900",
+      "script": "",
+      "sequence": 4294967295,
+      "txid": null,
+      "vout": null
+    }
+  ],
+  "locktime": 0,
+  "outputs": [
+    {
+      "pk_script": "76a914fb8a6a4c11cb216ce21f9f371dfc9271a469bd6d88ac",
+      "value_zat": 250000000
+    },
+    {
+      "pk_script": "a91469a9f95a98fe581b6eb52841ef4806dc4402eb9087",
+      "value_zat": 21875000
+    },
+    {
+      "pk_script": "a914931fec54c1fea86e574462cc32013f5400b8912987",
+      "value_zat": 25000000
+    },
+    {
+      "pk_script": "a914d45cb1adffb5215a42720532a076f02c7c778c9087",
+      "value_zat": 15625000
+    }
+  ],
+  "source": "Zebra getrawtransaction(txid, 1)",
+  "txid": "2d69a4ea575115bbae6a7bba324f2ba3f2caa16108e29909f19a6abd7989a002",
+  "version": 5,
+  "version_group_id": 648488714
+}

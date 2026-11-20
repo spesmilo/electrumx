@@ -2,12 +2,14 @@ import aiohttp
 import asyncio
 import json
 import logging
+from unittest.mock import Mock
 
 import pytest
 
-from aiorpcx import JSONRPCv1, JSONRPCLoose, RPCError, ignore_after, Request
-from electrumx.lib.coins import BitcoinCash, CoinError, Bitzeny, Dash
-from electrumx.server.daemon import Daemon, FakeEstimateFeeDaemon
+from aiorpcx import JSONRPCv1, JSONRPCv2, JSONRPCLoose, RPCError, ignore_after, Request
+from electrumx.lib.coins import Bitcoin, BitcoinCash, CoinError, Bitzeny, Dash, Komodo, Zcash, ZcashTestnet
+from electrumx.server.daemon import Daemon, DaemonError, FakeEstimateFeeDaemon, ZcashZebraDaemon
+from electrumx.server.session import ElectrumX, ZcashElectrumX
 
 
 coin = BitcoinCash
@@ -43,6 +45,7 @@ class ResponseBase:
 
 
 class JSONResponse(ResponseBase):
+    protocol = JSONRPCv1
 
     def __init__(self, result, msg_id, status=200):
         super().__init__({'Content-Type': 'application/json'}, status)
@@ -51,11 +54,11 @@ class JSONResponse(ResponseBase):
 
     async def json(self, loads=json.loads):
         if isinstance(self.msg_id, int):
-            message = JSONRPCv1.response_message(self.result, self.msg_id)
+            message = self.protocol.response_message(self.result, self.msg_id)
         else:
-            parts = [JSONRPCv1.response_message(item, msg_id)
+            parts = [self.protocol.response_message(item, msg_id)
                      for item, msg_id in zip(self.result, self.msg_id)]
-            message = JSONRPCv1.batch_message_from_parts(parts)
+            message = self.protocol.batch_message_from_parts(parts)
         return loads(message.decode())
 
 
@@ -97,6 +100,65 @@ class ClientSessionGood:
                 assert payload['params'] == args
                 request_ids.append(payload['id'])
             return JSONResponse(result, request_ids)
+
+
+class ClientSessionJSONWithCharset(ClientSessionGood):
+    '''Return a JSON response with a charset media type parameter.'''
+
+    def post(self, url, data=""):
+        response = super().post(url, data)
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        return response
+
+
+class ClientSessionNumericVerbosity(ClientSessionGood):
+    '''Reject boolean verbosity in single and batched getblock requests.'''
+
+    def post(self, url, data=""):
+        payload = json.loads(data)
+        requests = payload if isinstance(payload, list) else [payload]
+        for request in requests:
+            assert request['method'] == 'getblock'
+            assert type(request['params'][1]) is int
+        return super().post(url, data)
+
+
+class ClientSessionV2(ClientSessionGood):
+    '''Check outgoing JSON-RPC 2.0 requests and return 2.0 envelopes.'''
+
+    def post(self, url, data=""):
+        payload = json.loads(data)
+        requests = payload if isinstance(payload, list) else [payload]
+        for request in requests:
+            assert request['jsonrpc'] == '2.0'
+            assert isinstance(request['params'], list)
+        response = super().post(url, data)
+        response.protocol = JSONRPCv2
+        return response
+
+
+class ClientSessionReorderedBatch(ClientSessionGood):
+    '''Return a valid batch response in a different order from its request.'''
+
+    def post(self, url, data=""):
+        response = super().post(url, data)
+        if isinstance(response.msg_id, list):
+            return JSONResponse(response.result[::-1], response.msg_id[::-1])
+        return response
+
+
+class ClientSessionSingleBatchResponse(ClientSessionGood):
+    '''Return only the first batch response as an object, not an array.'''
+
+    protocol = JSONRPCv1
+    id_offset = 0
+
+    def post(self, url, data=""):
+        response = super().post(url, data)
+        if isinstance(response.msg_id, list):
+            response = JSONResponse(response.result[0], response.msg_id[0] + self.id_offset)
+        response.protocol = self.protocol
+        return response
 
 
 class ClientSessionBadAuth:
@@ -231,6 +293,14 @@ async def test_height(daemon):
 
 
 @pytest.mark.asyncio
+async def test_height_accepts_json_with_charset(daemon):
+    height = 300
+    daemon.session = ClientSessionJSONWithCharset(('getblockcount', [], height))
+    assert await daemon.height() == height
+    assert daemon.cached_height() == height
+
+
+@pytest.mark.asyncio
 async def test_broadcast_transaction(daemon):
     raw_tx = 'deadbeef'
     tx_hash = 'hash'
@@ -281,7 +351,7 @@ async def test_mempool_txids_hum(daemon):
 async def test_deserialised_block(daemon):
     block_hash = 'block_hash'
     result = {'some': 'mess'}
-    daemon.session = ClientSessionGood(('getblock', [block_hash, True], result))
+    daemon.session = ClientSessionNumericVerbosity(('getblock', [block_hash, 1], result))
     assert await daemon.deserialised_block(block_hash) == result
 
 
@@ -364,12 +434,203 @@ async def test_block_hex_hashes(daemon):
 async def test_raw_blocks(daemon):
     count = 3
     hex_hashes = [f'hex_hash{n}' for n in range(count)]
-    args_list = [[hex_hash, False] for hex_hash in hex_hashes]
+    args_list = [[hex_hash, 0] for hex_hash in hex_hashes]
     iterable = (hex_hash for hex_hash in hex_hashes)
     blocks = ["00", "019a", "02fe"]
     blocks_raw = [bytes.fromhex(block) for block in blocks]
-    daemon.session = ClientSessionGood(('getblock', args_list, blocks))
+    daemon.session = ClientSessionNumericVerbosity(('getblock', args_list, blocks))
     assert await daemon.raw_blocks(iterable) == blocks_raw
+
+
+@pytest.mark.asyncio
+async def test_raw_blocks_accept_reordered_batch_response(daemon):
+    hashes = ['block0', 'block1']
+    daemon.session = ClientSessionReorderedBatch(
+        ('getblock', [[block_hash, 0] for block_hash in hashes], ['00', 'ff']))
+    assert await daemon.raw_blocks(hashes) == [b'\x00', b'\xff']
+
+
+@pytest.mark.asyncio
+async def test_reordered_batch_keeps_error_at_request_position(daemon):
+    daemon.session = ClientSessionReorderedBatch(
+        ('getrawtransaction', [['tx0', 0], ['missing', 0]],
+         ['00', RPCError(-5, 'Not found')]))
+    assert await daemon.getrawtransactions(['tx0', 'missing']) == [b'\x00', None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['missing', 'duplicate', 'unexpected', 'extra', 'empty', 'no_id'])
+async def test_reject_mismatched_batch_ids(daemon, monkeypatch, case):
+    async def send_data(data):
+        first, second = [request['id'] for request in json.loads(data)]
+        unexpected = max(first, second) + 1
+        ids = {
+            'missing': [first],
+            'duplicate': [first, first],
+            'unexpected': [first, unexpected],
+            'extra': [first, second, unexpected],
+            'empty': [],
+            'no_id': [None, second],
+        }[case]
+        responses = []
+        for response_id in ids:
+            response = {'result': '00', 'error': None}
+            if response_id is not None:
+                response['id'] = response_id
+            responses.append(response)
+        return responses
+
+    monkeypatch.setattr(daemon, '_send_data', send_data)
+    with pytest.raises(DaemonError, match='batch response IDs do not match request IDs'):
+        await daemon.raw_blocks(['block0', 'block1'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('count', [1, 2])
+async def test_batch_processor_rejects_non_array_response(daemon, monkeypatch, count):
+    async def send_data(data):
+        request = json.loads(data)[0]
+        return {'id': request['id'], 'result': '00', 'error': None}
+
+    monkeypatch.setattr(daemon, '_send_data', send_data)
+    with pytest.raises(DaemonError, match='non-batch response to batch request'):
+        await daemon.raw_blocks([f'block{index}' for index in range(count)])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', [JSONRPCv1, JSONRPCv2])
+async def test_single_object_batch_response(daemon, protocol):
+    daemon.session = ClientSessionSingleBatchResponse(
+        ('getblock', [['block0', 0]], ['00']))
+    daemon.session.protocol = protocol
+    assert await daemon.raw_blocks(['block0']) == [b'\x00']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', [JSONRPCv1, JSONRPCv2])
+async def test_single_object_batch_response_checks_id(daemon, protocol):
+    daemon.session = ClientSessionSingleBatchResponse(
+        ('getblock', [['block0', 0]], ['00']))
+    daemon.session.protocol = protocol
+    daemon.session.id_offset = 1
+    with pytest.raises(DaemonError, match='batch response IDs do not match request IDs'):
+        await daemon.raw_blocks(['block0'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', [JSONRPCv1, JSONRPCv2])
+async def test_single_object_batch_response_preserves_error(daemon, protocol):
+    error = RPCError(-5, 'Not found')
+    daemon.session = ClientSessionSingleBatchResponse(
+        ('getblock', [['missing', 0]], [error]),
+        ('getrawtransaction', [['missing', 0]], [error]))
+    daemon.session.protocol = protocol
+    with pytest.raises(DaemonError, match='Not found'):
+        await daemon.raw_blocks(['missing'])
+    assert await daemon.getrawtransactions(['missing']) == [None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', [JSONRPCv1, JSONRPCv2])
+async def test_reject_single_object_for_multi_request_batch(daemon, protocol):
+    daemon.session = ClientSessionSingleBatchResponse(
+        ('getblock', [['block0', 0], ['block1', 0]], ['00', 'ff']))
+    daemon.session.protocol = protocol
+    with pytest.raises(DaemonError, match='non-batch response to batch request'):
+        await daemon.raw_blocks(['block0', 'block1'])
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_v2_requests_and_responses(daemon):
+    error = RPCError(-5, 'Not found')
+    daemon.session = ClientSessionV2(
+        ('getblockcount', [], 123),
+        ('getblock', ['block0', 1], {'hash': 'block0'}),
+        ('getblock', [['block0', 0]], ['00']),
+        ('getrawtransaction', ['missing', 0], error),
+        ('getrawtransaction', [['tx0', 0], ['missing', 0]], ['00', error]),
+        ('getblock', [['missing', 0]], [error]))
+    assert await daemon.height() == 123
+    assert await daemon.deserialised_block('block0') == {'hash': 'block0'}
+    assert await daemon.raw_blocks(['block0']) == [b'\x00']
+    with pytest.raises(DaemonError, match='Not found'):
+        await daemon.getrawtransaction('missing')
+    assert await daemon.getrawtransactions(['tx0', 'missing']) == [b'\x00', None]
+    with pytest.raises(DaemonError, match='Not found'):
+        await daemon.raw_blocks(['missing'])
+
+
+@pytest.mark.asyncio
+async def test_zebra_daemon_request_compatibility():
+    daemon = ZcashZebraDaemon(Zcash, urls[0])
+    assert daemon._single_payload('getrawmempool', None)['params'] == ()
+
+    daemon.session = ClientSessionJSONWithCharset(('getblockcount', [], 1))
+    assert await daemon.height() == 1
+
+    hashes = ['block0', 'block1']
+    daemon.session = ClientSessionNumericVerbosity(
+        ('getblock', [[block_hash, 0] for block_hash in hashes], ['00', 'ff']))
+    assert await daemon.raw_blocks(hashes) == [b'\x00', b'\xff']
+
+    daemon.session = ClientSessionSingleBatchResponse(('getblock', [['block0', 0]], ['00']))
+    assert await daemon.raw_blocks(['block0']) == [b'\x00']
+
+    daemon.session = ClientSessionNumericVerbosity(('getblock', ['block0', 1], {'hash': 'block0'}))
+    assert await daemon.deserialised_block('block0') == {'hash': 'block0'}
+
+    # No RPC call should be made for an unavailable fee estimate.
+    daemon.session = Mock()
+    assert await daemon.estimatefee(1) == -1
+    daemon.session.post.assert_not_called()
+
+
+@pytest.mark.parametrize('coin', [Zcash, ZcashTestnet])
+def test_zcash_daemon_and_session_selection(coin):
+    assert coin.DAEMON is ZcashZebraDaemon
+    assert coin.SESSIONCLS is ZcashElectrumX
+    assert coin.SESSIONCLS.PROTOCOL_MAX == (1, 4, 3)
+
+
+@pytest.mark.parametrize('coin', [Bitcoin, Komodo])
+def test_zcash_rpc_limits_do_not_apply_to_other_coins(coin):
+    assert coin.DAEMON is Daemon
+    assert coin.SESSIONCLS is ElectrumX
+    assert coin.SESSIONCLS.PROTOCOL_MAX == (1, 7, 0)
+
+
+@pytest.fixture
+def zcash_session():
+    session = object.__new__(ZcashElectrumX)
+    session.bump_cost = Mock()
+    session.set_request_handlers((1, 4, 3))
+    return session
+
+
+def test_zcash_session_request_handlers(zcash_session):
+    handlers = zcash_session.request_handlers
+    assert 'mempool.get_info' not in handlers
+    assert 'blockchain.transaction.broadcast_package' not in handlers
+    assert 'blockchain.transaction.testmempoolaccept' not in handlers
+    assert 'blockchain.scriptpubkey.get_history' not in handlers
+    assert 'blockchain.scripthash.get_history' in handlers
+    assert 'blockchain.relayfee' in handlers
+    assert handlers['blockchain.estimatefee'] == zcash_session.phandle_estimatefee
+
+
+@pytest.mark.asyncio
+async def test_zcash_session_fee_estimate_unavailable(zcash_session):
+    assert await zcash_session.request_handlers['blockchain.estimatefee'](1) == -1
+    zcash_session.bump_cost.assert_called_once_with(0.1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('number,mode', [(-1, None), (None, None), ('invalid', None),
+                                        (1, 'economical'), (1, 'conservative')])
+async def test_zcash_session_rejects_invalid_estimatefee_arguments(zcash_session, number, mode):
+    with pytest.raises(RPCError):
+        await zcash_session.phandle_estimatefee(number, mode)
+    zcash_session.bump_cost.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -24,6 +24,10 @@ transactions_alts = []
 
 for name in os.listdir(TRANSACTION_DIR):
     name_parts = name.split("_")
+    # Zcash needs dedicated checks for shielded bundles, coinbase inputs and
+    # integer zatoshi values.  See tests/lib/test_tx_zcash.py.
+    if name_parts[0] == "zcash":
+        continue
     tx_list = transactions_bitcoin if name_parts[0] == "bitcoin" else transactions_alts
     try:
         coinFound = Coin.lookup_coin_class(name_parts[0], name_parts[1])

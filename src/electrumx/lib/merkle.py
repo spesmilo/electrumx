@@ -26,7 +26,6 @@
 
 '''Merkle trees, branches, proofs and roots.'''
 
-from math import ceil, log
 from typing import Sequence, Optional, Callable, Tuple, Iterable, List, Awaitable
 
 from aiorpcx import Event, run_in_thread
@@ -55,7 +54,7 @@ class Merkle:
             raise TypeError('hash_count must be an integer')
         if hash_count < 1:
             raise ValueError('hash_count must be at least 1')
-        return ceil(log(hash_count, 2))
+        return (hash_count-1).bit_length()
 
     def branch_and_root(
             self, hashes: Iterable[bytes], index: int, length: Optional[int] = None,

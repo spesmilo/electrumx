@@ -26,6 +26,7 @@ def test_branch_length():
         assert merkle.branch_length(n) == 2
     for n in range(5, 9):
         assert merkle.branch_length(n) == 3
+    assert merkle.branch_length(500) == 9
 
 
 def test_branch_length_bad():
